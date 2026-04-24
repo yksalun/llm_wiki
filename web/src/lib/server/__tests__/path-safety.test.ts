@@ -21,7 +21,7 @@ describe("normalizeRelativePath", () => {
 
 describe("resolvePathInsideRoot", () => {
   it("resolves safe paths inside the root", () => {
-    const rootDir = path.join("F:/projects", "demo");
+    const rootDir = path.resolve(path.sep, "tmp", "demo");
 
     expect(resolvePathInsideRoot(rootDir, "wiki/intro.md")).toBe(
       path.join(rootDir, "wiki", "intro.md"),
@@ -29,7 +29,7 @@ describe("resolvePathInsideRoot", () => {
   });
 
   it("rejects paths that escape the root", () => {
-    const rootDir = path.join("F:/projects", "demo");
+    const rootDir = path.resolve(path.sep, "tmp", "demo");
 
     expect(() => resolvePathInsideRoot(rootDir, "../secret.md")).toThrow();
   });

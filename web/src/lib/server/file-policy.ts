@@ -1,18 +1,13 @@
+import path from "node:path";
+
 import { normalizeRelativePath } from "./path-safety";
 
 export const FILE_VIEW_SIZE_LIMIT_BYTES = 1024 * 1024;
 
 export type FileViewClass = "editable" | "preview" | "metadata" | "unsupported";
 
-const METADATA_FILES = new Set([
-  ".env.example",
-  "drizzle.config.ts",
-  "next.config.js",
-  "next.config.mjs",
-  "next.config.ts",
-  "package.json",
-  "tsconfig.json",
-]);
+const PREVIEW_EXTENSIONS = new Set([".md", ".txt", ".json", ".yaml", ".yml"]);
+const METADATA_EXTENSIONS = new Set([".pdf", ".docx", ".pptx", ".xlsx"]);
 
 export function isWritableProjectFile(relativePath: string): boolean {
   const normalized = normalizeRelativePath(relativePath);
@@ -29,24 +24,21 @@ export function classifyFileView(
   options: { sizeBytes?: number } = {},
 ): FileViewClass {
   const normalized = normalizeRelativePath(relativePath);
+  const extension = path.extname(normalized).toLowerCase();
 
   if (options.sizeBytes !== undefined && options.sizeBytes > FILE_VIEW_SIZE_LIMIT_BYTES) {
     return "unsupported";
   }
 
-  if (normalized === "purpose.md" || normalized === "schema.md") {
+  if (isWritableProjectFile(normalized)) {
     return "editable";
   }
 
-  if (normalized.startsWith("wiki/") && normalized.endsWith(".md")) {
-    return "preview";
-  }
-
-  if (METADATA_FILES.has(normalized)) {
+  if (METADATA_EXTENSIONS.has(extension)) {
     return "metadata";
   }
 
-  if (normalized.endsWith(".md")) {
+  if (PREVIEW_EXTENSIONS.has(extension)) {
     return "preview";
   }
 

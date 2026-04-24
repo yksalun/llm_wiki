@@ -20,8 +20,9 @@ describe("isWritableProjectFile", () => {
 describe("classifyFileView", () => {
   it("classifies editable, preview, metadata, and unsupported files", () => {
     expect(classifyFileView("purpose.md")).toBe("editable");
-    expect(classifyFileView("wiki/intro.md")).toBe("preview");
-    expect(classifyFileView("package.json")).toBe("metadata");
+    expect(classifyFileView("wiki/intro.md")).toBe("editable");
+    expect(classifyFileView("package.json")).toBe("preview");
+    expect(classifyFileView("raw/sources/demo.pdf")).toBe("metadata");
     expect(classifyFileView("assets/logo.png")).toBe("unsupported");
   });
 
