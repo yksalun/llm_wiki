@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { ProjectDetail } from "@/lib/types";
 import type {
+  ProjectSnapshotRecord,
   ProjectSnapshotInsert,
   ProjectSyncRunInsert,
 } from "@/lib/db/project-snapshot-repo";
@@ -12,22 +13,22 @@ import { createFixtureProject } from "@/test-utils/project-fixture";
 
 import { AppError } from "../app-error";
 import { getDatabaseUrlFromEnv, getProjectRootsFromEnv } from "../env";
+import type { ProjectRegistryRepo } from "../project-registry";
 import { resolveProjectById, scanProjectRoots } from "../project-registry";
 
 interface MockRepoCallState {
   snapshots: ProjectSnapshotInsert[];
+  existingSnapshots: ProjectSnapshotRecord[];
   syncRuns: ProjectSyncRunInsert[];
 }
 
 function createMockRepo(): {
   calls: MockRepoCallState;
-  repo: {
-    upsertProjectSnapshot: (snapshot: ProjectSnapshotInsert) => Promise<void>;
-    insertSyncRun: (input: ProjectSyncRunInsert) => Promise<void>;
-  };
+  repo: ProjectRegistryRepo;
 } {
   const calls: MockRepoCallState = {
     snapshots: [],
+    existingSnapshots: [],
     syncRuns: [],
   };
 
@@ -39,6 +40,52 @@ function createMockRepo(): {
       },
       async insertSyncRun(input) {
         calls.syncRuns.push(input);
+      },
+      async findProjectSnapshotById(projectId): Promise<ProjectSnapshotRecord | null> {
+        const snapshot =
+          calls.existingSnapshots.find((entry) => entry.projectId === projectId) ??
+          calls.snapshots.find((entry) => entry.projectId === projectId);
+
+        if (!snapshot) {
+          return null;
+        }
+
+        return {
+          id: snapshot.id ?? `snapshot-${projectId}`,
+          projectId: snapshot.projectId,
+          rootPath: snapshot.rootPath,
+          name: snapshot.name,
+          status: snapshot.status,
+          hasPurpose: snapshot.hasPurpose,
+          hasSchema: snapshot.hasSchema,
+          hasWikiDirectory: snapshot.hasWikiDirectory,
+          hasRawSourcesDirectory: snapshot.hasRawSourcesDirectory,
+          lastKnownUpdatedAt: snapshot.lastKnownUpdatedAt ?? null,
+          lastScannedAt: snapshot.lastScannedAt,
+        };
+      },
+      async findProjectSnapshotByRootPath(rootPath): Promise<ProjectSnapshotRecord | null> {
+        const snapshot =
+          calls.existingSnapshots.find((entry) => entry.rootPath === rootPath) ??
+          calls.snapshots.find((entry) => entry.rootPath === rootPath);
+
+        if (!snapshot) {
+          return null;
+        }
+
+        return {
+          id: snapshot.id ?? `snapshot-${snapshot.projectId}`,
+          projectId: snapshot.projectId,
+          rootPath: snapshot.rootPath,
+          name: snapshot.name,
+          status: snapshot.status,
+          hasPurpose: snapshot.hasPurpose,
+          hasSchema: snapshot.hasSchema,
+          hasWikiDirectory: snapshot.hasWikiDirectory,
+          hasRawSourcesDirectory: snapshot.hasRawSourcesDirectory,
+          lastKnownUpdatedAt: snapshot.lastKnownUpdatedAt ?? null,
+          lastScannedAt: snapshot.lastScannedAt,
+        };
       },
     },
   };
@@ -153,9 +200,24 @@ describe("scanProjectRoots", () => {
     await fs.mkdir(registryDir, { recursive: true });
     await fs.writeFile(path.join(registryDir, "project.json"), "{not-json", "utf8");
 
+    const mockRepo = createMockRepo();
+    mockRepo.calls.existingSnapshots.push({
+      id: "snapshot-row-1",
+      projectId: "known-project-id",
+      rootPath: fixture.rootDir,
+      name: "broken-project",
+      status: "ready",
+      hasPurpose: true,
+      hasSchema: true,
+      hasWikiDirectory: true,
+      hasRawSourcesDirectory: true,
+      lastKnownUpdatedAt: new Date("2026-04-24T12:25:00.000Z"),
+      lastScannedAt: new Date("2026-04-24T12:25:00.000Z"),
+    });
+
     const result = await scanProjectRoots([path.dirname(fixture.rootDir)], {
       now: () => new Date("2026-04-24T12:30:00.000Z"),
-      repo: createMockRepo().repo,
+      repo: mockRepo.repo,
     });
 
     const registry = JSON.parse(
@@ -167,7 +229,8 @@ describe("scanProjectRoots", () => {
       updatedAt: string;
     };
 
-    expect(result.projects[0]?.id).toBe(registry.id);
+    expect(result.projects[0]?.id).toBe("known-project-id");
+    expect(registry.id).toBe("known-project-id");
     expect(registry.name).toBe("broken-project");
     expect(registry.createdAt).toBe("2026-04-24T12:30:00.000Z");
     expect(registry.updatedAt).toBe("2026-04-24T12:30:00.000Z");
@@ -195,9 +258,24 @@ describe("scanProjectRoots", () => {
     );
 
     const now = new Date("2026-04-24T12:35:00.000Z");
+    const mockRepo = createMockRepo();
+    mockRepo.calls.existingSnapshots.push({
+      id: "snapshot-row-2",
+      projectId: "known-invalid-timestamp-id",
+      rootPath: fixture.rootDir,
+      name: "invalid-timestamps",
+      status: "ready",
+      hasPurpose: true,
+      hasSchema: true,
+      hasWikiDirectory: true,
+      hasRawSourcesDirectory: true,
+      lastKnownUpdatedAt: new Date("2026-04-24T12:34:00.000Z"),
+      lastScannedAt: new Date("2026-04-24T12:34:00.000Z"),
+    });
+
     const result = await scanProjectRoots([path.dirname(fixture.rootDir)], {
       now: () => now,
-      repo: createMockRepo().repo,
+      repo: mockRepo.repo,
     });
 
     const registry = JSON.parse(
@@ -209,7 +287,7 @@ describe("scanProjectRoots", () => {
       updatedAt: string;
     };
 
-    expect(registry.id).not.toBe("broken-project-id");
+    expect(registry.id).toBe("known-invalid-timestamp-id");
     expect(registry.createdAt).toBe(now.toISOString());
     expect(registry.updatedAt).toBe(now.toISOString());
     expect(result.projects[0]?.id).toBe(registry.id);
@@ -293,6 +371,31 @@ describe("scanProjectRoots", () => {
       hasRawSourcesDirectory: false,
     });
   });
+
+  it("throws when snapshot persistence fails for an otherwise healthy project", async () => {
+    const fixture = await createFixtureProject("db-write-failure");
+    cleanupTasks.push(fixture.cleanup);
+
+    const repo: ProjectRegistryRepo = {
+      async upsertProjectSnapshot() {
+        throw new Error("database unavailable");
+      },
+      async insertSyncRun() {},
+      async findProjectSnapshotById() {
+        return null;
+      },
+      async findProjectSnapshotByRootPath() {
+        return null;
+      },
+    };
+
+    await expect(
+      scanProjectRoots([path.dirname(fixture.rootDir)], {
+        now: () => new Date("2026-04-24T13:45:00.000Z"),
+        repo,
+      }),
+    ).rejects.toThrow("database unavailable");
+  });
 });
 
 describe("resolveProjectById", () => {
@@ -300,16 +403,18 @@ describe("resolveProjectById", () => {
     const fixture = await createFixtureProject("detail-project");
     cleanupTasks.push(fixture.cleanup);
 
+    const mockRepo = createMockRepo();
     const scanned = await scanProjectRoots([path.dirname(fixture.rootDir)], {
       now: () => new Date("2026-04-24T14:00:00.000Z"),
-      repo: createMockRepo().repo,
+      repo: mockRepo.repo,
     });
     const projectId = scanned.projects[0]?.id;
 
     expect(projectId).toBeTruthy();
 
-    const resolved = (await resolveProjectById([path.dirname(fixture.rootDir)], projectId!)) as
-      ProjectDetail & { rootDir: string };
+    const resolved = (await resolveProjectById([path.dirname(fixture.rootDir)], projectId!, {
+      repo: mockRepo.repo,
+    })) as ProjectDetail & { rootDir: string };
 
     expect(resolved).toMatchObject({
       id: projectId,
@@ -351,6 +456,9 @@ describe("resolveProjectById", () => {
     const resolved = await resolveProjectById(
       [path.dirname(targetFixture.rootDir), path.dirname(unrelatedFixture.rootDir)],
       "target-project-id",
+      {
+        repo: createMockRepo().repo,
+      },
     );
 
     expect(resolved.id).toBe("target-project-id");
@@ -362,7 +470,9 @@ describe("resolveProjectById", () => {
     cleanupTasks.push(fixture.cleanup);
 
     await expect(
-      resolveProjectById([path.dirname(fixture.rootDir)], "missing-project-id"),
+      resolveProjectById([path.dirname(fixture.rootDir)], "missing-project-id", {
+        repo: createMockRepo().repo,
+      }),
     ).rejects.toMatchObject({
       code: "PROJECT_NOT_FOUND",
       status: 404,
@@ -376,10 +486,50 @@ describe("resolveProjectById", () => {
     const missingRoot = path.join(path.dirname(fixture.rootDir), "missing-root");
 
     await expect(
-      resolveProjectById([missingRoot, path.dirname(fixture.rootDir)], "missing-project-id"),
+      resolveProjectById([missingRoot, path.dirname(fixture.rootDir)], "missing-project-id", {
+        repo: createMockRepo().repo,
+      }),
     ).rejects.toMatchObject({
       code: "PROJECT_NOT_FOUND",
       status: 404,
     });
+  });
+
+  it("falls back to the known snapshot root, rebuilds registry, and preserves projectId when schema is missing", async () => {
+    const fixture = await createFixtureProject("degraded-project");
+    cleanupTasks.push(fixture.cleanup);
+
+    const mockRepo = createMockRepo();
+    const scanned = await scanProjectRoots([path.dirname(fixture.rootDir)], {
+      now: () => new Date("2026-04-24T14:10:00.000Z"),
+      repo: mockRepo.repo,
+    });
+    const projectId = scanned.projects[0]?.id;
+    const registryPath = path.join(fixture.rootDir, ".llm-wiki", "project.json");
+
+    expect(projectId).toBeTruthy();
+
+    await fs.writeFile(registryPath, "{broken-json", "utf8");
+    await fs.rm(path.join(fixture.rootDir, "schema.md"), { force: true });
+
+    const resolved = await resolveProjectById([path.dirname(fixture.rootDir)], projectId!, {
+      repo: mockRepo.repo,
+    });
+    const rebuiltRegistry = JSON.parse(await fs.readFile(registryPath, "utf8")) as {
+      id: string;
+      name: string;
+    };
+
+    expect(resolved).toMatchObject({
+      id: projectId,
+      name: "degraded-project",
+      status: "incomplete",
+      hasPurpose: true,
+      hasSchema: false,
+      hasWikiDirectory: true,
+      rootDir: fixture.rootDir,
+      rootPathHint: fixture.rootDir,
+    });
+    expect(rebuiltRegistry.id).toBe(projectId);
   });
 });

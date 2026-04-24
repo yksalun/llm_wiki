@@ -8,6 +8,8 @@ import { AppError } from "./app-error";
 import { isWritableProjectFile } from "./file-policy";
 import { normalizeRelativePath, resolvePathInsideRoot } from "./path-safety";
 
+const pendingWrites = new Map<string, Promise<void>>();
+
 export async function writeProjectFile(
   projectRoot: string,
   request: FileWriteRequest,
@@ -19,22 +21,25 @@ export async function writeProjectFile(
   }
 
   const absolutePath = safeResolvePathInsideRoot(projectRoot, normalizedPath);
-  const currentStats = await getExistingFileStats(absolutePath);
-  const currentLastModified = currentStats?.mtime.toISOString() ?? null;
 
-  if (request.lastModified !== currentLastModified) {
-    throw new AppError("FILE_WRITE_CONFLICT", 409, "File changed since it was last read.");
-  }
+  return withWriteLock(absolutePath, async () => {
+    const currentStats = await getExistingFileStats(absolutePath);
+    const currentLastModified = currentStats?.mtime.toISOString() ?? null;
 
-  await fs.mkdir(path.dirname(absolutePath), { recursive: true });
-  await fs.writeFile(absolutePath, request.content, "utf8");
+    if (request.lastModified !== currentLastModified) {
+      throw new AppError("FILE_WRITE_CONFLICT", 409, "File changed since it was last read.");
+    }
 
-  const updatedStats = await fs.stat(absolutePath);
+    await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+    await fs.writeFile(absolutePath, request.content, "utf8");
 
-  return {
-    relativePath: normalizedPath,
-    lastModified: updatedStats.mtime.toISOString(),
-  };
+    const updatedStats = await fs.stat(absolutePath);
+
+    return {
+      relativePath: normalizedPath,
+      lastModified: updatedStats.mtime.toISOString(),
+    };
+  });
 }
 
 async function getExistingFileStats(filePath: string): Promise<Stats | null> {
@@ -81,4 +86,25 @@ function safeResolvePathInsideRoot(projectRoot: string, relativePath: string): s
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error;
+}
+
+async function withWriteLock<T>(lockKey: string, operation: () => Promise<T>): Promise<T> {
+  const previous = pendingWrites.get(lockKey);
+  let releaseCurrent!: () => void;
+  const current = new Promise<void>((resolve) => {
+    releaseCurrent = resolve;
+  });
+
+  pendingWrites.set(lockKey, current);
+
+  try {
+    await previous;
+    return await operation();
+  } finally {
+    releaseCurrent();
+
+    if (pendingWrites.get(lockKey) === current) {
+      pendingWrites.delete(lockKey);
+    }
+  }
 }

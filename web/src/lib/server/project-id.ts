@@ -11,6 +11,8 @@ interface ProjectRegistryRecord {
 
 interface EnsureProjectRegistryOptions {
   now?: () => Date;
+  preferredId?: string;
+  preferredName?: string;
 }
 
 const PROJECT_REGISTRY_DIR = ".llm-wiki";
@@ -62,7 +64,7 @@ export async function ensureProjectRegistry(
 ): Promise<ProjectRegistryRecord> {
   const now = (options.now ?? (() => new Date()))();
   const nowIso = now.toISOString();
-  const projectName = path.basename(projectRoot);
+  const projectName = options.preferredName ?? path.basename(projectRoot);
   const registryPath = getProjectRegistryPath(projectRoot);
   const existingRegistry = await readProjectRegistry(projectRoot);
 
@@ -71,7 +73,7 @@ export async function ensureProjectRegistry(
   }
 
   const record: ProjectRegistryRecord = {
-    id: crypto.randomUUID(),
+    id: options.preferredId ?? crypto.randomUUID(),
     name: projectName,
     createdAt: nowIso,
     updatedAt: nowIso,

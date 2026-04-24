@@ -235,6 +235,38 @@ describe("writeProjectFile", () => {
       status: 400,
     });
   });
+
+  it("serializes concurrent writes to the same file so the stale writer conflicts", async () => {
+    const fixture = await createFixtureProject("write-serialized");
+    cleanupTasks.push(fixture.cleanup);
+
+    const before = await readProjectFile(fixture.rootDir, "purpose.md");
+
+    const [first, second] = await Promise.allSettled([
+      writeProjectFile(fixture.rootDir, {
+        relativePath: "purpose.md",
+        content: "# Purpose\n\nFirst write.\n",
+        lastModified: before.lastModified,
+      }),
+      writeProjectFile(fixture.rootDir, {
+        relativePath: "purpose.md",
+        content: "# Purpose\n\nSecond write.\n",
+        lastModified: before.lastModified,
+      }),
+    ]);
+
+    const fulfilled = [first, second].filter((result) => result.status === "fulfilled");
+    const rejected = [first, second].filter((result) => result.status === "rejected");
+
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]).toMatchObject({
+      reason: expect.objectContaining({
+        code: "FILE_WRITE_CONFLICT",
+        status: 409,
+      }),
+    });
+  });
 });
 
 function flattenRelativePaths(node: {

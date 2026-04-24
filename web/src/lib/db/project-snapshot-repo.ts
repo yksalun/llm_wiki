@@ -60,6 +60,22 @@ export function createProjectSnapshotRepo(database: ProjectSnapshotDatabase = db
       return row ? mapProjectSnapshotToSummary(row) : null;
     },
 
+    async findProjectSnapshotById(projectId: string): Promise<ProjectSnapshotRecord | null> {
+      const row = await database.query.projectSnapshots.findFirst({
+        where: eq(projectSnapshots.projectId, projectId),
+      });
+
+      return row ?? null;
+    },
+
+    async findProjectSnapshotByRootPath(rootPath: string): Promise<ProjectSnapshotRecord | null> {
+      const row = await database.query.projectSnapshots.findFirst({
+        where: eq(projectSnapshots.rootPath, rootPath),
+      });
+
+      return row ?? null;
+    },
+
     async listProjectSnapshots(): Promise<ProjectSummary[]> {
       const rows = await database.query.projectSnapshots.findMany({
         orderBy: [desc(projectSnapshots.lastScannedAt)],
@@ -75,4 +91,6 @@ const projectSnapshotRepo = createProjectSnapshotRepo();
 export const upsertProjectSnapshot = projectSnapshotRepo.upsertProjectSnapshot;
 export const insertSyncRun = projectSnapshotRepo.insertSyncRun;
 export const findProjectSummaryById = projectSnapshotRepo.findProjectSummaryById;
+export const findProjectSnapshotById = projectSnapshotRepo.findProjectSnapshotById;
+export const findProjectSnapshotByRootPath = projectSnapshotRepo.findProjectSnapshotByRootPath;
 export const listProjectSnapshots = projectSnapshotRepo.listProjectSnapshots;
