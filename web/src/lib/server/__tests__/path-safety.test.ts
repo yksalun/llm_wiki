@@ -12,6 +12,7 @@ describe("normalizeRelativePath", () => {
   it("rejects empty, absolute, escaped, drive-letter, and null-byte paths", () => {
     expect(() => normalizeRelativePath("")).toThrow();
     expect(() => normalizeRelativePath("/etc/passwd")).toThrow();
+    expect(() => normalizeRelativePath("\\wiki\\intro.md")).toThrow();
     expect(() => normalizeRelativePath("C:\\wiki\\intro.md")).toThrow();
     expect(() => normalizeRelativePath("../secret.md")).toThrow();
     expect(() => normalizeRelativePath("wiki/\0intro.md")).toThrow();

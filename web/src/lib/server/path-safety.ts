@@ -11,11 +11,18 @@ export function normalizeRelativePath(input: string): string {
     throw new Error("Path must not contain null bytes");
   }
 
-  if (path.isAbsolute(input) || DRIVE_LETTER_PATH.test(input) || input.startsWith("\\\\")) {
+  const normalizedInput = input.replaceAll("\\", "/");
+
+  if (
+    path.posix.isAbsolute(normalizedInput) ||
+    path.win32.isAbsolute(input) ||
+    DRIVE_LETTER_PATH.test(input) ||
+    input.startsWith("\\\\")
+  ) {
     throw new Error("Path must be relative");
   }
 
-  const normalized = path.posix.normalize(input.replaceAll("\\", "/"));
+  const normalized = path.posix.normalize(normalizedInput);
 
   if (normalized === "." || normalized === "" || normalized === ".." || normalized.startsWith("../")) {
     throw new Error("Path must stay relative");
