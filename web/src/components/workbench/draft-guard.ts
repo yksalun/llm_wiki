@@ -12,6 +12,13 @@ export type PendingWorkbenchIntent =
     }
   | {
       type: "reload-project";
+    }
+  | {
+      type: "show-missing-section-file";
+      path: string;
+      section: WorkbenchSection;
+      title: string;
+      message: string;
     };
 
 export function hasBlockingDraft({
@@ -34,5 +41,7 @@ export function buildPendingDraftMessage(intent: PendingWorkbenchIntent) {
       return `You have unsaved changes. Save or discard them before opening ${intent.section} in ${intent.path}.`;
     case "reload-project":
       return "You have unsaved changes. Save or discard them before reloading the project.";
+    case "show-missing-section-file":
+      return `You have unsaved changes. Save or discard them before opening ${intent.section}. ${intent.path} is not available.`;
   }
 }

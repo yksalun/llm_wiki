@@ -112,6 +112,22 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
     setRefreshing(false);
   }, [setRefreshing, setSaving]);
 
+  const blocksDraftReplacement = useMemo(
+    () =>
+      hasBlockingDraft({
+        dirty,
+        saving,
+        fileMode: file?.mode ?? null,
+      }),
+    [dirty, file?.mode, saving],
+  );
+
+  useEffect(() => {
+    if (!blocksDraftReplacement) {
+      setPendingIntent(null);
+    }
+  }, [blocksDraftReplacement]);
+
   const performReloadProject = useCallback(() => {
     cancelProjectLoad();
     cancelFileLoad();
@@ -159,19 +175,14 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
   const requestReloadProject = useCallback(() => {
     const intent: PendingWorkbenchIntent = { type: "reload-project" };
 
-    if (
-      hasBlockingDraft({
-        dirty,
-        saving,
-        fileMode: file?.mode ?? null,
-      })
-    ) {
+    if (blocksDraftReplacement) {
       setPendingIntent(intent);
       return;
     }
 
+    setPendingIntent(null);
     performReloadProject();
-  }, [dirty, file?.mode, performReloadProject, saving]);
+  }, [blocksDraftReplacement, performReloadProject]);
 
   useEffect(() => {
     reset();
@@ -247,20 +258,34 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
           ? { type: "open-file", path: relativePath }
           : { type: "open-section-file", path: relativePath, section: nextSection };
 
-      if (
-        hasBlockingDraft({
-          dirty,
-          saving,
-          fileMode: file?.mode ?? null,
-        })
-      ) {
+      if (blocksDraftReplacement) {
         setPendingIntent(intent);
         return;
       }
 
+      setPendingIntent(null);
       await performOpenRelativePath(relativePath, nextSection);
     },
-    [dirty, file?.mode, performOpenRelativePath, saving],
+    [blocksDraftReplacement, performOpenRelativePath],
+  );
+
+  const showMissingSectionFile = useCallback(
+    ({
+      section: nextSection,
+      title: noticeTitle,
+      message,
+    }: Extract<PendingWorkbenchIntent, { type: "show-missing-section-file" }>) => {
+      cancelFileLoad();
+      setActiveRequestPath(null);
+      clearFile();
+      setPanelNotice({
+        tone: "error",
+        title: noticeTitle,
+        message,
+      });
+      setSection(nextSection);
+    },
+    [cancelFileLoad, clearFile, setSection],
   );
 
   const handleSectionChange = useCallback(
@@ -279,26 +304,25 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
           return;
         }
 
-        if (
-          hasBlockingDraft({
-            dirty,
-            saving,
-            fileMode: file?.mode ?? null,
-          })
-        ) {
-          setPendingIntent({ type: "open-section-file", path: purposePath, section: "Purpose" });
+        if (blocksDraftReplacement) {
+          setPendingIntent({
+            type: "show-missing-section-file",
+            path: purposePath,
+            section: "Purpose",
+            title: "Purpose file unavailable",
+            message: "purpose.md is not available for this project.",
+          });
           return;
         }
 
-        cancelFileLoad();
-        setActiveRequestPath(null);
-        clearFile();
-        setPanelNotice({
-          tone: "error",
+        setPendingIntent(null);
+        showMissingSectionFile({
+          type: "show-missing-section-file",
+          path: purposePath,
+          section: "Purpose",
           title: "Purpose file unavailable",
           message: "purpose.md is not available for this project.",
         });
-        setSection(nextSection);
         return;
       }
 
@@ -308,26 +332,25 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
           return;
         }
 
-        if (
-          hasBlockingDraft({
-            dirty,
-            saving,
-            fileMode: file?.mode ?? null,
-          })
-        ) {
-          setPendingIntent({ type: "open-section-file", path: schemaPath, section: "Schema" });
+        if (blocksDraftReplacement) {
+          setPendingIntent({
+            type: "show-missing-section-file",
+            path: schemaPath,
+            section: "Schema",
+            title: "Schema file unavailable",
+            message: "schema.md is not available for this project.",
+          });
           return;
         }
 
-        cancelFileLoad();
-        setActiveRequestPath(null);
-        clearFile();
-        setPanelNotice({
-          tone: "error",
+        setPendingIntent(null);
+        showMissingSectionFile({
+          type: "show-missing-section-file",
+          path: schemaPath,
+          section: "Schema",
           title: "Schema file unavailable",
           message: "schema.md is not available for this project.",
         });
-        setSection(nextSection);
         return;
       }
 
@@ -336,7 +359,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
       setPanelNotice(null);
       setSection(nextSection);
     },
-    [cancelFileLoad, clearFile, dirty, file?.mode, requestOpenRelativePath, saving, setSection, treePaths],
+    [blocksDraftReplacement, cancelFileLoad, requestOpenRelativePath, setSection, showMissingSectionFile, treePaths],
   );
 
   const handleSave = useCallback(async (): Promise<SaveOutcome> => {
@@ -492,9 +515,14 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
         return;
       }
 
+      if (intent.type === "show-missing-section-file") {
+        showMissingSectionFile(intent);
+        return;
+      }
+
       await performOpenRelativePath(intent.path, intent.type === "open-section-file" ? intent.section : "Files");
     },
-    [performOpenRelativePath, performReloadProject],
+    [performOpenRelativePath, performReloadProject, showMissingSectionFile],
   );
 
   const draftGuardPrompt = useMemo<DraftGuardPrompt | null>(() => {

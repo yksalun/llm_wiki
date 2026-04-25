@@ -67,4 +67,18 @@ describe("buildPendingDraftMessage", () => {
     expect(message).toContain("Save or discard");
     expect(message).toContain("purpose.md");
   });
+
+  it("describes showing a missing section file notice without opening the file", () => {
+    const message = buildPendingDraftMessage({
+      type: "show-missing-section-file",
+      path: "schema.md",
+      section: "Schema",
+      title: "Schema file unavailable",
+      message: "schema.md is not available for this project.",
+    });
+
+    expect(message).toContain("Save or discard");
+    expect(message).toContain("Schema");
+    expect(message).toContain("schema.md");
+  });
 });
