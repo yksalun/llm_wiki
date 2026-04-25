@@ -1,4 +1,4 @@
-import type { FileViewMode } from "@/lib/types";
+import type { FileViewMode, WorkbenchSection } from "@/lib/types";
 
 export type PendingWorkbenchIntent =
   | {
@@ -8,7 +8,7 @@ export type PendingWorkbenchIntent =
   | {
       type: "open-section-file";
       path: string;
-      section: string;
+      section: WorkbenchSection;
     }
   | {
       type: "reload-project";

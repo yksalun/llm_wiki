@@ -5,7 +5,16 @@ import { motion } from "motion/react";
 import { AlertTriangle, Boxes, RefreshCcw } from "lucide-react";
 
 import { AppShell } from "@/components/app/app-shell";
-import { FilePanel, type FilePanelNotice } from "@/components/workbench/file-panel";
+import {
+  FilePanel,
+  type DraftGuardPrompt,
+  type FilePanelNotice,
+} from "@/components/workbench/file-panel";
+import {
+  buildPendingDraftMessage,
+  hasBlockingDraft,
+  type PendingWorkbenchIntent,
+} from "@/components/workbench/draft-guard";
 import { FileTree } from "@/components/workbench/file-tree";
 import { ProjectOverview } from "@/components/workbench/project-overview";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -56,6 +65,10 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
     draft,
     dirty,
     saving,
+    refreshing,
+    lastSaveStatus,
+    lastSavedAt,
+    conflict,
     setSection,
     setSelectedPath,
     openFile,
@@ -74,6 +87,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
   const [activeRequestPath, setActiveRequestPath] = useState<string | null>(null);
   const [panelNotice, setPanelNotice] = useState<FilePanelNotice | null>(null);
+  const [pendingIntent, setPendingIntent] = useState<PendingWorkbenchIntent | null>(null);
   const projectLoadAbortRef = useRef<AbortController | null>(null);
   const fileLoadAbortRef = useRef<AbortController | null>(null);
   const latestFileRequestIdRef = useRef(0);
@@ -98,7 +112,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
     setRefreshing(false);
   }, [setRefreshing, setSaving]);
 
-  const reloadProject = useCallback(() => {
+  const performReloadProject = useCallback(() => {
     cancelProjectLoad();
     cancelFileLoad();
     cancelSave();
@@ -142,9 +156,26 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
       });
   }, [cancelFileLoad, cancelProjectLoad, cancelSave, clearFile, projectId]);
 
+  const requestReloadProject = useCallback(() => {
+    const intent: PendingWorkbenchIntent = { type: "reload-project" };
+
+    if (
+      hasBlockingDraft({
+        dirty,
+        saving,
+        fileMode: file?.mode ?? null,
+      })
+    ) {
+      setPendingIntent(intent);
+      return;
+    }
+
+    performReloadProject();
+  }, [dirty, file?.mode, performReloadProject, saving]);
+
   useEffect(() => {
     reset();
-    reloadProject();
+    performReloadProject();
 
     return () => {
       cancelProjectLoad();
@@ -152,7 +183,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
       cancelSave();
       reset();
     };
-  }, [cancelFileLoad, cancelProjectLoad, cancelSave, reloadProject, reset]);
+  }, [cancelFileLoad, cancelProjectLoad, cancelSave, performReloadProject, reset]);
 
   const treePaths = useMemo(() => {
     if (loadState.status !== "ready") {
@@ -162,7 +193,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
     return collectTreePaths(loadState.tree);
   }, [loadState]);
 
-  const openRelativePath = useCallback(
+  const performOpenRelativePath = useCallback(
     async (relativePath: string, nextSection: WorkbenchSection = "Files") => {
       cancelFileLoad();
 
@@ -209,6 +240,29 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
     [cancelFileLoad, clearFile, openFile, projectId, setPanelNotice, setSection, setSelectedPath],
   );
 
+  const requestOpenRelativePath = useCallback(
+    async (relativePath: string, nextSection: WorkbenchSection = "Files") => {
+      const intent: PendingWorkbenchIntent =
+        nextSection === "Files"
+          ? { type: "open-file", path: relativePath }
+          : { type: "open-section-file", path: relativePath, section: nextSection };
+
+      if (
+        hasBlockingDraft({
+          dirty,
+          saving,
+          fileMode: file?.mode ?? null,
+        })
+      ) {
+        setPendingIntent(intent);
+        return;
+      }
+
+      await performOpenRelativePath(relativePath, nextSection);
+    },
+    [dirty, file?.mode, performOpenRelativePath, saving],
+  );
+
   const handleSectionChange = useCallback(
     async (nextSection: WorkbenchSection) => {
       if (nextSection === "Files") {
@@ -221,7 +275,18 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
 
       if (nextSection === "Purpose") {
         if (treePaths.has(purposePath)) {
-          await openRelativePath(purposePath, "Purpose");
+          await requestOpenRelativePath(purposePath, "Purpose");
+          return;
+        }
+
+        if (
+          hasBlockingDraft({
+            dirty,
+            saving,
+            fileMode: file?.mode ?? null,
+          })
+        ) {
+          setPendingIntent({ type: "open-section-file", path: purposePath, section: "Purpose" });
           return;
         }
 
@@ -239,7 +304,18 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
 
       if (nextSection === "Schema") {
         if (treePaths.has(schemaPath)) {
-          await openRelativePath(schemaPath, "Schema");
+          await requestOpenRelativePath(schemaPath, "Schema");
+          return;
+        }
+
+        if (
+          hasBlockingDraft({
+            dirty,
+            saving,
+            fileMode: file?.mode ?? null,
+          })
+        ) {
+          setPendingIntent({ type: "open-section-file", path: schemaPath, section: "Schema" });
           return;
         }
 
@@ -260,7 +336,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
       setPanelNotice(null);
       setSection(nextSection);
     },
-    [cancelFileLoad, clearFile, openRelativePath, setSection, treePaths],
+    [cancelFileLoad, clearFile, dirty, file?.mode, requestOpenRelativePath, saving, setSection, treePaths],
   );
 
   const handleSave = useCallback(async (): Promise<SaveOutcome> => {
@@ -407,6 +483,59 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
     setSaving,
   ]);
 
+  const executeIntent = useCallback(
+    async (intent: PendingWorkbenchIntent) => {
+      setPendingIntent(null);
+
+      if (intent.type === "reload-project") {
+        performReloadProject();
+        return;
+      }
+
+      await performOpenRelativePath(intent.path, intent.type === "open-section-file" ? intent.section : "Files");
+    },
+    [performOpenRelativePath, performReloadProject],
+  );
+
+  const draftGuardPrompt = useMemo<DraftGuardPrompt | null>(() => {
+    if (!pendingIntent) {
+      return null;
+    }
+
+    return {
+      message: buildPendingDraftMessage(pendingIntent),
+      saving,
+      onSaveAndContinue: () => {
+        if (saving) {
+          return;
+        }
+
+        void (async () => {
+          const intent = pendingIntent;
+          const outcome = await handleSave();
+
+          if (outcome === "saved" || outcome === "skipped") {
+            await executeIntent(intent);
+          }
+        })();
+      },
+      onDiscardAndContinue: () => {
+        if (saving) {
+          return;
+        }
+
+        void executeIntent(pendingIntent);
+      },
+      onCancel: () => {
+        if (saving) {
+          return;
+        }
+
+        setPendingIntent(null);
+      },
+    };
+  }, [executeIntent, handleSave, pendingIntent, saving]);
+
   useEffect(() => {
     if (!dirty || file?.mode !== "editable") {
       return;
@@ -440,11 +569,11 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
       eyebrow="Project Workbench"
       title={title}
       description={description}
-      aside={<WorkbenchAside loadState={loadState} saving={saving} onReload={reloadProject} />}
+      aside={<WorkbenchAside loadState={loadState} saving={saving} onReload={requestReloadProject} />}
     >
       {loadState.status === "loading" ? <WorkbenchLoading /> : null}
       {loadState.status === "error" ? (
-        <WorkbenchError message={loadState.message} onReload={reloadProject} />
+        <WorkbenchError message={loadState.message} onReload={requestReloadProject} />
       ) : null}
       {loadState.status === "ready" ? (
         <motion.div
@@ -501,7 +630,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
                   loadingPath={activeRequestPath}
                   disabled={saving}
                   onOpenFile={(relativePath) => {
-                    void openRelativePath(relativePath, "Files");
+                    void requestOpenRelativePath(relativePath, "Files");
                   }}
                 />
               </motion.div>
@@ -519,13 +648,23 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
                   draft={draft}
                   dirty={dirty}
                   saving={saving}
+                  refreshing={refreshing}
                   loading={activeRequestPath !== null}
+                  lastSaveStatus={lastSaveStatus}
+                  lastSavedAt={lastSavedAt}
+                  conflict={conflict}
+                  draftGuardPrompt={draftGuardPrompt}
                   notice={panelNotice}
                   onDraftChange={setDraft}
                   onSave={() => {
                     void handleSave();
                   }}
                   onReset={handleResetDraft}
+                  onReloadRemote={() => {
+                    if (file) {
+                      void requestOpenRelativePath(file.relativePath, section);
+                    }
+                  }}
                 />
               </motion.div>
             </div>

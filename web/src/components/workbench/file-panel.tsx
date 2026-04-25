@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, FileCog, FileText, Info, Save } from "lucide-react";
+import { AlertCircle, FileCog, FileText, Info, RefreshCcw, Save } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -14,11 +14,20 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import type { FileReadResult, WorkbenchSection } from "@/lib/types";
+import type { FileConflictState, SaveStatus } from "@/stores/workbench-store";
 
 export interface FilePanelNotice {
   tone: "error" | "warning";
   title: string;
   message: string;
+}
+
+export interface DraftGuardPrompt {
+  message: string;
+  saving: boolean;
+  onSaveAndContinue: () => void;
+  onDiscardAndContinue: () => void;
+  onCancel: () => void;
 }
 
 interface FilePanelProps {
@@ -28,11 +37,17 @@ interface FilePanelProps {
   draft: string;
   dirty: boolean;
   saving: boolean;
+  refreshing: boolean;
   loading: boolean;
+  lastSaveStatus: SaveStatus;
+  lastSavedAt: string | null;
+  conflict: FileConflictState | null;
+  draftGuardPrompt: DraftGuardPrompt | null;
   notice: FilePanelNotice | null;
   onDraftChange: (draft: string) => void;
   onSave: () => void;
   onReset: () => void;
+  onReloadRemote: () => void;
 }
 
 export function FilePanel({
@@ -42,11 +57,17 @@ export function FilePanel({
   draft,
   dirty,
   saving,
+  refreshing,
   loading,
+  lastSaveStatus,
+  lastSavedAt,
+  conflict,
+  draftGuardPrompt,
   notice,
   onDraftChange,
   onSave,
   onReset,
+  onReloadRemote,
 }: FilePanelProps) {
   if (loading) {
     return (
@@ -106,6 +127,14 @@ export function FilePanel({
       <div className="space-y-4">
         <FileFacts file={file} dirty={dirty} />
 
+        <SaveStatusMessage
+          refreshing={refreshing}
+          lastSaveStatus={lastSaveStatus}
+          lastSavedAt={lastSavedAt}
+          conflict={conflict}
+          onReloadRemote={onReloadRemote}
+        />
+
         {notice ? (
           <Alert
             variant={notice.tone === "error" ? "destructive" : "default"}
@@ -120,6 +149,8 @@ export function FilePanel({
             <AlertDescription>{notice.message}</AlertDescription>
           </Alert>
         ) : null}
+
+        {draftGuardPrompt ? <DraftGuardAlert prompt={draftGuardPrompt} /> : null}
 
         {file.mode === "editable" ? (
           <div className="space-y-4">
@@ -167,6 +198,110 @@ export function FilePanel({
       </div>
     </PanelCard>
   );
+}
+
+function DraftGuardAlert({ prompt }: { prompt: DraftGuardPrompt }) {
+  return (
+    <Alert className="border-amber-900/15 bg-amber-700/5 text-amber-950">
+      <AlertCircle className="size-4" />
+      <AlertTitle>Unsaved draft</AlertTitle>
+      <AlertDescription className="space-y-3">
+        <p>{prompt.message}</p>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" onClick={prompt.onSaveAndContinue} disabled={prompt.saving}>
+            <Save className="size-4" />
+            {prompt.saving ? "Saving..." : "Save and continue"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={prompt.onDiscardAndContinue}
+            disabled={prompt.saving}
+          >
+            Discard draft
+          </Button>
+          <Button size="sm" variant="ghost" onClick={prompt.onCancel} disabled={prompt.saving}>
+            Cancel
+          </Button>
+        </div>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+function SaveStatusMessage({
+  refreshing,
+  lastSaveStatus,
+  lastSavedAt,
+  conflict,
+  onReloadRemote,
+}: {
+  refreshing: boolean;
+  lastSaveStatus: SaveStatus;
+  lastSavedAt: string | null;
+  conflict: FileConflictState | null;
+  onReloadRemote: () => void;
+}) {
+  if (refreshing) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Refreshing saved file from disk...
+      </p>
+    );
+  }
+
+  if (lastSaveStatus === "idle") {
+    return null;
+  }
+
+  if (lastSaveStatus === "success") {
+    return (
+      <p className="text-sm text-emerald-700">
+        Saved{lastSavedAt ? ` at ${formatSavedAt(lastSavedAt)}` : ""}.
+      </p>
+    );
+  }
+
+  if (lastSaveStatus === "failed") {
+    return <p className="text-sm text-destructive">Save failed. Your draft is still local.</p>;
+  }
+
+  if (lastSaveStatus === "refresh_failed") {
+    return (
+      <p className="text-sm text-amber-800">
+        Saved{lastSavedAt ? ` at ${formatSavedAt(lastSavedAt)}` : ""}, but refresh failed.
+      </p>
+    );
+  }
+
+  if (lastSaveStatus === "conflict") {
+    return (
+      <div className="flex flex-wrap items-center gap-3 rounded-[16px] border border-amber-900/15 bg-amber-700/5 px-4 py-3 text-sm text-amber-950">
+        <span>
+          Conflict{conflict?.relativePath ? ` in ${conflict.relativePath}` : ""}. Your draft was not
+          saved.
+        </span>
+        <Button size="sm" variant="outline" onClick={onReloadRemote}>
+          <RefreshCcw className="size-4" />
+          Reload remote
+        </Button>
+      </div>
+    );
+  }
+}
+
+function formatSavedAt(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
 function PanelCard({

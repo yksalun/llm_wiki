@@ -44,16 +44,27 @@ describe("buildPendingDraftMessage", () => {
     const message = buildPendingDraftMessage({
       type: "open-section-file",
       path: "docs/overview.md",
-      section: "Quick Start",
+      section: "Purpose",
     });
 
     expect(message).toContain("docs/overview.md");
-    expect(message).toContain("Quick Start");
+    expect(message).toContain("Purpose");
   });
 
   it("describes reload semantics for reload-project intents", () => {
     const intent: PendingWorkbenchIntent = { type: "reload-project" };
 
     expect(buildPendingDraftMessage(intent).toLowerCase()).toContain("reload");
+  });
+
+  it("describes replacing a conflicted draft with the remote file", () => {
+    const message = buildPendingDraftMessage({
+      type: "open-section-file",
+      path: "purpose.md",
+      section: "Purpose",
+    });
+
+    expect(message).toContain("Save or discard");
+    expect(message).toContain("purpose.md");
   });
 });
