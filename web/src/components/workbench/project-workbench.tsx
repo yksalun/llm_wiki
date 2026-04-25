@@ -408,7 +408,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
   ]);
 
   useEffect(() => {
-    if (!dirty || saving || file?.mode !== "editable") {
+    if (!dirty || file?.mode !== "editable") {
       return;
     }
 
@@ -422,7 +422,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [dirty, file?.mode, saving]);
+  }, [dirty, file?.mode]);
 
   const handleResetDraft = useCallback(() => {
     setDraft(file?.content ?? "");
