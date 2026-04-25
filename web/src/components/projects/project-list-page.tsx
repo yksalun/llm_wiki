@@ -49,8 +49,6 @@ export function ProjectListPage() {
   useEffect(() => {
     const abortController = new AbortController();
 
-    setLoadState({ status: "loading" });
-
     fetchProjects(abortController.signal)
       .then((data) => {
         if (abortController.signal.aborted) {
