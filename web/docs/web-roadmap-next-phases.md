@@ -127,6 +127,8 @@ flowchart TD
 
 ## 7. 阶段 2：编辑可靠性补强
 
+> 状态：已完成。阶段 2 已按 [spec](../../docs/superpowers/specs/2026-04-25-phase-2-editing-reliability-design.md) 和 [implementation plan](../../docs/superpowers/plans/2026-04-25-phase-2-editing-reliability.md) 落地，覆盖未保存草稿保护、保存结果反馈、冲突恢复语义和关键测试。
+
 ### 7.1 阶段目标
 
 把当前工作台从“能编辑”提升到“适合长期稳定编辑”。
