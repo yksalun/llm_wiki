@@ -47,6 +47,97 @@ describe("createWorkbenchStore", () => {
     expect(store.getState().dirty).toBe(false);
   });
 
+  it("tracks successful save feedback without replacing dirty calculation", () => {
+    const store = createWorkbenchStore();
+    const savedAt = "2026-04-25T01:00:00.000Z";
+
+    store.getState().openFile(createFile());
+    store.getState().setDraft("# Updated");
+    store.getState().setSaving(true);
+    store.getState().markSaveSuccess(savedAt);
+
+    expect(store.getState().saving).toBe(false);
+    expect(store.getState().lastSaveStatus).toBe("success");
+    expect(store.getState().lastSavedAt).toBe(savedAt);
+    expect(store.getState().conflict).toBeNull();
+    expect(store.getState().dirty).toBe(true);
+  });
+
+  it("clears save feedback when opening a new file", () => {
+    const store = createWorkbenchStore();
+
+    store.getState().openFile(createFile({ relativePath: "first.md" }));
+    store.getState().markSaveSuccess("2026-04-25T01:00:00.000Z");
+    store.getState().setRefreshing(true);
+    store.getState().markRefreshFailed();
+
+    store.getState().openFile(createFile({ relativePath: "second.md", content: "# Second" }));
+
+    expect(store.getState()).toMatchObject({
+      selectedPath: "second.md",
+      draft: "# Second",
+      refreshing: false,
+      lastSaveStatus: "idle",
+      lastSavedAt: null,
+      conflict: null,
+    });
+  });
+
+  it("keeps the draft when save fails or conflicts", () => {
+    const store = createWorkbenchStore();
+
+    store.getState().openFile(createFile({ relativePath: "purpose.md" }));
+    store.getState().setDraft("# Local draft");
+    store.getState().setSaving(true);
+    store.getState().markSaveFailed();
+
+    expect(store.getState()).toMatchObject({
+      draft: "# Local draft",
+      dirty: true,
+      saving: false,
+      lastSaveStatus: "failed",
+      conflict: null,
+    });
+
+    store.getState().setSaving(true);
+    store.getState().markSaveConflict({
+      relativePath: "purpose.md",
+      message: "File changed on disk.",
+      currentLastModified: "2026-04-25T02:00:00.000Z",
+    });
+
+    expect(store.getState()).toMatchObject({
+      draft: "# Local draft",
+      dirty: true,
+      saving: false,
+      lastSaveStatus: "conflict",
+      conflict: {
+        relativePath: "purpose.md",
+        message: "File changed on disk.",
+        currentLastModified: "2026-04-25T02:00:00.000Z",
+      },
+    });
+  });
+
+  it("clears save feedback explicitly", () => {
+    const store = createWorkbenchStore();
+
+    store.getState().openFile(createFile());
+    store.getState().markSaveConflict({
+      relativePath: "purpose.md",
+      message: "File changed on disk.",
+      currentLastModified: "2026-04-25T02:00:00.000Z",
+    });
+    store.getState().clearSaveFeedback();
+
+    expect(store.getState()).toMatchObject({
+      refreshing: false,
+      lastSaveStatus: "idle",
+      lastSavedAt: null,
+      conflict: null,
+    });
+  });
+
   it("can clear the selection without resetting the active section", () => {
     const store = createWorkbenchStore();
 
@@ -60,6 +151,10 @@ describe("createWorkbenchStore", () => {
     expect(store.getState().draft).toBe("");
     expect(store.getState().dirty).toBe(false);
     expect(store.getState().saving).toBe(false);
+    expect(store.getState().refreshing).toBe(false);
+    expect(store.getState().lastSaveStatus).toBe("idle");
+    expect(store.getState().lastSavedAt).toBeNull();
+    expect(store.getState().conflict).toBeNull();
   });
 
   it("can clear the loaded file while keeping the requested path selected", () => {
@@ -76,6 +171,10 @@ describe("createWorkbenchStore", () => {
     expect(store.getState().draft).toBe("");
     expect(store.getState().dirty).toBe(false);
     expect(store.getState().saving).toBe(false);
+    expect(store.getState().refreshing).toBe(false);
+    expect(store.getState().lastSaveStatus).toBe("idle");
+    expect(store.getState().lastSavedAt).toBeNull();
+    expect(store.getState().conflict).toBeNull();
   });
 
   it("resets the full workbench state", () => {
@@ -85,6 +184,12 @@ describe("createWorkbenchStore", () => {
     store.getState().openFile(createFile({ relativePath: "wiki/entry.md", content: "hello" }));
     store.getState().setDraft("changed");
     store.getState().setSaving(true);
+    store.getState().setRefreshing(true);
+    store.getState().markSaveConflict({
+      relativePath: "wiki/entry.md",
+      message: "File changed on disk.",
+      currentLastModified: "2026-04-25T03:00:00.000Z",
+    });
     store.getState().reset();
 
     expect(store.getState()).toMatchObject({
@@ -94,6 +199,10 @@ describe("createWorkbenchStore", () => {
       draft: "",
       dirty: false,
       saving: false,
+      refreshing: false,
+      lastSaveStatus: "idle",
+      lastSavedAt: null,
+      conflict: null,
     });
   });
 });

@@ -13,18 +13,26 @@ interface ApiErrorPayload {
   error?: {
     code?: string;
     message?: string;
+    details?: Record<string, string | number | boolean | null>;
   };
 }
 
 export class ClientApiError extends Error {
   readonly status: number;
   readonly code?: string;
+  readonly details?: Record<string, string | number | boolean | null>;
 
-  constructor(message: string, status: number, code?: string) {
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+    details?: Record<string, string | number | boolean | null>,
+  ) {
     super(message);
     this.name = "ClientApiError";
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -101,6 +109,7 @@ async function requestJson<T>(input: RequestInfo | URL, init?: RequestInit): Pro
       apiError?.error?.message ?? "Request failed.",
       response.status,
       apiError?.error?.code,
+      apiError?.error?.details,
     );
   }
 

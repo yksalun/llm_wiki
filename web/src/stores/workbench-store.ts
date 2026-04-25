@@ -5,6 +5,14 @@ import { createStore } from "zustand/vanilla";
 
 import type { FileReadResult, WorkbenchSection } from "@/lib/types";
 
+export type SaveStatus = "idle" | "success" | "failed" | "conflict" | "refresh_failed";
+
+export interface FileConflictState {
+  relativePath: string;
+  message: string;
+  currentLastModified: string | null;
+}
+
 export interface WorkbenchStoreState {
   section: WorkbenchSection;
   selectedPath: string | null;
@@ -12,14 +20,31 @@ export interface WorkbenchStoreState {
   draft: string;
   dirty: boolean;
   saving: boolean;
+  refreshing: boolean;
+  lastSaveStatus: SaveStatus;
+  lastSavedAt: string | null;
+  conflict: FileConflictState | null;
   setSection: (section: WorkbenchSection) => void;
   setSelectedPath: (selectedPath: string | null) => void;
   openFile: (file: FileReadResult | null) => void;
   setDraft: (draft: string) => void;
   setSaving: (saving: boolean) => void;
+  setRefreshing: (refreshing: boolean) => void;
+  markSaveSuccess: (lastSavedAt: string) => void;
+  markSaveFailed: () => void;
+  markSaveConflict: (conflict: FileConflictState) => void;
+  markRefreshFailed: () => void;
+  clearSaveFeedback: () => void;
   clearFile: (preserveSelection?: boolean) => void;
   reset: () => void;
 }
+
+const clearSaveFeedbackState = {
+  refreshing: false,
+  lastSaveStatus: "idle" as SaveStatus,
+  lastSavedAt: null,
+  conflict: null,
+};
 
 const initialWorkbenchState = {
   section: "Overview" as WorkbenchSection,
@@ -28,6 +53,7 @@ const initialWorkbenchState = {
   draft: "",
   dirty: false,
   saving: false,
+  ...clearSaveFeedbackState,
 };
 
 function createWorkbenchState(
@@ -52,6 +78,7 @@ function createWorkbenchState(
         draft: file?.content ?? "",
         dirty: false,
         saving: false,
+        ...clearSaveFeedbackState,
       });
     },
     setDraft: (draft) => {
@@ -63,6 +90,40 @@ function createWorkbenchState(
     setSaving: (saving) => {
       set({ saving });
     },
+    setRefreshing: (refreshing) => {
+      set({ refreshing });
+    },
+    markSaveSuccess: (lastSavedAt) => {
+      set({
+        saving: false,
+        lastSaveStatus: "success",
+        lastSavedAt,
+        conflict: null,
+      });
+    },
+    markSaveFailed: () => {
+      set({
+        saving: false,
+        lastSaveStatus: "failed",
+        conflict: null,
+      });
+    },
+    markSaveConflict: (conflict) => {
+      set({
+        saving: false,
+        lastSaveStatus: "conflict",
+        conflict,
+      });
+    },
+    markRefreshFailed: () => {
+      set({
+        refreshing: false,
+        lastSaveStatus: "refresh_failed",
+      });
+    },
+    clearSaveFeedback: () => {
+      set(clearSaveFeedbackState);
+    },
     clearFile: (preserveSelection = false) => {
       set((state) => ({
         selectedPath: preserveSelection ? state.selectedPath : null,
@@ -70,6 +131,7 @@ function createWorkbenchState(
         draft: "",
         dirty: false,
         saving: false,
+        ...clearSaveFeedbackState,
       }));
     },
     reset: () => {
