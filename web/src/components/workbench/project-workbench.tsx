@@ -320,6 +320,8 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
           return "aborted";
         }
 
+        const now = new Date().toISOString();
+
         openFile({
           ...fileSnapshot,
           content: draftSnapshot,
@@ -334,7 +336,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
               ? `${error.message} Local editor state was updated to the saved draft.`
             : "The file was saved, but the workbench could not reload it. Local draft state was preserved.",
         });
-        markRefreshFailed();
+        markRefreshFailed(now);
         return "saved";
       }
     } catch (error: unknown) {

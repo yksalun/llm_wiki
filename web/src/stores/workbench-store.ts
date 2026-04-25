@@ -33,7 +33,7 @@ export interface WorkbenchStoreState {
   markSaveSuccess: (lastSavedAt: string) => void;
   markSaveFailed: () => void;
   markSaveConflict: (conflict: FileConflictState) => void;
-  markRefreshFailed: () => void;
+  markRefreshFailed: (lastSavedAt: string) => void;
   clearSaveFeedback: () => void;
   clearFile: (preserveSelection?: boolean) => void;
   reset: () => void;
@@ -115,10 +115,13 @@ function createWorkbenchState(
         conflict,
       });
     },
-    markRefreshFailed: () => {
+    markRefreshFailed: (lastSavedAt) => {
       set({
+        saving: false,
         refreshing: false,
         lastSaveStatus: "refresh_failed",
+        lastSavedAt,
+        conflict: null,
       });
     },
     clearSaveFeedback: () => {

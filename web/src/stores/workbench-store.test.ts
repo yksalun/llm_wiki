@@ -69,7 +69,7 @@ describe("createWorkbenchStore", () => {
     store.getState().openFile(createFile({ relativePath: "first.md" }));
     store.getState().markSaveSuccess("2026-04-25T01:00:00.000Z");
     store.getState().setRefreshing(true);
-    store.getState().markRefreshFailed();
+    store.getState().markRefreshFailed("2026-04-25T14:00:00.000Z");
 
     store.getState().openFile(createFile({ relativePath: "second.md", content: "# Second" }));
 
@@ -116,6 +116,28 @@ describe("createWorkbenchStore", () => {
         message: "File changed on disk.",
         currentLastModified: "2026-04-25T02:00:00.000Z",
       },
+    });
+  });
+
+  it("records saved time when refresh fails after a successful save", () => {
+    const store = createWorkbenchStore();
+    const savedAt = "2026-04-25T14:00:00.000Z";
+
+    store.getState().openFile(createFile({ relativePath: "purpose.md" }));
+    store.getState().setRefreshing(true);
+    store.getState().markSaveConflict({
+      relativePath: "purpose.md",
+      message: "File changed on disk.",
+      currentLastModified: "2026-04-25T02:00:00.000Z",
+    });
+    store.getState().markRefreshFailed(savedAt);
+
+    expect(store.getState()).toMatchObject({
+      saving: false,
+      refreshing: false,
+      lastSaveStatus: "refresh_failed",
+      lastSavedAt: savedAt,
+      conflict: null,
     });
   });
 
