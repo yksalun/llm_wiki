@@ -122,12 +122,6 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
     [dirty, file?.mode, saving],
   );
 
-  useEffect(() => {
-    if (!blocksDraftReplacement) {
-      setPendingIntent(null);
-    }
-  }, [blocksDraftReplacement]);
-
   const performReloadProject = useCallback(() => {
     cancelProjectLoad();
     cancelFileLoad();
@@ -186,9 +180,16 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
 
   useEffect(() => {
     reset();
-    performReloadProject();
+    let shouldLoad = true;
+
+    queueMicrotask(() => {
+      if (shouldLoad) {
+        performReloadProject();
+      }
+    });
 
     return () => {
+      shouldLoad = false;
       cancelProjectLoad();
       cancelFileLoad();
       cancelSave();
@@ -413,6 +414,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
 
         openFile(refreshedFile);
         markSaveSuccess(now);
+        setPendingIntent(null);
         return "saved";
       } catch (error: unknown) {
         if (abortController.signal.aborted || requestId !== latestSaveRequestIdRef.current) {
@@ -436,6 +438,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
             : "The file was saved, but the workbench could not reload it. Local draft state was preserved.",
         });
         markRefreshFailed(now);
+        setPendingIntent(null);
         return "saved";
       }
     } catch (error: unknown) {
@@ -525,13 +528,15 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
     [performOpenRelativePath, performReloadProject, showMissingSectionFile],
   );
 
+  const activePendingIntent = blocksDraftReplacement ? pendingIntent : null;
+
   const draftGuardPrompt = useMemo<DraftGuardPrompt | null>(() => {
-    if (!pendingIntent) {
+    if (!activePendingIntent) {
       return null;
     }
 
     return {
-      message: buildPendingDraftMessage(pendingIntent),
+      message: buildPendingDraftMessage(activePendingIntent),
       saving,
       onSaveAndContinue: () => {
         if (saving) {
@@ -539,7 +544,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
         }
 
         void (async () => {
-          const intent = pendingIntent;
+          const intent = activePendingIntent;
           const outcome = await handleSave();
 
           if (outcome === "saved" || outcome === "skipped") {
@@ -552,7 +557,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
           return;
         }
 
-        void executeIntent(pendingIntent);
+        void executeIntent(activePendingIntent);
       },
       onCancel: () => {
         if (saving) {
@@ -562,7 +567,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
         setPendingIntent(null);
       },
     };
-  }, [executeIntent, handleSave, pendingIntent, saving]);
+  }, [activePendingIntent, executeIntent, handleSave, saving]);
 
   useEffect(() => {
     if (!dirty || file?.mode !== "editable") {
@@ -581,7 +586,16 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
     };
   }, [dirty, file?.mode]);
 
+  const handleDraftChange = useCallback(
+    (nextDraft: string) => {
+      setPendingIntent(null);
+      setDraft(nextDraft);
+    },
+    [setDraft],
+  );
+
   const handleResetDraft = useCallback(() => {
+    setPendingIntent(null);
     setDraft(file?.content ?? "");
   }, [file, setDraft]);
 
@@ -683,7 +697,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
                   conflict={conflict}
                   draftGuardPrompt={draftGuardPrompt}
                   notice={panelNotice}
-                  onDraftChange={setDraft}
+                  onDraftChange={handleDraftChange}
                   onSave={() => {
                     void handleSave();
                   }}
