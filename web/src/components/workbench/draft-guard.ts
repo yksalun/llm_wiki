@@ -1,4 +1,4 @@
-type FileMode = "editable" | "readonly";
+import type { FileViewMode } from "@/lib/types";
 
 export type PendingWorkbenchIntent =
   | {
@@ -21,7 +21,7 @@ export function hasBlockingDraft({
 }: {
   dirty: boolean;
   saving: boolean;
-  fileMode: FileMode;
+  fileMode: FileViewMode | null;
 }) {
   return dirty && !saving && fileMode === "editable";
 }

@@ -12,7 +12,10 @@ describe("hasBlockingDraft", () => {
       { dirty: true, saving: false, fileMode: "editable" as const, expected: true },
       { dirty: false, saving: false, fileMode: "editable" as const, expected: false },
       { dirty: true, saving: true, fileMode: "editable" as const, expected: false },
-      { dirty: true, saving: false, fileMode: "readonly" as const, expected: false },
+      { dirty: true, saving: false, fileMode: "preview" as const, expected: false },
+      { dirty: true, saving: false, fileMode: "metadata" as const, expected: false },
+      { dirty: true, saving: false, fileMode: "unsupported" as const, expected: false },
+      { dirty: true, saving: false, fileMode: null, expected: false },
     ];
 
     for (const state of states) {
