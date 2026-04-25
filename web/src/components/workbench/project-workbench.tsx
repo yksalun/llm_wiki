@@ -43,6 +43,8 @@ type LoadState =
   | { status: "error"; message: string }
   | { status: "ready"; detail: ProjectDetail; tree: FileTreeNode[] };
 
+type SaveOutcome = "saved" | "failed" | "conflict" | "aborted" | "skipped";
+
 const purposePath = "purpose.md";
 const schemaPath = "schema.md";
 
@@ -59,6 +61,12 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
     openFile,
     setDraft,
     setSaving,
+    setRefreshing,
+    markSaveSuccess,
+    markSaveFailed,
+    markSaveConflict,
+    markRefreshFailed,
+    clearSaveFeedback,
     clearFile,
     reset,
   } = useWorkbenchStore();
@@ -87,7 +95,8 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
     saveAbortRef.current?.abort();
     saveAbortRef.current = null;
     setSaving(false);
-  }, [setSaving]);
+    setRefreshing(false);
+  }, [setRefreshing, setSaving]);
 
   const reloadProject = useCallback(() => {
     cancelProjectLoad();
@@ -254,9 +263,9 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
     [cancelFileLoad, clearFile, openRelativePath, setSection, treePaths],
   );
 
-  const handleSave = useCallback(async () => {
-    if (!file) {
-      return;
+  const handleSave = useCallback(async (): Promise<SaveOutcome> => {
+    if (!file || !dirty) {
+      return "skipped";
     }
 
     cancelSave();
@@ -269,6 +278,8 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
     latestSaveRequestIdRef.current = requestId;
     saveAbortRef.current = abortController;
     setSaving(true);
+    setRefreshing(false);
+    clearSaveFeedback();
     setPanelNotice(null);
 
     try {
@@ -283,8 +294,10 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
       );
 
       if (abortController.signal.aborted || requestId !== latestSaveRequestIdRef.current) {
-        return;
+        return "aborted";
       }
+
+      setRefreshing(true);
 
       try {
         const refreshedFile = await fetchProjectFile(
@@ -294,13 +307,17 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
         );
 
         if (abortController.signal.aborted || requestId !== latestSaveRequestIdRef.current) {
-          return;
+          return "aborted";
         }
 
+        const now = new Date().toISOString();
+
         openFile(refreshedFile);
+        markSaveSuccess(now);
+        return "saved";
       } catch (error: unknown) {
         if (abortController.signal.aborted || requestId !== latestSaveRequestIdRef.current) {
-          return;
+          return "aborted";
         }
 
         openFile({
@@ -315,12 +332,37 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
           message:
             error instanceof Error
               ? `${error.message} Local editor state was updated to the saved draft.`
-              : "The file was saved, but the workbench could not reload it. Local draft state was preserved.",
+            : "The file was saved, but the workbench could not reload it. Local draft state was preserved.",
         });
+        markRefreshFailed();
+        return "saved";
       }
     } catch (error: unknown) {
       if (abortController.signal.aborted || requestId !== latestSaveRequestIdRef.current) {
-        return;
+        return "aborted";
+      }
+
+      if (error instanceof ClientApiError && error.code === "FILE_WRITE_CONFLICT") {
+        const relativePath =
+          typeof error.details?.relativePath === "string"
+            ? error.details.relativePath
+            : fileSnapshot.relativePath;
+        const currentLastModified =
+          typeof error.details?.currentLastModified === "string"
+            ? error.details.currentLastModified
+            : null;
+
+        markSaveConflict({
+          relativePath,
+          message: error.message,
+          currentLastModified,
+        });
+        setPanelNotice({
+          tone: "warning",
+          title: "File changed on disk",
+          message: error.message,
+        });
+        return "conflict";
       }
 
       const message =
@@ -328,23 +370,57 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
           ? error.message
           : error instanceof Error
             ? error.message
-            : "Unable to save this file.";
+          : "Unable to save this file.";
 
+      markSaveFailed();
       setPanelNotice({
         tone: "error",
         title: "Unable to save file",
         message,
       });
+      return "failed";
     } finally {
       if (requestId === latestSaveRequestIdRef.current) {
         setSaving(false);
+        setRefreshing(false);
       }
 
       if (saveAbortRef.current === abortController) {
         saveAbortRef.current = null;
       }
     }
-  }, [cancelSave, draft, file, openFile, projectId, setSaving]);
+  }, [
+    cancelSave,
+    clearSaveFeedback,
+    dirty,
+    draft,
+    file,
+    markRefreshFailed,
+    markSaveConflict,
+    markSaveFailed,
+    markSaveSuccess,
+    openFile,
+    projectId,
+    setRefreshing,
+    setSaving,
+  ]);
+
+  useEffect(() => {
+    if (!dirty || saving || file?.mode !== "editable") {
+      return;
+    }
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [dirty, file?.mode, saving]);
 
   const handleResetDraft = useCallback(() => {
     setDraft(file?.content ?? "");
