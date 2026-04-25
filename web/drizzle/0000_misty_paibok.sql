@@ -1,4 +1,6 @@
-CREATE TABLE "project_snapshots" (
+CREATE SCHEMA IF NOT EXISTS "llm_wiki_web";
+--> statement-breakpoint
+CREATE TABLE "llm_wiki_web"."project_snapshots" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"project_id" text NOT NULL,
 	"root_path" text NOT NULL,
@@ -13,7 +15,7 @@ CREATE TABLE "project_snapshots" (
 	CONSTRAINT "project_snapshots_project_id_unique" UNIQUE("project_id")
 );
 --> statement-breakpoint
-CREATE TABLE "project_sync_runs" (
+CREATE TABLE "llm_wiki_web"."project_sync_runs" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"root_path" text NOT NULL,
 	"status" text NOT NULL,

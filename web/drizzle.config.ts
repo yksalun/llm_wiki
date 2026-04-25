@@ -9,4 +9,9 @@ export default defineConfig({
   },
   strict: true,
   verbose: true,
+  migrations: {
+    schema: process.env.NEXT_PUBLIC_DB_MIGRATIONS_SCHEMA || "drizzle",
+    table:
+      process.env.NEXT_PUBLIC_DB_MIGRATIONS_TABLE || "__drizzle_migrations",
+  },
 });

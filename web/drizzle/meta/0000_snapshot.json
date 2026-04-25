@@ -1,12 +1,12 @@
 {
-  "id": "44febe78-7893-4523-bd2a-66ce840454cb",
+  "id": "4a473d13-e770-4796-94e1-cd8e86c318b5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.project_snapshots": {
+    "llm_wiki_web.project_snapshots": {
       "name": "project_snapshots",
-      "schema": "",
+      "schema": "llm_wiki_web",
       "columns": {
         "id": {
           "name": "id",
@@ -92,9 +92,9 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.project_sync_runs": {
+    "llm_wiki_web.project_sync_runs": {
       "name": "project_sync_runs",
-      "schema": "",
+      "schema": "llm_wiki_web",
       "columns": {
         "id": {
           "name": "id",
@@ -144,7 +144,9 @@
     }
   },
   "enums": {},
-  "schemas": {},
+  "schemas": {
+    "llm_wiki_web": "llm_wiki_web"
+  },
   "sequences": {},
   "roles": {},
   "policies": {},

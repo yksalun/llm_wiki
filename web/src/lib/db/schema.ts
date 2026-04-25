@@ -1,10 +1,27 @@
-import { boolean, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  pgSchema,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 import type { ProjectStatus } from "@/lib/types";
 
 export type ProjectSyncRunStatus = "success" | "warning" | "failure";
 
-export const projectSnapshots = pgTable("project_snapshots", {
+const schemaName = (process.env.NEXT_PUBLIC_DB_SCHEMA || "public").trim();
+
+// Drizzle forbids pgSchema('public'); for public schema use pgTable().
+// For non-public schema (e.g. 'web'), use pgSchema(name).table() to generate "schema"."table".
+export const customSchema =
+  schemaName && schemaName !== "public" ? pgSchema(schemaName) : null;
+const table: typeof pgTable = customSchema
+  ? (customSchema.table.bind(customSchema) as unknown as typeof pgTable)
+  : pgTable;
+
+export const projectSnapshots = table("project_snapshots", {
   id: uuid("id").defaultRandom().primaryKey(),
   projectId: text("project_id").notNull().unique(),
   rootPath: text("root_path").notNull(),
@@ -14,11 +31,13 @@ export const projectSnapshots = pgTable("project_snapshots", {
   hasSchema: boolean("has_schema").notNull(),
   hasWikiDirectory: boolean("has_wiki_directory").notNull(),
   hasRawSourcesDirectory: boolean("has_raw_sources_directory").notNull(),
-  lastKnownUpdatedAt: timestamp("last_known_updated_at", { withTimezone: true }),
+  lastKnownUpdatedAt: timestamp("last_known_updated_at", {
+    withTimezone: true,
+  }),
   lastScannedAt: timestamp("last_scanned_at", { withTimezone: true }).notNull(),
 });
 
-export const projectSyncRuns = pgTable("project_sync_runs", {
+export const projectSyncRuns = table("project_sync_runs", {
   id: uuid("id").defaultRandom().primaryKey(),
   rootPath: text("root_path").notNull(),
   status: text("status").$type<ProjectSyncRunStatus>().notNull(),
