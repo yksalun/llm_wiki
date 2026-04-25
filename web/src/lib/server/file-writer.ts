@@ -27,7 +27,12 @@ export async function writeProjectFile(
     const currentLastModified = currentStats?.mtime.toISOString() ?? null;
 
     if (request.lastModified !== currentLastModified) {
-      throw new AppError("FILE_WRITE_CONFLICT", 409, "File changed since it was last read.");
+      throw new AppError("FILE_WRITE_CONFLICT", 409, "File changed since it was last read.", {
+        details: {
+          relativePath: normalizedPath,
+          currentLastModified,
+        },
+      });
     }
 
     await fs.mkdir(path.dirname(absolutePath), { recursive: true });

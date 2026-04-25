@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -165,5 +166,84 @@ describe("/api/projects/[projectId]/file route", () => {
 
     expect(response.status).toBe(400);
     expect(payload.error.code).toBe("INVALID_REQUEST_BODY");
+  });
+
+  it("PUT returns 400 when the request body is malformed JSON", async () => {
+    const { projectId } = await createProjectContext("write-malformed-json");
+
+    const { PUT } = await import("../route");
+    const response = await PUT(
+      new Request(`http://localhost/api/projects/${projectId}/file`, {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: "{",
+      }),
+      {
+        params: Promise.resolve({ projectId }),
+      },
+    );
+    const payload = (await response.json()) as {
+      error: {
+        code: string;
+      };
+    };
+
+    expect(response.status).toBe(400);
+    expect(payload.error.code).toBe("INVALID_REQUEST_BODY");
+  });
+
+  it("PUT returns conflict recovery details when the file changed since read", async () => {
+    const { fixture, projectId } = await createProjectContext("write-conflict-details");
+
+    const { GET, PUT } = await import("../route");
+    const readResponse = await GET(
+      new Request(`http://localhost/api/projects/${projectId}/file?path=purpose.md`),
+      {
+        params: Promise.resolve({ projectId }),
+      },
+    );
+    const readPayload = (await readResponse.json()) as {
+      lastModified: string | null;
+    };
+    const filePath = path.join(fixture.rootDir, "purpose.md");
+    const currentTimestamp = new Date(Date.now() + 1000);
+
+    await fs.writeFile(filePath, "# Purpose\n\nChanged elsewhere.\n", "utf8");
+    await fs.utimes(filePath, currentTimestamp, currentTimestamp);
+
+    const response = await PUT(
+      new Request(`http://localhost/api/projects/${projectId}/file`, {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          relativePath: "purpose.md",
+          content: "# Purpose\n\nStale write.\n",
+          lastModified: readPayload.lastModified,
+        }),
+      }),
+      {
+        params: Promise.resolve({ projectId }),
+      },
+    );
+    const payload = (await response.json()) as {
+      error: {
+        code: string;
+        details?: {
+          relativePath?: string;
+          currentLastModified?: string | null;
+        };
+      };
+    };
+
+    expect(response.status).toBe(409);
+    expect(payload.error.code).toBe("FILE_WRITE_CONFLICT");
+    expect(payload.error.details).toEqual({
+      relativePath: "purpose.md",
+      currentLastModified: currentTimestamp.toISOString(),
+    });
   });
 });

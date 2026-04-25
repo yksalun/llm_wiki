@@ -33,12 +33,22 @@ export async function PUT(request: Request, context: ProjectRouteContext) {
     const roots = getProjectRootsFromEnv();
     const { projectId } = await context.params;
     const project = await resolveProjectById(roots, projectId);
-    const payload = validateFileWriteRequest(await request.json());
+    const payload = validateFileWriteRequest(await parseJsonRequestBody(request));
     const result = await writeProjectFile(project.rootDir, payload);
 
     return okJson(result);
   } catch (error) {
     return errorJson(error);
+  }
+}
+
+async function parseJsonRequestBody(request: Request): Promise<unknown> {
+  try {
+    return await request.json();
+  } catch (error) {
+    throw new AppError("INVALID_REQUEST_BODY", 400, "Request body must be valid JSON.", {
+      cause: error instanceof Error ? error : undefined,
+    });
   }
 }
 

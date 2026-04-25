@@ -8,12 +8,22 @@ export function okJson<T>(payload: T, status = 200) {
 
 export function errorJson(error: unknown) {
   if (error instanceof AppError) {
+    const errorBody: {
+      code: string;
+      message: string;
+      details?: unknown;
+    } = {
+      code: error.code,
+      message: error.publicMessage,
+    };
+
+    if (error.details !== undefined) {
+      errorBody.details = error.details;
+    }
+
     return NextResponse.json(
       {
-        error: {
-          code: error.code,
-          message: error.publicMessage,
-        },
+        error: errorBody,
       },
       { status: error.status },
     );
