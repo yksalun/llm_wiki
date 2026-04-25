@@ -28,7 +28,7 @@ export async function writeProjectFile(
 
     if (request.lastModified !== currentLastModified) {
       throw new AppError("FILE_WRITE_CONFLICT", 409, "File changed since it was last read.", {
-        details: {
+        publicDetails: {
           relativePath: normalizedPath,
           currentLastModified,
         },

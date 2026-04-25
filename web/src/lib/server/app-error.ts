@@ -1,12 +1,12 @@
 export interface AppErrorOptions extends ErrorOptions {
-  details?: unknown;
+  publicDetails?: Record<string, string | number | boolean | null>;
 }
 
 export class AppError extends Error {
   readonly code: string;
   readonly status: number;
   readonly publicMessage: string;
-  readonly details?: unknown;
+  readonly publicDetails?: Record<string, string | number | boolean | null>;
 
   constructor(code: string, status: number, publicMessage: string, options?: AppErrorOptions) {
     super(publicMessage, options);
@@ -14,6 +14,6 @@ export class AppError extends Error {
     this.code = code;
     this.status = status;
     this.publicMessage = publicMessage;
-    this.details = options?.details;
+    this.publicDetails = options?.publicDetails;
   }
 }

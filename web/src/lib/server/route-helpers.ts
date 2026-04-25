@@ -11,14 +11,14 @@ export function errorJson(error: unknown) {
     const errorBody: {
       code: string;
       message: string;
-      details?: unknown;
+      details?: Record<string, string | number | boolean | null>;
     } = {
       code: error.code,
       message: error.publicMessage,
     };
 
-    if (error.details !== undefined) {
-      errorBody.details = error.details;
+    if (error.publicDetails !== undefined) {
+      errorBody.details = error.publicDetails;
     }
 
     return NextResponse.json(

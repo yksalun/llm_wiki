@@ -187,11 +187,13 @@ describe("/api/projects/[projectId]/file route", () => {
     const payload = (await response.json()) as {
       error: {
         code: string;
+        message: string;
       };
     };
 
     expect(response.status).toBe(400);
     expect(payload.error.code).toBe("INVALID_REQUEST_BODY");
+    expect(Object.keys(payload.error).sort()).toEqual(["code", "message"]);
   });
 
   it("PUT returns conflict recovery details when the file changed since read", async () => {
