@@ -178,12 +178,12 @@ function WarningsAlert({ warnings }: { warnings: string[] }) {
       </AlertTitle>
       <AlertDescription className="text-amber-900/80 dark:text-amber-100/80">
         {warnings.length === 1 ? (
-          warnings[0]
+          formatWarningMessage(warnings[0])
         ) : (
           <ul className="space-y-1 pl-4">
             {warnings.map((warning) => (
               <li key={warning} className="list-disc">
-                {warning}
+                {formatWarningMessage(warning)}
               </li>
             ))}
           </ul>
@@ -191,6 +191,14 @@ function WarningsAlert({ warnings }: { warnings: string[] }) {
       </AlertDescription>
     </Alert>
   );
+}
+
+function formatWarningMessage(warning: string) {
+  if (warning === "A configured project root could not be scanned.") {
+    return "无法扫描已配置的项目根目录。";
+  }
+
+  return warning;
 }
 
 function LoadingState() {
