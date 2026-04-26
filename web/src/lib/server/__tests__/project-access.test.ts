@@ -77,6 +77,28 @@ function catchError(action: () => void): unknown {
 }
 
 describe("applyProjectAccessToFile", () => {
+  it("leaves editable files unchanged when writes are enabled", () => {
+    const file: FileReadResult = {
+      relativePath: "wiki/index.md",
+      mode: "editable",
+      content: "# Wiki\n",
+      editable: true,
+      size: 7,
+      lastModified: "2026-04-26T00:00:00.000Z",
+      metadata: {
+        existing: true,
+      },
+    };
+
+    expect(
+      applyProjectAccessToFile(file, {
+        mode: "read-write",
+        canRead: true,
+        canWrite: true,
+      }),
+    ).toBe(file);
+  });
+
   it("converts editable files to preview files when writes are disabled", () => {
     const file: FileReadResult = {
       relativePath: "wiki/index.md",
