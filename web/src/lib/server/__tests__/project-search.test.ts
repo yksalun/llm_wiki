@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FILE_VIEW_SIZE_LIMIT_BYTES } from "../file-policy";
 import { MAX_PROJECT_SEARCH_RESULTS, searchProjectFiles } from "../project-search";
@@ -10,6 +10,8 @@ import { MAX_PROJECT_SEARCH_RESULTS, searchProjectFiles } from "../project-searc
 const cleanupTasks: Array<() => Promise<void>> = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
+
   while (cleanupTasks.length > 0) {
     const cleanup = cleanupTasks.pop();
 
@@ -132,6 +134,31 @@ describe("searchProjectFiles", () => {
     });
   });
 
+  it("returns the top sorted results while counting every match across many files", async () => {
+    const projectRoot = await createProject("many-files");
+
+    for (let fileIndex = 0; fileIndex < MAX_PROJECT_SEARCH_RESULTS + 10; fileIndex += 1) {
+      await writeProjectFile(
+        projectRoot,
+        `result-${fileIndex.toString().padStart(2, "0")}.md`,
+        `target ${fileIndex}\n`,
+      );
+    }
+
+    const response = await searchProjectFiles(projectRoot, "target");
+
+    expect(response.results).toHaveLength(MAX_PROJECT_SEARCH_RESULTS);
+    expect(response.results.at(0)?.relativePath).toBe("result-00.md");
+    expect(response.results.at(-1)?.relativePath).toBe("result-49.md");
+    expect(response.summary).toEqual({
+      scannedFiles: MAX_PROJECT_SEARCH_RESULTS + 10,
+      skippedFiles: 0,
+      matchedFiles: MAX_PROJECT_SEARCH_RESULTS + 10,
+      totalMatches: MAX_PROJECT_SEARCH_RESULTS + 10,
+      truncated: true,
+    });
+  });
+
   it("marks truncated and counts all matches when one file exceeds the per-file result cap", async () => {
     const projectRoot = await createProject("per-file-cap");
     await writeProjectFile(
@@ -164,6 +191,49 @@ describe("searchProjectFiles", () => {
       "zeta.md:1",
       "alpha.md:2",
     ]);
+  });
+
+  it("bounds returned line text and keeps match offsets coherent within the cropped line", async () => {
+    const projectRoot = await createProject("long-line");
+    await writeProjectFile(projectRoot, "long.json", `${"a".repeat(220)}target${"b".repeat(220)}\n`);
+
+    const response = await searchProjectFiles(projectRoot, "target");
+    const result = response.results[0];
+
+    expect(result.lineText.length).toBeLessThanOrEqual(160);
+    expect(result.lineText.startsWith("...")).toBe(true);
+    expect(result.lineText.endsWith("...")).toBe(true);
+    expect(result.matchStart).toBeGreaterThanOrEqual(0);
+    expect(result.matchEnd).toBeLessThanOrEqual(result.lineText.length);
+    expect(result.lineText.slice(result.matchStart, result.matchEnd)).toBe("target");
+    expect(result.preview).toBe(result.lineText);
+  });
+
+  it("skips files that become oversized after the initial stat guard", async () => {
+    const projectRoot = await createProject("post-read-size");
+    const relativePath = "race.md";
+    const absolutePath = path.join(projectRoot, relativePath);
+    await writeProjectFile(projectRoot, relativePath, "target\n");
+
+    const originalReadFile = fs.readFile;
+    vi.spyOn(fs, "readFile").mockImplementation(async (...args: Parameters<typeof fs.readFile>) => {
+      if (args[0] === absolutePath) {
+        return Buffer.alloc(FILE_VIEW_SIZE_LIMIT_BYTES + 1, "target");
+      }
+
+      return originalReadFile(...args);
+    });
+
+    const response = await searchProjectFiles(projectRoot, "target");
+
+    expect(response.results).toEqual([]);
+    expect(response.summary).toEqual({
+      scannedFiles: 0,
+      skippedFiles: 1,
+      matchedFiles: 0,
+      totalMatches: 0,
+      truncated: false,
+    });
   });
 });
 

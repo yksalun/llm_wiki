@@ -9,6 +9,7 @@ import type { ProjectSearchResponse, ProjectSearchResult } from "@/lib/types";
 import { FILE_VIEW_SIZE_LIMIT_BYTES } from "./file-policy";
 
 export const MAX_PROJECT_SEARCH_RESULTS = 50;
+export const MAX_PROJECT_SEARCH_LINE_TEXT_LENGTH = 160;
 
 const MAX_MATCHES_PER_FILE = 5;
 const PREVIEW_RADIUS = 48;
@@ -32,6 +33,7 @@ export async function searchProjectFiles(
   let matchedFiles = 0;
   let totalMatches = 0;
   let truncatedByPerFileCap = false;
+  let truncatedByGlobalCap = false;
 
   for await (const relativePath of walkProjectFiles(rootDir, "")) {
     const extension = getFileExtension(relativePath);
@@ -65,14 +67,14 @@ export async function searchProjectFiles(
       totalMatches += fileSearchResult.totalMatches;
       truncatedByPerFileCap ||= fileSearchResult.truncated;
       searchResults.push(...fileSearchResult.results);
+      truncatedByGlobalCap ||= trimToTopResults(searchResults, lowerQuery);
     }
   }
 
   const sortedResults = searchResults.sort((left, right) =>
     compareSearchResults(left, right, lowerQuery),
   );
-  const truncated =
-    truncatedByPerFileCap || sortedResults.length > MAX_PROJECT_SEARCH_RESULTS;
+  const truncated = truncatedByPerFileCap || truncatedByGlobalCap;
 
   return {
     query: trimmedQuery,
@@ -138,6 +140,10 @@ async function safeReadUtf8(filePath: string): Promise<string | null> {
   try {
     const buffer = await fs.readFile(filePath);
 
+    if (buffer.byteLength > FILE_VIEW_SIZE_LIMIT_BYTES) {
+      return null;
+    }
+
     return utf8Decoder.decode(buffer);
   } catch {
     return null;
@@ -165,13 +171,15 @@ function findLineMatches(
     totalMatches += 1;
 
     if (matches.length < MAX_MATCHES_PER_FILE) {
+      const croppedLine = cropLineAroundMatch(lineText, matchStart, matchStart + query.length);
+
       matches.push({
         relativePath,
         lineNumber: lineIndex + 1,
-        lineText,
-        preview: buildPreview(lineText, matchStart, matchStart + query.length),
-        matchStart,
-        matchEnd: matchStart + query.length,
+        lineText: croppedLine.lineText,
+        preview: croppedLine.lineText,
+        matchStart: croppedLine.matchStart,
+        matchEnd: croppedLine.matchEnd,
       });
     }
   }
@@ -183,13 +191,45 @@ function findLineMatches(
   };
 }
 
-function buildPreview(lineText: string, matchStart: number, matchEnd: number): string {
-  const start = Math.max(0, matchStart - PREVIEW_RADIUS);
-  const end = Math.min(lineText.length, matchEnd + PREVIEW_RADIUS);
+function cropLineAroundMatch(
+  lineText: string,
+  matchStart: number,
+  matchEnd: number,
+): { lineText: string; matchStart: number; matchEnd: number } {
+  const queryLength = matchEnd - matchStart;
+  const initialStart = Math.max(0, matchStart - PREVIEW_RADIUS);
+  const initialEnd = Math.min(lineText.length, matchEnd + PREVIEW_RADIUS);
+  const hasPrefix = initialStart > 0;
+  const hasSuffix = initialEnd < lineText.length;
+  const ellipsisLength = (hasPrefix ? 3 : 0) + (hasSuffix ? 3 : 0);
+  const maxContextLength = Math.max(0, MAX_PROJECT_SEARCH_LINE_TEXT_LENGTH - ellipsisLength - queryLength);
+  const beforeContextLength = Math.min(matchStart - initialStart, Math.floor(maxContextLength / 2));
+  const afterContextLength = Math.min(
+    initialEnd - matchEnd,
+    maxContextLength - beforeContextLength,
+  );
+  const start = matchStart - beforeContextLength;
+  const end = matchEnd + afterContextLength;
   const prefix = start > 0 ? "..." : "";
   const suffix = end < lineText.length ? "..." : "";
+  const croppedPrefixLength = prefix.length;
 
-  return `${prefix}${lineText.slice(start, end)}${suffix}`;
+  return {
+    lineText: `${prefix}${lineText.slice(start, end)}${suffix}`,
+    matchStart: croppedPrefixLength + matchStart - start,
+    matchEnd: croppedPrefixLength + matchEnd - start,
+  };
+}
+
+function trimToTopResults(results: ProjectSearchResult[], lowerQuery: string): boolean {
+  if (results.length <= MAX_PROJECT_SEARCH_RESULTS) {
+    return false;
+  }
+
+  results.sort((left, right) => compareSearchResults(left, right, lowerQuery));
+  results.splice(MAX_PROJECT_SEARCH_RESULTS);
+
+  return true;
 }
 
 function compareSearchResults(
