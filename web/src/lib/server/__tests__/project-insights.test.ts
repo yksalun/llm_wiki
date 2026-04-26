@@ -93,6 +93,108 @@ describe("buildProjectInsights", () => {
     );
   });
 
+  it("creates an unsafe link finding for absolute markdown paths without creating an edge", async () => {
+    const projectRoot = await createProject("absolute-link");
+    await writeProjectFile(projectRoot, "README.md", "See [Absolute](/abs.md).\n");
+    await writeProjectFile(projectRoot, "abs.md", "# Abs\n");
+
+    const response = await buildProjectInsights(projectRoot);
+
+    expect(response.graph.edges).toEqual([]);
+    expect(response.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          severity: "risk",
+          title: "Unsafe markdown link",
+          relativePath: "README.md",
+          lineNumber: 1,
+        }),
+      ]),
+    );
+    expect(response.findings.find((finding) => finding.title === "Unsafe markdown link")?.message).toContain(
+      "/abs.md",
+    );
+  });
+
+  it("ignores external and anchor markdown hrefs without broken link findings", async () => {
+    const projectRoot = await createProject("external-links");
+    await writeProjectFile(
+      projectRoot,
+      "README.md",
+      [
+        "[Http](http://example.com/a.md)",
+        "[Https](https://example.com/a.md)",
+        "[Upper](HTTPS://example.com/a.md)",
+        "[Ftp](ftp://example.com/a.md)",
+        "[ProtocolRelative](//example.com/a.md)",
+        "[Mail](mailto:test@example.com)",
+        "[Anchor](#section)",
+      ].join("\n"),
+    );
+
+    const response = await buildProjectInsights(projectRoot);
+
+    expect(response.graph.edges).toEqual([]);
+    expect(response.findings.filter((finding) => finding.title === "Broken markdown link")).toEqual([]);
+    expect(response.findings.filter((finding) => finding.title === "Unsafe markdown link")).toEqual([]);
+    expect(response.researchPrompts.filter((prompt) => prompt.id.startsWith("prompt:broken-link:"))).toEqual([]);
+  });
+
+  it("deduplicates markdown link edges with the same source line and target", async () => {
+    const projectRoot = await createProject("duplicate-edges");
+    await writeProjectFile(projectRoot, "README.md", "See [Guide](docs/guide.md) and [Guide again](docs/guide.md).\n");
+    await writeProjectFile(projectRoot, "docs/guide.md", "# Guide\n");
+
+    const response = await buildProjectInsights(projectRoot);
+
+    expect(response.graph.edges).toEqual([
+      expect.objectContaining({
+        id: "edge:README.md:1:docs/guide.md",
+        sourceId: "file:README.md",
+        targetId: "file:docs/guide.md",
+      }),
+    ]);
+  });
+
+  it("keeps finding and research prompt ids unique for repeated broken links on one line", async () => {
+    const projectRoot = await createProject("duplicate-broken-links");
+    await writeProjectFile(
+      projectRoot,
+      "README.md",
+      "See [Missing](docs/missing.md), [Missing again](docs/missing.md), [Unsafe](/abs.md), and [Unsafe again](/abs.md).\n",
+    );
+
+    const response = await buildProjectInsights(projectRoot);
+    const riskFindings = response.findings.filter((finding) => finding.severity === "risk");
+    const promptIds = response.researchPrompts.map((prompt) => prompt.id);
+
+    expect(riskFindings.length).toBeGreaterThan(1);
+    expect(new Set(riskFindings.map((finding) => finding.id)).size).toBe(riskFindings.length);
+    expect(new Set(promptIds).size).toBe(promptIds.length);
+  });
+
+  it("limits research prompts to six after link deduplication", async () => {
+    const projectRoot = await createProject("prompt-limit");
+    await writeProjectFile(
+      projectRoot,
+      "README.md",
+      [
+        "[Missing 1](missing-1.md)",
+        "[Missing 2](missing-2.md)",
+        "[Missing 3](missing-3.md)",
+        "[Missing 4](missing-4.md)",
+        "[Missing 5](missing-5.md)",
+        "[Missing 6](missing-6.md)",
+        "[Missing 7](missing-7.md)",
+      ].join("\n"),
+    );
+
+    const response = await buildProjectInsights(projectRoot);
+
+    expect(response.researchPrompts).toHaveLength(6);
+    expect(new Set(response.researchPrompts.map((prompt) => prompt.id)).size).toBe(6);
+  });
+
   it("creates a warning finding and research prompt for orphan wiki pages", async () => {
     const projectRoot = await createProject("orphan-wiki");
     await writeProjectFile(projectRoot, "wiki/index.md", "# Index\n");

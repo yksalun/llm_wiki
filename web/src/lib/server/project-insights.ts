@@ -29,6 +29,7 @@ interface BrokenLink {
   targetPath: string;
   lineNumber: number;
   linkText: string;
+  idTarget: string;
 }
 
 interface OrphanPage {
@@ -67,6 +68,9 @@ export async function buildProjectInsights(
   const findings: ProjectInsightFinding[] = [];
   const incomingMarkdownLinkCounts = new Map<string, number>();
   const brokenLinks: BrokenLink[] = [];
+  const edgeIds = new Set<string>();
+  const findingIds = new Set<string>();
+  const brokenLinkIds = new Set<string>();
 
   for (const file of analyzedFiles) {
     if (!file.isMarkdown) {
@@ -81,45 +85,60 @@ export async function buildProjectInsights(
       const targetPath = resolveMarkdownTarget(file.relativePath, link.href);
 
       if (targetPath === null || targetPath.startsWith("..") || path.posix.isAbsolute(targetPath)) {
-        findings.push(
+        addFindingOnce(
+          findings,
+          findingIds,
           createFinding(
             "risk",
             "Unsafe markdown link",
             `Markdown link "${link.href}" points outside the project and was not linked.`,
             file.relativePath,
             link.lineNumber,
+            link.text,
           ),
         );
-        brokenLinks.push({
+        addBrokenLinkOnce(brokenLinks, brokenLinkIds, {
           sourcePath: file.relativePath,
           targetPath: link.href,
           lineNumber: link.lineNumber,
           linkText: link.text,
+          idTarget: link.text,
         });
         continue;
       }
 
       if (!targetPaths.has(targetPath)) {
-        findings.push(
+        addFindingOnce(
+          findings,
+          findingIds,
           createFinding(
             "risk",
             "Broken markdown link",
             `Markdown link "${link.href}" resolves to missing file "${targetPath}".`,
             file.relativePath,
             link.lineNumber,
+            targetPath,
           ),
         );
-        brokenLinks.push({
+        addBrokenLinkOnce(brokenLinks, brokenLinkIds, {
           sourcePath: file.relativePath,
           targetPath,
           lineNumber: link.lineNumber,
           linkText: link.text,
+          idTarget: targetPath,
         });
         continue;
       }
 
+      const edgeId = `edge:${file.relativePath}:${link.lineNumber}:${targetPath}`;
+
+      if (edgeIds.has(edgeId)) {
+        continue;
+      }
+
+      edgeIds.add(edgeId);
       edges.push({
-        id: `edge:${file.relativePath}:${link.lineNumber}:${targetPath}`,
+        id: edgeId,
         sourceId: `file:${file.relativePath}`,
         targetId: `file:${targetPath}`,
         kind: "links-to",
@@ -257,10 +276,9 @@ function getLineNumber(content: string, index: number): number {
 
 function shouldIgnoreHref(href: string): boolean {
   return (
-    href.startsWith("http://") ||
-    href.startsWith("https://") ||
-    href.startsWith("mailto:") ||
-    href.startsWith("#")
+    href.startsWith("#") ||
+    href.startsWith("//") ||
+    /^[a-z][a-z0-9+.-]*:/i.test(href)
   );
 }
 
@@ -269,6 +287,10 @@ function resolveMarkdownTarget(sourcePath: string, href: string): string | null 
 
   if (hrefWithoutHash.length === 0) {
     return null;
+  }
+
+  if (path.posix.isAbsolute(hrefWithoutHash)) {
+    return hrefWithoutHash;
   }
 
   return path.posix.normalize(path.posix.join(path.posix.dirname(sourcePath), hrefWithoutHash));
@@ -289,17 +311,47 @@ function createFinding(
   message: string,
   relativePath?: string,
   lineNumber?: number,
+  identity?: string,
 ): ProjectInsightFinding {
   const location = relativePath ? `${relativePath}:${lineNumber ?? 0}` : "project";
+  const identitySuffix = identity ? `:${createIdSegment(identity)}` : "";
 
   return {
-    id: `finding:${severity}:${slugify(title)}:${location}`,
+    id: `finding:${severity}:${slugify(title)}:${location}${identitySuffix}`,
     severity,
     title,
     message,
     ...(relativePath ? { relativePath } : {}),
     ...(lineNumber ? { lineNumber } : {}),
   };
+}
+
+function addFindingOnce(
+  findings: ProjectInsightFinding[],
+  findingIds: Set<string>,
+  finding: ProjectInsightFinding,
+): void {
+  if (findingIds.has(finding.id)) {
+    return;
+  }
+
+  findingIds.add(finding.id);
+  findings.push(finding);
+}
+
+function addBrokenLinkOnce(
+  brokenLinks: BrokenLink[],
+  brokenLinkIds: Set<string>,
+  brokenLink: BrokenLink,
+): void {
+  const id = `${brokenLink.sourcePath}:${brokenLink.lineNumber}:${brokenLink.idTarget}`;
+
+  if (brokenLinkIds.has(id)) {
+    return;
+  }
+
+  brokenLinkIds.add(id);
+  brokenLinks.push(brokenLink);
 }
 
 function findWikiOrphans(
@@ -326,7 +378,7 @@ function buildResearchPrompts(
 
   for (const brokenLink of brokenLinks) {
     prompts.push({
-      id: `prompt:broken-link:${brokenLink.sourcePath}:${brokenLink.lineNumber}:${brokenLink.targetPath}`,
+      id: `prompt:broken-link:${brokenLink.sourcePath}:${brokenLink.lineNumber}:${createIdSegment(brokenLink.idTarget)}`,
       title: "Resolve broken project link",
       question: `What should "${brokenLink.linkText || brokenLink.targetPath}" in ${brokenLink.sourcePath} link to instead of ${brokenLink.targetPath}?`,
       reason: "Broken markdown links make the project graph incomplete.",
@@ -359,4 +411,8 @@ function buildResearchPrompts(
 
 function slugify(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function createIdSegment(value: string): string {
+  return value.trim() || "link";
 }
