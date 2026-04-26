@@ -100,12 +100,15 @@ describe("/api/projects/[projectId]/question route", () => {
     vi.stubEnv("LLM_WIKI_OPENAI_API_KEY", "test-key");
     vi.stubEnv("LLM_WIKI_OPENAI_MODEL", "test-model");
     vi.stubEnv("LLM_WIKI_OPENAI_BASE_URL", "https://provider.example.test/v1/responses");
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
-      new Response(JSON.stringify({ output_text: "Answer [1]." }), {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void input;
+      void init;
+
+      return new Response(JSON.stringify({ output_text: "Answer [1]." }), {
         status: 200,
         headers: { "content-type": "application/json" },
-      }),
-    );
+      });
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     const { POST, runtime } = await import("../route");
@@ -147,7 +150,8 @@ describe("/api/projects/[projectId]/question route", () => {
       ]),
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const providerRequest = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+    const [, providerRequestInit] = fetchMock.mock.calls[0] ?? [];
+    const providerRequest = JSON.parse(String(providerRequestInit?.body)) as {
       input: Array<{ content: string }>;
     };
     expect(providerRequest.input[0]?.content).not.toContain("invalid role");

@@ -26,6 +26,21 @@ export function ProjectQuestionPanel({
   onOpenFile,
   askFn = askProjectQuestion,
 }: ProjectQuestionPanelProps) {
+  return (
+    <ProjectQuestionPanelSession
+      key={projectId}
+      projectId={projectId}
+      onOpenFile={onOpenFile}
+      askFn={askFn}
+    />
+  );
+}
+
+function ProjectQuestionPanelSession({
+  projectId,
+  onOpenFile,
+  askFn,
+}: Required<ProjectQuestionPanelProps>) {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<ProjectQuestionMessage[]>([]);
   const [lastResponse, setLastResponse] = useState<ProjectQuestionResponse | null>(null);
@@ -40,20 +55,11 @@ export function ProjectQuestionPanel({
   const canAsk = trimmedQuestion.length >= 2 && status !== "loading";
 
   useEffect(() => {
-    controllerRef.current?.abort();
-    controllerRef.current = null;
-    setQuestion("");
-    setMessages([]);
-    setLastResponse(null);
-    setStatus("idle");
-    setErrorMessage(null);
-    setLastRequest(null);
-
     return () => {
       controllerRef.current?.abort();
       controllerRef.current = null;
     };
-  }, [projectId]);
+  }, []);
 
   function submitQuestion(nextQuestion: string, history: ProjectQuestionMessage[]) {
     controllerRef.current?.abort();

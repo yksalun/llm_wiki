@@ -65,6 +65,17 @@ LLM_WIKI_PROJECT_ROOTS=/srv/llm-wiki-projects,/data/wiki-labs
 DATABASE_URL=postgres://app:password@127.0.0.1:5432/llm_wiki_web
 ```
 
+项目级问答还需要配置：
+
+```bash
+LLM_WIKI_OPENAI_API_KEY=sk-...
+LLM_WIKI_OPENAI_MODEL=your-model
+# 可选；默认 https://api.openai.com/v1/responses
+LLM_WIKI_OPENAI_BASE_URL=https://api.openai.com/v1/responses
+```
+
+也可以用 `OPENAI_API_KEY` 作为 API key fallback。未配置时，Ask section 会显示 provider 未配置错误。
+
 说明：
 
 - `LLM_WIKI_PROJECT_ROOTS`

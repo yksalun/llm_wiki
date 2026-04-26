@@ -71,10 +71,14 @@ describe("answerProjectQuestion", () => {
     await writeProjectFile(projectRoot, "wiki/schema.md", "The schema is defined in this file.\n");
     const config = { apiKey: "test-key", model: "test-model", baseUrl: "https://example.test" };
     const getConfig = vi.fn(() => config);
-    const generateAnswer = vi.fn(async (_input: GenerateProjectAnswerInput) => ({
-      answer: "Schema 在 wiki/schema.md 中定义。[1]",
-      model: "test-model",
-    }));
+    const generateAnswer = vi.fn(async (input: GenerateProjectAnswerInput) => {
+      void input;
+
+      return {
+        answer: "Schema 在 wiki/schema.md 中定义。[1]",
+        model: "test-model",
+      };
+    });
 
     const response = await answerProjectQuestion(
       projectRoot,
@@ -118,10 +122,14 @@ describe("answerProjectQuestion", () => {
       model: "test-model",
       baseUrl: "https://example.test",
     }));
-    const generateAnswer = vi.fn(async (_input: GenerateProjectAnswerInput) => ({
-      answer: "answer [1]",
-      model: "test-model",
-    }));
+    const generateAnswer = vi.fn(async (input: GenerateProjectAnswerInput) => {
+      void input;
+
+      return {
+        answer: "answer [1]",
+        model: "test-model",
+      };
+    });
 
     const response = await answerProjectQuestion(
       projectRoot,
@@ -209,10 +217,14 @@ describe("answerProjectQuestion", () => {
       model: "test-model",
       baseUrl: "https://example.test",
     }));
-    const generateAnswer = vi.fn(async (_input: GenerateProjectAnswerInput) => ({
-      answer: "answer [1]",
-      model: "test-model",
-    }));
+    const generateAnswer = vi.fn(async (input: GenerateProjectAnswerInput) => {
+      void input;
+
+      return {
+        answer: "answer [1]",
+        model: "test-model",
+      };
+    });
 
     const longContent = "assistant latest ".repeat(100);
     await answerProjectQuestion(
@@ -266,7 +278,7 @@ describe("answerProjectQuestion", () => {
       model: "test-model",
       baseUrl: "https://example.test",
     }));
-    const generateAnswer = vi.fn(async (_input: GenerateProjectAnswerInput) => ({
+    const generateAnswer = vi.fn(async () => ({
       answer: "answer [1]",
       model: "test-model",
     }));

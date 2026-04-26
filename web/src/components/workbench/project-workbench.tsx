@@ -533,44 +533,36 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
 
   const activePendingIntent = blocksDraftReplacement ? pendingIntent : null;
 
-  const draftGuardPrompt = useMemo<DraftGuardPrompt | null>(() => {
-    if (!activePendingIntent) {
-      return null;
+  const handleDraftGuardSaveAndContinue = useCallback(() => {
+    if (!activePendingIntent || saving) {
+      return;
     }
 
-    return {
-      message: buildPendingDraftMessage(activePendingIntent),
-      saving,
-      onSaveAndContinue: () => {
-        if (saving) {
-          return;
-        }
+    void (async () => {
+      const intent = activePendingIntent;
+      const outcome = await handleSave();
 
-        void (async () => {
-          const intent = activePendingIntent;
-          const outcome = await handleSave();
-
-          if (outcome === "saved" || outcome === "skipped") {
-            await executeIntent(intent);
-          }
-        })();
-      },
-      onDiscardAndContinue: () => {
-        if (saving) {
-          return;
-        }
-
-        void executeIntent(activePendingIntent);
-      },
-      onCancel: () => {
-        if (saving) {
-          return;
-        }
-
-        setPendingIntent(null);
-      },
-    };
+      if (outcome === "saved" || outcome === "skipped") {
+        await executeIntent(intent);
+      }
+    })();
   }, [activePendingIntent, executeIntent, handleSave, saving]);
+
+  const handleDraftGuardDiscardAndContinue = useCallback(() => {
+    if (!activePendingIntent || saving) {
+      return;
+    }
+
+    void executeIntent(activePendingIntent);
+  }, [activePendingIntent, executeIntent, saving]);
+
+  const handleDraftGuardCancel = useCallback(() => {
+    if (saving) {
+      return;
+    }
+
+    setPendingIntent(null);
+  }, [saving]);
 
   useEffect(() => {
     if (!dirty || file?.mode !== "editable") {
@@ -651,7 +643,13 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
             </TabsList>
           </Tabs>
 
-          {draftGuardPrompt ? <DraftGuardAlert prompt={draftGuardPrompt} /> : null}
+          <WorkbenchDraftGuardAlert
+            intent={activePendingIntent}
+            saving={saving}
+            onSaveAndContinue={handleDraftGuardSaveAndContinue}
+            onDiscardAndContinue={handleDraftGuardDiscardAndContinue}
+            onCancel={handleDraftGuardCancel}
+          />
 
           <ProjectSearch
             projectId={projectId}
@@ -743,6 +741,34 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
       ) : null}
     </AppShell>
   );
+}
+
+function WorkbenchDraftGuardAlert({
+  intent,
+  saving,
+  onSaveAndContinue,
+  onDiscardAndContinue,
+  onCancel,
+}: {
+  intent: PendingWorkbenchIntent | null;
+  saving: boolean;
+  onSaveAndContinue: () => void;
+  onDiscardAndContinue: () => void;
+  onCancel: () => void;
+}) {
+  if (!intent) {
+    return null;
+  }
+
+  const prompt: DraftGuardPrompt = {
+    message: buildPendingDraftMessage(intent),
+    saving,
+    onSaveAndContinue,
+    onDiscardAndContinue,
+    onCancel,
+  };
+
+  return <DraftGuardAlert prompt={prompt} />;
 }
 
 function WorkbenchAside({

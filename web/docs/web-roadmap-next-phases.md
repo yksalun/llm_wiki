@@ -384,6 +384,8 @@ flowchart TD
 
 ### 10.1 阶段 5：聊天 / RAG / 项目级问答
 
+> 状态：已完成。阶段 5 已按 [spec](../../docs/superpowers/specs/2026-04-26-phase-5-project-qa-design.md) 和 [implementation plan](../../docs/superpowers/plans/2026-04-26-phase-5-project-qa.md) 落地，覆盖项目级 Ask 入口、检索增强问答 API、OpenAI Responses provider 适配、带引用来源的回答、source 打开联动和关键测试。
+
 这一阶段的目标不是“接个模型就完了”，而是让系统开始具备项目级问答能力。
 
 重点会是：
