@@ -1,4 +1,4 @@
-import type { ProjectQuestionMessage, ProjectQuestionRequest } from "@/lib/types";
+import type { ProjectQuestionRequest } from "@/lib/types";
 import { AppError } from "@/lib/server/app-error";
 import { getProjectRootsFromEnv } from "@/lib/server/env";
 import { answerProjectQuestion } from "@/lib/server/project-question-answer";
@@ -57,33 +57,8 @@ function validateProjectQuestionRequest(payload: unknown): ProjectQuestionReques
 
   return {
     question: candidate.question,
-    ...(Array.isArray(candidate.history) ? { history: normalizeHistory(candidate.history) } : {}),
+    ...(Array.isArray(candidate.history)
+      ? { history: candidate.history as ProjectQuestionRequest["history"] }
+      : {}),
   };
-}
-
-function normalizeHistory(history: unknown[]): ProjectQuestionMessage[] {
-  return history.flatMap((message) => {
-    if (!message || typeof message !== "object") {
-      return [];
-    }
-
-    const candidate = message as {
-      role?: unknown;
-      content?: unknown;
-    };
-
-    if (
-      (candidate.role !== "user" && candidate.role !== "assistant") ||
-      typeof candidate.content !== "string"
-    ) {
-      return [];
-    }
-
-    return [
-      {
-        role: candidate.role,
-        content: candidate.content,
-      },
-    ];
-  });
 }

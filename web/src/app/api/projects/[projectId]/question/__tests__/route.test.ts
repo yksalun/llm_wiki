@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createFixtureProject } from "@/test-utils/project-fixture";
 
@@ -29,11 +29,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  delete process.env.LLM_WIKI_PROJECT_ROOTS;
-  delete process.env.LLM_WIKI_OPENAI_API_KEY;
-  delete process.env.OPENAI_API_KEY;
-  delete process.env.LLM_WIKI_OPENAI_MODEL;
-  delete process.env.LLM_WIKI_OPENAI_BASE_URL;
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.resetModules();
 
@@ -50,7 +46,7 @@ async function createProjectContext(projectName: string) {
   const fixture = await createFixtureProject(projectName);
   cleanupTasks.push(fixture.cleanup);
 
-  process.env.LLM_WIKI_PROJECT_ROOTS = path.dirname(fixture.rootDir);
+  vi.stubEnv("LLM_WIKI_PROJECT_ROOTS", path.dirname(fixture.rootDir));
 
   const { GET: listProjects } = await import("../../../route");
   const response = await listProjects();
@@ -65,6 +61,35 @@ async function createProjectContext(projectName: string) {
 }
 
 describe("/api/projects/[projectId]/question route", () => {
+  describe.sequential("env isolation", () => {
+    const preservedApiKey = "preserved-route-test-key";
+    let originalApiKey: string | undefined;
+
+    beforeAll(() => {
+      originalApiKey = process.env.LLM_WIKI_OPENAI_API_KEY;
+      process.env.LLM_WIKI_OPENAI_API_KEY = preservedApiKey;
+    });
+
+    afterAll(() => {
+      if (originalApiKey === undefined) {
+        delete process.env.LLM_WIKI_OPENAI_API_KEY;
+        return;
+      }
+
+      process.env.LLM_WIKI_OPENAI_API_KEY = originalApiKey;
+    });
+
+    it("stubs provider env for one test", () => {
+      vi.stubEnv("LLM_WIKI_OPENAI_API_KEY", "stubbed-route-test-key");
+
+      expect(process.env.LLM_WIKI_OPENAI_API_KEY).toBe("stubbed-route-test-key");
+    });
+
+    it("restores provider env after each test", () => {
+      expect(process.env.LLM_WIKI_OPENAI_API_KEY).toBe(preservedApiKey);
+    });
+  });
+
   it("POST answers a project question with sources", async () => {
     const { fixture, projectId } = await createProjectContext("question-success");
     await fs.writeFile(
@@ -72,10 +97,10 @@ describe("/api/projects/[projectId]/question route", () => {
       "The billing schema is defined in invoices.sql.\n",
       "utf8",
     );
-    process.env.LLM_WIKI_OPENAI_API_KEY = "test-key";
-    process.env.LLM_WIKI_OPENAI_MODEL = "test-model";
-    process.env.LLM_WIKI_OPENAI_BASE_URL = "https://provider.example.test/v1/responses";
-    const fetchMock = vi.fn(async () =>
+    vi.stubEnv("LLM_WIKI_OPENAI_API_KEY", "test-key");
+    vi.stubEnv("LLM_WIKI_OPENAI_MODEL", "test-model");
+    vi.stubEnv("LLM_WIKI_OPENAI_BASE_URL", "https://provider.example.test/v1/responses");
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       new Response(JSON.stringify({ output_text: "Answer [1]." }), {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -122,6 +147,11 @@ describe("/api/projects/[projectId]/question route", () => {
       ]),
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    const providerRequest = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+      input: Array<{ content: string }>;
+    };
+    expect(providerRequest.input[0]?.content).not.toContain("invalid role");
+    expect(providerRequest.input[0]?.content).not.toContain("123");
   });
 
   it("POST returns 400 when question is not a string", async () => {
