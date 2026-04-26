@@ -28,6 +28,14 @@ const project: ProjectDetail = {
     canRead: true,
     canWrite: true,
   },
+  runtime: {
+    activeEngine: "node",
+    bridgeStatus: "not-configured",
+    heavyTasks: [
+      { task: "project-search", engine: "node", bridgeStatus: "not-configured" },
+      { task: "project-insights", engine: "node", bridgeStatus: "not-configured" },
+    ],
+  },
 };
 
 const tree: FileTreeNode[] = [

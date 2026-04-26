@@ -16,6 +16,15 @@ import { getDatabaseUrlFromEnv, getProjectRootsFromEnv } from "../env";
 import type { ProjectRegistryRepo } from "../project-registry";
 import { resolveProjectById, scanProjectRoots } from "../project-registry";
 
+const runtimeCapabilities = {
+  activeEngine: "node",
+  bridgeStatus: "not-configured",
+  heavyTasks: [
+    { task: "project-search", engine: "node", bridgeStatus: "not-configured" },
+    { task: "project-insights", engine: "node", bridgeStatus: "not-configured" },
+  ],
+};
+
 interface MockRepoCallState {
   snapshots: ProjectSnapshotInsert[];
   existingSnapshots: ProjectSnapshotRecord[];
@@ -427,6 +436,7 @@ describe("resolveProjectById", () => {
       rootDir: fixture.rootDir,
       rootPathHint: fixture.rootDir,
       sections: ["Overview", "Ask", "Insights", "Files", "Purpose", "Schema", "Project Info"],
+      runtime: runtimeCapabilities,
     });
   });
 
@@ -529,6 +539,7 @@ describe("resolveProjectById", () => {
       hasWikiDirectory: true,
       rootDir: fixture.rootDir,
       rootPathHint: fixture.rootDir,
+      runtime: runtimeCapabilities,
     });
     expect(rebuiltRegistry.id).toBe(projectId);
   });

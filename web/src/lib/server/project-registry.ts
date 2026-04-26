@@ -16,6 +16,7 @@ import {
 } from "@/lib/db/project-snapshot-repo";
 
 import { AppError } from "./app-error";
+import { getProjectRuntimeCapabilities } from "./heavy-task-runtime";
 import { ensureProjectRegistry, readProjectRegistry } from "./project-id";
 
 export interface ResolvedProject extends ProjectDetail {
@@ -412,6 +413,7 @@ function toResolvedProject(project: ProjectScanResult): ResolvedProject {
       canRead: true,
       canWrite: true,
     },
+    runtime: getProjectRuntimeCapabilities(),
     rootDir: project.rootDir,
   };
 }

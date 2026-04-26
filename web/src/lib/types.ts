@@ -11,6 +11,27 @@ export type FileNodeType = "file" | "directory";
 export type FileViewMode = "editable" | "preview" | "metadata" | "unsupported";
 export type ProjectAccessMode = "read-write" | "read-only";
 export type ProjectStatus = "ready" | "incomplete";
+export type HeavyTaskEngine = "node";
+export type HeavyTaskBridgeStatus = "not-configured";
+export type HeavyTaskName = "project-search" | "project-insights";
+
+export interface HeavyTaskCapability {
+  task: HeavyTaskName;
+  engine: HeavyTaskEngine;
+  bridgeStatus: HeavyTaskBridgeStatus;
+}
+
+export interface ProjectRuntimeCapabilities {
+  activeEngine: HeavyTaskEngine;
+  bridgeStatus: HeavyTaskBridgeStatus;
+  heavyTasks: HeavyTaskCapability[];
+}
+
+export interface HeavyTaskExecutionMetadata {
+  task: HeavyTaskName;
+  engine: HeavyTaskEngine;
+  durationMs: number;
+}
 
 export interface ProjectAccessPolicy {
   mode: ProjectAccessMode;
@@ -38,6 +59,7 @@ export interface ProjectDetail extends ProjectSummary {
   sections: WorkbenchSection[];
   rootPathHint: string | null;
   access: ProjectAccessPolicy;
+  runtime: ProjectRuntimeCapabilities;
 }
 
 export interface ProjectSearchResult {
@@ -59,6 +81,7 @@ export interface ProjectSearchResponse {
     totalMatches: number;
     truncated: boolean;
   };
+  execution?: HeavyTaskExecutionMetadata;
 }
 
 export interface ProjectQuestionMessage {
@@ -138,6 +161,7 @@ export interface ProjectInsightsResponse {
   };
   findings: ProjectInsightFinding[];
   researchPrompts: ProjectInsightResearchPrompt[];
+  execution?: HeavyTaskExecutionMetadata;
 }
 
 export interface FileTreeNode {

@@ -79,6 +79,14 @@ vi.mock("@/lib/client/api", () => ({
     updatedAt: null,
     rootPathHint: null,
     sections: ["Overview", "Ask", "Insights", "Files", "Purpose", "Schema", "Project Info"],
+    runtime: {
+      activeEngine: "node",
+      bridgeStatus: "not-configured",
+      heavyTasks: [
+        { task: "project-search", engine: "node", bridgeStatus: "not-configured" },
+        { task: "project-insights", engine: "node", bridgeStatus: "not-configured" },
+      ],
+    },
   }),
   fetchProjectTree: vi.fn().mockResolvedValue([
     {
@@ -145,6 +153,14 @@ describe("ProjectWorkbench draft guard", () => {
       updatedAt: null,
       rootPathHint: null,
       sections: ["Overview", "Ask", "Insights", "Files", "Purpose", "Schema", "Project Info"],
+      runtime: {
+        activeEngine: "node",
+        bridgeStatus: "not-configured",
+        heavyTasks: [
+          { task: "project-search", engine: "node", bridgeStatus: "not-configured" },
+          { task: "project-insights", engine: "node", bridgeStatus: "not-configured" },
+        ],
+      },
     });
 
     renderProjectWorkbench();
@@ -298,5 +314,13 @@ function defaultProjectDetail(): ProjectDetail {
     updatedAt: null,
     rootPathHint: null,
     sections: ["Overview", "Ask", "Insights", "Files", "Purpose", "Schema", "Project Info"],
+    runtime: {
+      activeEngine: "node",
+      bridgeStatus: "not-configured",
+      heavyTasks: [
+        { task: "project-search", engine: "node", bridgeStatus: "not-configured" },
+        { task: "project-insights", engine: "node", bridgeStatus: "not-configured" },
+      ],
+    },
   };
 }
