@@ -17,6 +17,7 @@ import {
   type PendingWorkbenchIntent,
 } from "@/components/workbench/draft-guard";
 import { FileTree } from "@/components/workbench/file-tree";
+import { ProjectInsightsPanel } from "@/components/workbench/project-insights-panel";
 import { ProjectOverview } from "@/components/workbench/project-overview";
 import { ProjectQuestionPanel } from "@/components/workbench/project-question-panel";
 import { ProjectSearch } from "@/components/workbench/project-search";
@@ -673,6 +674,15 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
 
           {section === "Ask" ? (
             <ProjectQuestionPanel
+              projectId={projectId}
+              onOpenFile={(relativePath) => {
+                void requestOpenRelativePath(relativePath, "Files");
+              }}
+            />
+          ) : null}
+
+          {section === "Insights" ? (
+            <ProjectInsightsPanel
               projectId={projectId}
               onOpenFile={(relativePath) => {
                 void requestOpenRelativePath(relativePath, "Files");

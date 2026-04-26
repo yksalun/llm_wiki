@@ -31,6 +31,18 @@ vi.mock("@/components/workbench/project-question-panel", () => ({
   ),
 }));
 
+vi.mock("@/components/workbench/project-insights-panel", () => ({
+  ProjectInsightsPanel: ({
+    onOpenFile,
+  }: {
+    onOpenFile: (relativePath: string) => void;
+  }) => (
+    <button type="button" onClick={() => onOpenFile("wiki/schema.md")}>
+      Open insight source
+    </button>
+  ),
+}));
+
 vi.mock("@/lib/client/api", () => ({
   ClientApiError: class ClientApiError extends Error {
     code: string;
@@ -52,7 +64,7 @@ vi.mock("@/lib/client/api", () => ({
     hasRawSourcesDirectory: false,
     updatedAt: null,
     rootPathHint: null,
-    sections: ["Overview", "Ask", "Files", "Purpose", "Schema", "Project Info"],
+    sections: ["Overview", "Ask", "Insights", "Files", "Purpose", "Schema", "Project Info"],
   }),
   fetchProjectTree: vi.fn().mockResolvedValue([
     {
@@ -120,6 +132,31 @@ describe("ProjectWorkbench draft guard", () => {
     });
 
     await clickButton("Open source");
+
+    expect(container?.textContent).toContain("Unsaved draft");
+    expect(container?.textContent).toContain("wiki/schema.md");
+
+    await clickButton("Cancel");
+
+    expect(container?.textContent).not.toContain("Unsaved draft");
+    expect(container?.textContent).not.toContain("wiki/schema.md");
+  });
+
+  it("shows and cancels the dirty draft guard from an Insights source open", async () => {
+    renderProjectWorkbench();
+
+    await waitForButton("Purpose");
+    await clickButton("Purpose");
+    await waitForText("purpose.md");
+    await clickButton("Edit");
+
+    updateEditor("# purpose.md\n\nLocal unsaved edit.");
+
+    act(() => {
+      useWorkbenchStore.getState().setSection("Insights");
+    });
+
+    await clickButton("Open insight source");
 
     expect(container?.textContent).toContain("Unsaved draft");
     expect(container?.textContent).toContain("wiki/schema.md");

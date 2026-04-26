@@ -105,7 +105,7 @@ describe("/api/projects routes", () => {
       id: projectId,
       name: "detail-project",
       rootPathHint: null,
-      sections: ["Overview", "Ask", "Files", "Purpose", "Schema", "Project Info"],
+      sections: ["Overview", "Ask", "Insights", "Files", "Purpose", "Schema", "Project Info"],
     });
     expect(payload).not.toHaveProperty("rootDir");
   });
