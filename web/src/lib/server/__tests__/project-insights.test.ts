@@ -189,6 +189,27 @@ describe("buildProjectInsights", () => {
     expect([...unsafeFindings.map((finding) => finding.id), ...promptIds].join("\n")).not.toContain(projectRoot);
   });
 
+  it("flags Windows drive absolute markdown hrefs as unsafe without leaking project roots in ids", async () => {
+    const projectRoot = await createProject("windows-absolute-links");
+    await writeProjectFile(
+      projectRoot,
+      "README.md",
+      "See [Local](C:/Users/name/secret.md) and [Local](C:\\Users\\name\\secret.md).\n",
+    );
+
+    const response = await buildProjectInsights(projectRoot);
+    const unsafeFindings = response.findings.filter((finding) => finding.title === "Unsafe markdown link");
+    const promptIds = response.researchPrompts
+      .filter((prompt) => prompt.id.startsWith("prompt:broken-link:"))
+      .map((prompt) => prompt.id);
+
+    expect(response.graph.edges).toEqual([]);
+    expect(unsafeFindings).toHaveLength(2);
+    expect(new Set(unsafeFindings.map((finding) => finding.id)).size).toBe(2);
+    expect(new Set(promptIds).size).toBe(promptIds.length);
+    expect([...unsafeFindings.map((finding) => finding.id), ...promptIds].join("\n")).not.toContain(projectRoot);
+  });
+
   it("limits research prompts to six after link deduplication", async () => {
     const projectRoot = await createProject("prompt-limit");
     await writeProjectFile(

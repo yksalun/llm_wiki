@@ -84,7 +84,12 @@ export async function buildProjectInsights(
 
       const targetPath = resolveMarkdownTarget(file.relativePath, link.href);
 
-      if (targetPath === null || targetPath.startsWith("..") || path.posix.isAbsolute(targetPath)) {
+      if (
+        targetPath === null ||
+        targetPath.startsWith("..") ||
+        path.posix.isAbsolute(targetPath) ||
+        isWindowsAbsoluteHref(targetPath)
+      ) {
         addFindingOnce(
           findings,
           findingIds,
@@ -275,6 +280,10 @@ function getLineNumber(content: string, index: number): number {
 }
 
 function shouldIgnoreHref(href: string): boolean {
+  if (isWindowsAbsoluteHref(href)) {
+    return false;
+  }
+
   return (
     href.startsWith("#") ||
     href.startsWith("//") ||
@@ -289,11 +298,15 @@ function resolveMarkdownTarget(sourcePath: string, href: string): string | null 
     return null;
   }
 
-  if (path.posix.isAbsolute(hrefWithoutHash)) {
+  if (path.posix.isAbsolute(hrefWithoutHash) || isWindowsAbsoluteHref(hrefWithoutHash)) {
     return hrefWithoutHash;
   }
 
   return path.posix.normalize(path.posix.join(path.posix.dirname(sourcePath), hrefWithoutHash));
+}
+
+function isWindowsAbsoluteHref(href: string): boolean {
+  return /^[a-z]:[\\/]/i.test(href);
 }
 
 function stripHashAndQuery(href: string): string {
