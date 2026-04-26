@@ -32,17 +32,7 @@ export function ProjectSearch({
   const trimmedQuery = query.trim();
 
   useEffect(() => {
-    if (trimmedQuery.length === 0) {
-      setStatus("idle");
-      setResponse(null);
-      setErrorMessage(null);
-      return;
-    }
-
-    if (trimmedQuery.length === 1) {
-      setStatus("short");
-      setResponse(null);
-      setErrorMessage(null);
+    if (trimmedQuery.length < 2) {
       return;
     }
 
@@ -88,8 +78,33 @@ export function ProjectSearch({
     const scannedLabel = `${summary.scannedFiles} scanned`;
     const truncatedLabel = summary.truncated ? "truncated" : null;
 
-    return [totalLabel, scannedLabel, truncatedLabel].filter(Boolean).join(" · ");
+    return [totalLabel, scannedLabel, truncatedLabel].filter(Boolean).join(" / ");
   }, [response]);
+
+  function handleQueryChange(nextQuery: string) {
+    const nextTrimmedQuery = nextQuery.trim();
+
+    setQuery(nextQuery);
+    setRetryKey(0);
+
+    if (nextTrimmedQuery.length === 0) {
+      setStatus("idle");
+      setResponse(null);
+      setErrorMessage(null);
+      return;
+    }
+
+    if (nextTrimmedQuery.length === 1) {
+      setStatus("short");
+      setResponse(null);
+      setErrorMessage(null);
+      return;
+    }
+
+    setStatus("loading");
+    setResponse(null);
+    setErrorMessage(null);
+  }
 
   return (
     <section className="space-y-3 rounded-lg border border-black/10 bg-white/60 p-3">
@@ -98,7 +113,7 @@ export function ProjectSearch({
         <Input
           type="search"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => handleQueryChange(event.target.value)}
           placeholder="Search project files"
           aria-label="Search project files"
         />
@@ -129,7 +144,15 @@ export function ProjectSearch({
           <AlertTitle>Search failed</AlertTitle>
           <AlertDescription className="space-y-3">
             <p>{errorMessage ?? "Search failed."}</p>
-            <Button type="button" size="sm" variant="outline" onClick={() => setRetryKey((key) => key + 1)}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setStatus("loading");
+                setRetryKey((key) => key + 1);
+              }}
+            >
               <RotateCcw className="size-4" />
               Retry
             </Button>
