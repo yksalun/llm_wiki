@@ -9,7 +9,7 @@ import type {
 import { AppError } from "./app-error";
 import { getProjectQuestionAnswerConfigFromEnv } from "./env";
 import { generateProjectAnswer } from "./llm-provider";
-import { searchProjectFiles } from "./project-search";
+import { searchProjectFilesForQueries } from "./project-search";
 
 const MIN_QUESTION_LENGTH = 2;
 const MAX_QUESTION_LENGTH = 500;
@@ -23,6 +23,7 @@ const FILLER_WORDS = new Set(["the", "and", "for", "from", "with", "is", "are"])
 export interface AnswerProjectQuestionDependencies {
   getConfig?: typeof getProjectQuestionAnswerConfigFromEnv;
   generateAnswer?: typeof generateProjectAnswer;
+  searchFilesForQueries?: typeof searchProjectFilesForQueries;
 }
 
 export function buildProjectQuestionSearchQueries(question: string): string[] {
@@ -63,10 +64,12 @@ export async function answerProjectQuestion(
   const queries = buildProjectQuestionSearchQueries(question);
   const sourceCandidates: ProjectQuestionSource[] = [];
   const seenSources = new Set<string>();
+  const searchFilesForQueriesDependency =
+    dependencies.searchFilesForQueries ?? searchProjectFilesForQueries;
+  const searchResponses = await searchFilesForQueriesDependency(projectRoot, queries);
   let truncated = false;
 
-  for (const query of queries) {
-    const searchResponse = await searchProjectFiles(projectRoot, query);
+  for (const searchResponse of searchResponses) {
     truncated ||=
       searchResponse.summary.truncated ||
       searchResponse.summary.totalMatches > searchResponse.results.length;

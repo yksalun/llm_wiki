@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AppError } from "../app-error";
+import type { ProjectSearchResponse } from "@/lib/types";
 import type { GenerateProjectAnswerInput } from "../llm-provider";
 import {
   answerProjectQuestion,
@@ -145,6 +146,67 @@ describe("answerProjectQuestion", () => {
     });
     expect(response.retrieval.totalMatches).toBe(1);
     expect(response.retrieval.truncated).toBe(false);
+  });
+
+  it("searches generated queries with one injected multi-query search call", async () => {
+    const projectRoot = await createProject("multi-query-search");
+    const getConfig = vi.fn(() => ({
+      apiKey: "test-key",
+      model: "test-model",
+      baseUrl: "https://example.test",
+    }));
+    const generateAnswer = vi.fn(async () => ({
+      answer: "answer [1]",
+      model: "test-model",
+    }));
+    const searchFilesForQueries = vi.fn(
+      async (_root: string, queries: string[]): Promise<ProjectSearchResponse[]> =>
+        queries.map((query) => ({
+          query,
+          results:
+            query === "schema"
+              ? [
+                  {
+                    relativePath: "wiki/schema.md",
+                    lineNumber: 1,
+                    lineText: "The schema is defined here.",
+                    preview: "The schema is defined here.",
+                    matchStart: 4,
+                    matchEnd: 10,
+                  },
+                ]
+              : [],
+          summary: {
+            scannedFiles: 1,
+            skippedFiles: 0,
+            matchedFiles: query === "schema" ? 1 : 0,
+            totalMatches: query === "schema" ? 1 : 0,
+            truncated: false,
+          },
+        })),
+    );
+
+    const response = await answerProjectQuestion(
+      projectRoot,
+      { question: "Where is the schema defined?" },
+      { getConfig, generateAnswer, searchFilesForQueries },
+    );
+
+    expect(searchFilesForQueries).toHaveBeenCalledTimes(1);
+    expect(searchFilesForQueries).toHaveBeenCalledWith(projectRoot, [
+      "Where is the schema defined?",
+      "where",
+      "schema",
+      "defined",
+    ]);
+    expect(response.sources).toEqual([
+      {
+        id: 1,
+        relativePath: "wiki/schema.md",
+        lineNumber: 1,
+        preview: "The schema is defined here.",
+      },
+    ]);
   });
 
   it("wraps source and history data in delimiters and warns to ignore embedded instructions", async () => {
