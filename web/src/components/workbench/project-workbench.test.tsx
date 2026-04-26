@@ -39,7 +39,7 @@ vi.mock("@/components/workbench/project-question-panel", () => ({
     onOpenFile: (relativePath: string) => void;
   }) => (
     <button type="button" onClick={() => onOpenFile("wiki/schema.md")}>
-      Open source
+      打开来源
     </button>
   ),
 }));
@@ -51,7 +51,7 @@ vi.mock("@/components/workbench/project-insights-panel", () => ({
     onOpenFile: (relativePath: string) => void;
   }) => (
     <button type="button" onClick={() => onOpenFile("wiki/schema.md")}>
-      Open insight source
+      打开洞察来源
     </button>
   ),
 }));
@@ -165,26 +165,26 @@ describe("ProjectWorkbench draft guard", () => {
 
     renderProjectWorkbench();
 
-    await waitForText("read-only");
-    await clickButton("Project Info");
+    await waitForText("只读");
+    await clickButton("项目信息");
 
-    expect(container?.textContent).toContain("Access mode");
-    expect(container?.textContent).toContain("read-only");
-    expect(container?.textContent).toContain("Write access");
-    expect(container?.textContent).toContain("No");
-    expect(container?.textContent).toContain("Heavy task engine");
-    expect(container?.textContent).toContain("node");
-    expect(container?.textContent).toContain("Bridge status");
-    expect(container?.textContent).toContain("not-configured");
-    expect(container?.textContent).toContain("Tracked heavy tasks");
-    expect(container?.textContent).toContain("project-search, project-insights");
+    expect(container?.textContent).toContain("访问模式");
+    expect(container?.textContent).toContain("只读");
+    expect(container?.textContent).toContain("写入权限");
+    expect(container?.textContent).toContain("否");
+    expect(container?.textContent).toContain("重任务运行时");
+    expect(container?.textContent).toContain("内置运行时");
+    expect(container?.textContent).toContain("桥接状态");
+    expect(container?.textContent).toContain("未配置");
+    expect(container?.textContent).toContain("已跟踪重任务");
+    expect(container?.textContent).toContain("项目搜索、项目洞察");
   });
 
   it("shows and cancels the dirty draft guard from an Ask source open", async () => {
     renderProjectWorkbench();
 
-    await waitForButton("Purpose");
-    await clickButton("Purpose");
+    await waitForButton("目标");
+    await clickButton("目标");
     await waitForText("purpose.md");
     await clickButton("Edit");
 
@@ -194,7 +194,7 @@ describe("ProjectWorkbench draft guard", () => {
       useWorkbenchStore.getState().setSection("Ask");
     });
 
-    await clickButton("Open source");
+    await clickButton("打开来源");
 
     expect(container?.textContent).toContain("Unsaved draft");
     expect(container?.textContent).toContain("wiki/schema.md");
@@ -208,8 +208,8 @@ describe("ProjectWorkbench draft guard", () => {
   it("shows and cancels the dirty draft guard from an Insights source open", async () => {
     renderProjectWorkbench();
 
-    await waitForButton("Purpose");
-    await clickButton("Purpose");
+    await waitForButton("目标");
+    await clickButton("目标");
     await waitForText("purpose.md");
     await clickButton("Edit");
 
@@ -219,7 +219,7 @@ describe("ProjectWorkbench draft guard", () => {
       useWorkbenchStore.getState().setSection("Insights");
     });
 
-    await clickButton("Open insight source");
+    await clickButton("打开洞察来源");
 
     expect(container?.textContent).toContain("Unsaved draft");
     expect(container?.textContent).toContain("wiki/schema.md");

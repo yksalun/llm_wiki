@@ -40,6 +40,14 @@ import {
   fetchProjectTree,
   saveProjectFile,
 } from "@/lib/client/api";
+import {
+  formatAccessModeLabel,
+  formatHeavyTaskBridgeStatusLabel,
+  formatHeavyTaskEngineLabel,
+  formatHeavyTaskNameLabel,
+  formatProjectStatusLabel,
+  formatWorkbenchSectionLabel,
+} from "@/lib/display-labels";
 import type {
   FileTreeNode,
   ProjectDetail,
@@ -160,7 +168,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
           message:
             error instanceof Error
               ? error.message
-              : "Unable to assemble the project workbench.",
+              : "无法组装项目工作台。",
         });
       })
       .finally(() => {
@@ -239,9 +247,9 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
         clearFile(true);
         setPanelNotice({
           tone: "error",
-          title: "File request failed",
+          title: "文件请求失败",
           message:
-            error instanceof Error ? error.message : "Unable to open the requested file.",
+            error instanceof Error ? error.message : "无法打开请求的文件。",
         });
       } finally {
         if (!abortController.signal.aborted && requestId === latestFileRequestIdRef.current) {
@@ -314,8 +322,8 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
             type: "show-missing-section-file",
             path: purposePath,
             section: "Purpose",
-            title: "Purpose file unavailable",
-            message: "purpose.md is not available for this project.",
+            title: "目标文件不可用",
+            message: "purpose.md 在这个项目中不可用。",
           });
           return;
         }
@@ -325,8 +333,8 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
           type: "show-missing-section-file",
           path: purposePath,
           section: "Purpose",
-          title: "Purpose file unavailable",
-          message: "purpose.md is not available for this project.",
+          title: "目标文件不可用",
+          message: "purpose.md 在这个项目中不可用。",
         });
         return;
       }
@@ -342,8 +350,8 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
             type: "show-missing-section-file",
             path: schemaPath,
             section: "Schema",
-            title: "Schema file unavailable",
-            message: "schema.md is not available for this project.",
+            title: "结构文件不可用",
+            message: "schema.md 在这个项目中不可用。",
           });
           return;
         }
@@ -353,8 +361,8 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
           type: "show-missing-section-file",
           path: schemaPath,
           section: "Schema",
-          title: "Schema file unavailable",
-          message: "schema.md is not available for this project.",
+          title: "结构文件不可用",
+          message: "schema.md 在这个项目中不可用。",
         });
         return;
       }
@@ -435,11 +443,11 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
         });
         setPanelNotice({
           tone: "warning",
-          title: "File saved, refresh failed",
+          title: "文件已保存，但刷新失败",
           message:
             error instanceof Error
-              ? `${error.message} Local editor state was updated to the saved draft.`
-            : "The file was saved, but the workbench could not reload it. Local draft state was preserved.",
+              ? `${error.message} 本地编辑状态已更新为已保存草稿。`
+            : "文件已保存，但工作台无法重新加载它。本地草稿状态已保留。",
         });
         markRefreshFailed(now);
         setPendingIntent(null);
@@ -467,7 +475,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
         });
         setPanelNotice({
           tone: "warning",
-          title: "File changed on disk",
+          title: "磁盘上的文件已变化",
           message: error.message,
         });
         return "conflict";
@@ -478,12 +486,12 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
           ? error.message
           : error instanceof Error
             ? error.message
-          : "Unable to save this file.";
+          : "无法保存这个文件。";
 
       markSaveFailed();
       setPanelNotice({
         tone: "error",
-        title: "Unable to save file",
+        title: "无法保存文件",
         message,
       });
       return "failed";
@@ -596,15 +604,15 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
   }, [file, setDraft]);
 
   const title =
-    loadState.status === "ready" ? loadState.detail.name : "Project workbench";
+    loadState.status === "ready" ? loadState.detail.name : "项目工作台";
   const description =
     loadState.status === "ready"
-      ? "Open the project tree, inspect source files, and edit allowed Markdown records through the project routes."
-      : "Loading the project dossier and file tree.";
+      ? "打开项目文件树，检查来源文件，并通过项目路由编辑允许修改的 Markdown 记录。"
+      : "正在加载项目档案和文件树。";
 
   return (
     <AppShell
-      eyebrow="Project Workbench"
+      eyebrow="项目工作台"
       title={title}
       description={description}
       aside={<WorkbenchAside loadState={loadState} saving={saving} onReload={requestReloadProject} />}
@@ -636,9 +644,9 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
                   key={item}
                   value={item}
                   disabled={saving}
-                  className="rounded-full px-4 py-2 data-active:bg-black/5"
+                  className="rounded-full px-4 py-2 data-active:bg-[color:var(--paper-muted)]"
                 >
-                  {item}
+                  {formatWorkbenchSectionLabel(item)}
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -791,24 +799,24 @@ function WorkbenchAside({
   onReload: () => void;
 }) {
   return (
-    <Card className="border-[color:var(--paper-border)] bg-[linear-gradient(180deg,rgba(255,252,246,0.92),rgba(245,239,229,0.86))] shadow-[0_18px_60px_rgba(88,67,42,0.10)]">
-      <CardHeader className="border-b border-black/5">
+    <Card className="border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/92 shadow-[0_18px_60px_rgba(var(--shadow-panel),0.10)]">
+      <CardHeader className="border-b border-[color:var(--paper-border)]">
         <CardTitle className="text-sm uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">
-          Workbench State
+          工作台状态
         </CardTitle>
-        <CardDescription>Current route and structure status for this project.</CardDescription>
+        <CardDescription>当前路由和项目结构状态。</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 pt-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-              Project route
+              项目路由
             </p>
             <p className="mt-1 text-sm font-medium text-[color:var(--ink-strong)]">
               /projects/[projectId]
             </p>
           </div>
-          <div className="rounded-full border border-black/8 bg-white/70 p-2 text-[color:var(--ink-soft)]">
+          <div className="rounded-full border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)]/70 p-2 text-[color:var(--ink-soft)]">
             <Boxes className="size-4" />
           </div>
         </div>
@@ -817,22 +825,22 @@ function WorkbenchAside({
           <div className="flex flex-wrap gap-2">
             <Badge
               variant="secondary"
-              className="w-fit border border-amber-900/10 bg-amber-700/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-900"
+              className="w-fit border border-amber-900/10 bg-amber-700/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-900 dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-100"
             >
-              {loadState.detail.status}
+              {formatProjectStatusLabel(loadState.detail.status)}
             </Badge>
             <Badge
               variant="secondary"
-              className="w-fit border border-sky-900/10 bg-sky-700/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-900"
+              className="w-fit border border-sky-900/10 bg-sky-700/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-900 dark:border-sky-300/20 dark:bg-sky-300/10 dark:text-sky-100"
             >
-              Access {loadState.detail.access.mode}
+              访问 {formatAccessModeLabel(loadState.detail.access.mode)}
             </Badge>
           </div>
         ) : null}
 
         <Button variant="outline" onClick={onReload} disabled={saving} className="w-full">
           <RefreshCcw className="size-4" />
-          Reload project
+          重新加载项目
         </Button>
       </CardContent>
     </Card>
@@ -843,24 +851,24 @@ function WorkbenchLoading() {
   return (
     <div className="grid gap-4 xl:grid-cols-[19rem_minmax(0,1fr)]">
       <Card className="border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/90">
-        <CardHeader className="border-b border-black/5">
-          <Skeleton className="h-4 w-24 bg-black/8" />
-          <Skeleton className="h-4 w-40 bg-black/8" />
+        <CardHeader className="border-b border-[color:var(--paper-border)]">
+          <Skeleton className="h-4 w-24 bg-[color:var(--paper-muted)]" />
+          <Skeleton className="h-4 w-40 bg-[color:var(--paper-muted)]" />
         </CardHeader>
         <CardContent className="space-y-3 pt-4">
           {Array.from({ length: 10 }, (_, index) => (
-            <Skeleton key={index} className="h-8 rounded-xl bg-black/7" />
+            <Skeleton key={index} className="h-8 rounded-xl bg-[color:var(--paper-muted)]" />
           ))}
         </CardContent>
       </Card>
       <Card className="border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/90">
-        <CardHeader className="border-b border-black/5">
-          <Skeleton className="h-4 w-52 bg-black/8" />
-          <Skeleton className="h-4 w-full bg-black/8" />
+        <CardHeader className="border-b border-[color:var(--paper-border)]">
+          <Skeleton className="h-4 w-52 bg-[color:var(--paper-muted)]" />
+          <Skeleton className="h-4 w-full bg-[color:var(--paper-muted)]" />
         </CardHeader>
         <CardContent className="space-y-4 pt-4">
-          <Skeleton className="h-24 rounded-[20px] bg-black/7" />
-          <Skeleton className="h-[420px] rounded-[20px] bg-black/7" />
+          <Skeleton className="h-24 rounded-[20px] bg-[color:var(--paper-muted)]" />
+          <Skeleton className="h-[420px] rounded-[20px] bg-[color:var(--paper-muted)]" />
         </CardContent>
       </Card>
     </div>
@@ -875,22 +883,22 @@ function WorkbenchError({
   onReload: () => void;
 }) {
   return (
-    <Card className="border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/92 shadow-[0_16px_48px_rgba(61,52,40,0.08)]">
-      <CardHeader className="border-b border-black/5">
-        <CardTitle>Unable to open the project workbench</CardTitle>
+    <Card className="border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/92 shadow-[0_16px_48px_rgba(var(--shadow-panel),0.08)]">
+      <CardHeader className="border-b border-[color:var(--paper-border)]">
+        <CardTitle>无法打开项目工作台</CardTitle>
         <CardDescription>
-          The page could not complete the initial detail and tree requests.
+          页面未能完成初始详情和文件树请求。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 pt-4">
         <Alert variant="destructive" className="border-destructive/20 bg-destructive/5">
           <AlertTriangle className="size-4" />
-          <AlertTitle>Initial load failed</AlertTitle>
+          <AlertTitle>初始加载失败</AlertTitle>
           <AlertDescription>{message}</AlertDescription>
         </Alert>
         <Button onClick={onReload}>
           <RefreshCcw className="size-4" />
-          Retry
+          重试
         </Button>
       </CardContent>
     </Card>
@@ -905,34 +913,34 @@ function ProjectInfoPanel({
   tree: FileTreeNode[];
 }) {
   return (
-    <Card className="border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/92 shadow-[0_18px_56px_rgba(61,52,40,0.08)]">
-      <CardHeader className="border-b border-black/5">
-        <CardTitle>Project info</CardTitle>
+    <Card className="border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/92 shadow-[0_18px_56px_rgba(var(--shadow-panel),0.08)]">
+      <CardHeader className="border-b border-[color:var(--paper-border)]">
+        <CardTitle>项目信息</CardTitle>
         <CardDescription>
-          Summary of the resolved project route and tree composition.
+          已解析项目路由和文件树组成摘要。
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4 pt-4 md:grid-cols-2 xl:grid-cols-3">
-        <InfoBlock label="Project name" value={detail.name} />
-        <InfoBlock label="Project ID" value={detail.id} mono />
-        <InfoBlock label="Status" value={detail.status} />
-        <InfoBlock label="Access mode" value={detail.access.mode} />
-        <InfoBlock label="Write access" value={detail.access.canWrite ? "Yes" : "No"} />
-        <InfoBlock label="Heavy task engine" value={detail.runtime.activeEngine} />
-        <InfoBlock label="Bridge status" value={detail.runtime.bridgeStatus} />
+        <InfoBlock label="项目名称" value={detail.name} />
+        <InfoBlock label="项目 ID" value={detail.id} mono />
+        <InfoBlock label="状态" value={formatProjectStatusLabel(detail.status)} />
+        <InfoBlock label="访问模式" value={formatAccessModeLabel(detail.access.mode)} />
+        <InfoBlock label="写入权限" value={detail.access.canWrite ? "是" : "否"} />
+        <InfoBlock label="重任务运行时" value={formatHeavyTaskEngineLabel(detail.runtime.activeEngine)} />
+        <InfoBlock label="桥接状态" value={formatHeavyTaskBridgeStatusLabel(detail.runtime.bridgeStatus)} />
         <InfoBlock
-          label="Tracked heavy tasks"
-          value={detail.runtime.heavyTasks.map((task) => task.task).join(", ")}
+          label="已跟踪重任务"
+          value={detail.runtime.heavyTasks.map((task) => formatHeavyTaskNameLabel(task.task)).join("、")}
         />
-        <InfoBlock label="Purpose present" value={detail.hasPurpose ? "Yes" : "No"} />
-        <InfoBlock label="Schema present" value={detail.hasSchema ? "Yes" : "No"} />
-        <InfoBlock label="Wiki directory" value={detail.hasWikiDirectory ? "Yes" : "No"} />
+        <InfoBlock label="目标文件" value={detail.hasPurpose ? "已存在" : "缺失"} />
+        <InfoBlock label="结构文件" value={detail.hasSchema ? "已存在" : "缺失"} />
+        <InfoBlock label="知识库目录" value={detail.hasWikiDirectory ? "已存在" : "缺失"} />
         <InfoBlock
-          label="Raw sources directory"
-          value={detail.hasRawSourcesDirectory ? "Yes" : "No"}
+          label="原始资料目录"
+          value={detail.hasRawSourcesDirectory ? "已存在" : "缺失"}
         />
-        <InfoBlock label="Sections" value={detail.sections.join(", ")} />
-        <InfoBlock label="Tree entries" value={String(collectTreePaths(tree).size)} />
+        <InfoBlock label="工作区" value={detail.sections.map(formatWorkbenchSectionLabel).join("、")} />
+        <InfoBlock label="文件树条目" value={String(collectTreePaths(tree).size)} />
       </CardContent>
     </Card>
   );
@@ -948,7 +956,7 @@ function InfoBlock({
   mono?: boolean;
 }) {
   return (
-    <div className="rounded-[20px] border border-black/8 bg-white/55 p-4">
+    <div className="rounded-[20px] border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)]/55 p-4">
       <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
       <p className={mono ? "mt-2 font-mono text-sm text-[color:var(--ink-strong)]" : "mt-2 text-sm font-medium text-[color:var(--ink-strong)]"}>
         {value}
