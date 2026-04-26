@@ -62,7 +62,7 @@ export async function searchProjectFiles(
 
     scannedFiles += 1;
 
-    const fileSearchResult = findLineMatches(relativePath, content, trimmedQuery, lowerQuery);
+    const fileSearchResult = findLineMatches(relativePath, content, trimmedQuery);
 
     if (fileSearchResult.totalMatches > 0) {
       matchedFiles += 1;
@@ -162,24 +162,26 @@ function findLineMatches(
   relativePath: string,
   content: string,
   query: string,
-  lowerQuery: string,
 ): { results: ProjectSearchResult[]; totalMatches: number; truncated: boolean } {
   const matches: ProjectSearchResult[] = [];
   let totalMatches = 0;
   const lines = content.split(/\r?\n/);
+  const queryPattern = new RegExp(escapeRegExp(query), "iu");
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const lineText = lines[lineIndex];
-    const matchStart = lineText.toLowerCase().indexOf(lowerQuery);
+    const match = queryPattern.exec(lineText);
 
-    if (matchStart === -1) {
+    if (!match) {
       continue;
     }
 
+    const matchStart = match.index;
+    const matchEnd = matchStart + match[0].length;
     totalMatches += 1;
 
     if (matches.length < MAX_MATCHES_PER_FILE) {
-      const croppedLine = cropLineAroundMatch(lineText, matchStart, matchStart + query.length);
+      const croppedLine = cropLineAroundMatch(lineText, matchStart, matchEnd);
 
       matches.push({
         relativePath,
@@ -197,6 +199,10 @@ function findLineMatches(
     totalMatches,
     truncated: totalMatches > matches.length,
   };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function cropLineAroundMatch(

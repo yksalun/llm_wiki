@@ -74,6 +74,25 @@ describe("searchProjectFiles", () => {
     });
   });
 
+  it("keeps match offsets in the original line when earlier Unicode lowercasing expands", async () => {
+    const projectRoot = await createProject("unicode-offsets");
+    await writeProjectFile(projectRoot, "unicode.md", "İ target\n");
+
+    const response = await searchProjectFiles(projectRoot, "target");
+    const result = response.results[0];
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        relativePath: "unicode.md",
+        lineNumber: 1,
+        lineText: "İ target",
+        matchStart: 2,
+        matchEnd: 8,
+      }),
+    );
+    expect(result.lineText.slice(result.matchStart, result.matchEnd)).toBe("target");
+  });
+
   it("returns an empty zero summary for short trimmed queries without scanning", async () => {
     const projectRoot = await createProject("short-query");
     await writeProjectFile(projectRoot, "target.md", "target\n");
