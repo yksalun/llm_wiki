@@ -1,4 +1,5 @@
 import { getProjectRootsFromEnv } from "@/lib/server/env";
+import { getProjectRuntimeCapabilities } from "@/lib/server/heavy-task-runtime";
 import { getProjectAccessPolicyFromEnv } from "@/lib/server/project-access";
 import { resolveProjectById } from "@/lib/server/project-registry";
 import { errorJson, okJson } from "@/lib/server/route-helpers";
@@ -22,6 +23,7 @@ export async function GET(_request: Request, context: ProjectRouteContext) {
       id: project.id,
       name: project.name,
       access,
+      runtime: getProjectRuntimeCapabilities(),
       status: project.status,
       hasPurpose: project.hasPurpose,
       hasSchema: project.hasSchema,

@@ -85,6 +85,11 @@ describe("/api/projects/[projectId]/insights route", () => {
           label: string;
         }>;
       };
+      execution: {
+        task: "project-insights";
+        engine: "node";
+        durationMs: number;
+      };
     };
 
     expect(runtime).toBe("nodejs");
@@ -99,6 +104,9 @@ describe("/api/projects/[projectId]/insights route", () => {
         }),
       ]),
     );
+    expect(payload.execution.task).toBe("project-insights");
+    expect(payload.execution.engine).toBe("node");
+    expect(payload.execution.durationMs).toBeGreaterThanOrEqual(0);
   });
 
   it("GET returns 404 for an unknown project", async () => {

@@ -108,6 +108,15 @@ describe("/api/projects routes", () => {
         canRead: true;
         canWrite: true;
       };
+      runtime: {
+        activeEngine: "node";
+        bridgeStatus: "not-configured";
+        heavyTasks: Array<{
+          task: "project-search" | "project-insights";
+          engine: "node";
+          bridgeStatus: "not-configured";
+        }>;
+      };
       rootPathHint: string | null;
       sections: string[];
     };
@@ -121,6 +130,14 @@ describe("/api/projects routes", () => {
         mode: "read-write",
         canRead: true,
         canWrite: true,
+      },
+      runtime: {
+        activeEngine: "node",
+        bridgeStatus: "not-configured",
+        heavyTasks: [
+          { task: "project-search", engine: "node", bridgeStatus: "not-configured" },
+          { task: "project-insights", engine: "node", bridgeStatus: "not-configured" },
+        ],
       },
       rootPathHint: null,
       sections: ["Overview", "Ask", "Insights", "Files", "Purpose", "Schema", "Project Info"],

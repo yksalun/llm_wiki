@@ -75,6 +75,11 @@ describe("/api/projects/[projectId]/search route", () => {
       query: string;
       results: Array<{ relativePath: string }>;
       summary: { totalMatches: number };
+      execution: {
+        task: "project-search";
+        engine: "node";
+        durationMs: number;
+      };
     };
 
     expect(runtime).toBe("nodejs");
@@ -88,6 +93,9 @@ describe("/api/projects/[projectId]/search route", () => {
       ]),
     );
     expect(payload.summary.totalMatches).toBeGreaterThan(0);
+    expect(payload.execution.task).toBe("project-search");
+    expect(payload.execution.engine).toBe("node");
+    expect(payload.execution.durationMs).toBeGreaterThanOrEqual(0);
   });
 
   it("GET returns an empty response for short queries without scanning", async () => {

@@ -918,6 +918,12 @@ function ProjectInfoPanel({
         <InfoBlock label="Status" value={detail.status} />
         <InfoBlock label="Access mode" value={detail.access.mode} />
         <InfoBlock label="Write access" value={detail.access.canWrite ? "Yes" : "No"} />
+        <InfoBlock label="Heavy task engine" value={detail.runtime.activeEngine} />
+        <InfoBlock label="Bridge status" value={detail.runtime.bridgeStatus} />
+        <InfoBlock
+          label="Tracked heavy tasks"
+          value={detail.runtime.heavyTasks.map((task) => task.task).join(", ")}
+        />
         <InfoBlock label="Purpose present" value={detail.hasPurpose ? "Yes" : "No"} />
         <InfoBlock label="Schema present" value={detail.hasSchema ? "Yes" : "No"} />
         <InfoBlock label="Wiki directory" value={detail.hasWikiDirectory ? "Yes" : "No"} />

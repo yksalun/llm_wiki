@@ -172,6 +172,12 @@ describe("ProjectWorkbench draft guard", () => {
     expect(container?.textContent).toContain("read-only");
     expect(container?.textContent).toContain("Write access");
     expect(container?.textContent).toContain("No");
+    expect(container?.textContent).toContain("Heavy task engine");
+    expect(container?.textContent).toContain("node");
+    expect(container?.textContent).toContain("Bridge status");
+    expect(container?.textContent).toContain("not-configured");
+    expect(container?.textContent).toContain("Tracked heavy tasks");
+    expect(container?.textContent).toContain("project-search, project-insights");
   });
 
   it("shows and cancels the dirty draft guard from an Ask source open", async () => {
