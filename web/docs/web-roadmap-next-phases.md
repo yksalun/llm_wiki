@@ -298,6 +298,8 @@ flowchart TD
 
 ## 9. 阶段 4：项目内检索基础
 
+> 状态：已完成。阶段 4 已按 [spec](../../docs/superpowers/specs/2026-04-26-phase-4-project-search-design.md) 和 [implementation plan](../../docs/superpowers/plans/2026-04-26-phase-4-project-search.md) 落地，覆盖项目内关键词搜索、服务端按需扫描、搜索 API、工作台搜索面板、结果打开联动和关键测试。
+
 ### 9.1 阶段目标
 
 把当前工作台从“靠人手翻文件”升级到“能快速找到目标内容”。
