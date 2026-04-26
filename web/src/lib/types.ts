@@ -1,6 +1,7 @@
 export type WorkbenchSection =
   | "Overview"
   | "Ask"
+  | "Insights"
   | "Files"
   | "Purpose"
   | "Schema"
@@ -79,6 +80,56 @@ export interface ProjectQuestionResponse {
     truncated: boolean;
   };
   model: string;
+}
+
+export interface ProjectInsightNode {
+  id: string;
+  label: string;
+  kind: "file";
+  relativePath: string;
+}
+
+export interface ProjectInsightEdge {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  kind: "links-to";
+  label: string;
+  sourceLineNumber: number;
+}
+
+export interface ProjectInsightFinding {
+  id: string;
+  severity: "info" | "warning" | "risk";
+  title: string;
+  message: string;
+  relativePath?: string;
+  lineNumber?: number;
+}
+
+export interface ProjectInsightResearchPrompt {
+  id: string;
+  title: string;
+  question: string;
+  reason: string;
+  sourceIds: string[];
+}
+
+export interface ProjectInsightsResponse {
+  summary: {
+    analyzedFiles: number;
+    markdownFiles: number;
+    graphNodes: number;
+    graphEdges: number;
+    findings: number;
+    researchPrompts: number;
+  };
+  graph: {
+    nodes: ProjectInsightNode[];
+    edges: ProjectInsightEdge[];
+  };
+  findings: ProjectInsightFinding[];
+  researchPrompts: ProjectInsightResearchPrompt[];
 }
 
 export interface FileTreeNode {

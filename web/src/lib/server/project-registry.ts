@@ -42,6 +42,7 @@ interface ProjectRegistryOptions {
 const PROJECT_SECTIONS: ProjectDetail["sections"] = [
   "Overview",
   "Ask",
+  "Insights",
   "Files",
   "Purpose",
   "Schema",
