@@ -85,11 +85,11 @@ describe("ProjectOverview", () => {
       <ProjectOverview project={project} tree={tree} onChangeSection={() => undefined} />,
     );
 
-    expect(html).toContain("Markdown 文件");
+    expect(html).toContain("标记文档");
     expect(html).toContain("预览文件");
     expect(html).toContain("元数据文件");
     expect(html).toContain("从知识库开始");
-    expectMetric(html, "Markdown 文件", "1");
+    expectMetric(html, "标记文档", "1");
     expectMetric(html, "预览文件", "1");
     expectMetric(html, "元数据文件", "1");
   });

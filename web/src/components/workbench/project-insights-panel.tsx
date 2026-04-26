@@ -6,6 +6,7 @@ import { ExternalLink, GitBranch, Lightbulb, LoaderCircle, RotateCcw } from "luc
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { fetchProjectInsights } from "@/lib/client/api";
+import { formatInsightSeverityLabel } from "@/lib/display-labels";
 import type {
   ProjectInsightEdge,
   ProjectInsightFinding,
@@ -174,7 +175,7 @@ function SummaryGrid({ response }: { response: ProjectInsightsResponse }) {
   return (
     <dl className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
       <SummaryItem label="已分析" value={`${summary.analyzedFiles} 个文件`} />
-      <SummaryItem label="Markdown" value={`${summary.markdownFiles} 个文件`} />
+      <SummaryItem label="标记文档" value={`${summary.markdownFiles} 个文件`} />
       <SummaryItem label="节点" value={`${summary.graphNodes} 个节点`} />
       <SummaryItem label="边" value={`${summary.graphEdges} 条边`} />
       <SummaryItem label="发现" value={`${summary.findings} 条发现`} />
@@ -242,7 +243,9 @@ function FindingItem({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <p className="text-sm font-medium text-[color:var(--ink-strong)]">{finding.title}</p>
-          <p className="text-xs uppercase text-muted-foreground">{finding.severity}</p>
+          <p className="text-xs text-muted-foreground">
+            {formatInsightSeverityLabel(finding.severity)}
+          </p>
         </div>
         {finding.relativePath ? (
           <Button

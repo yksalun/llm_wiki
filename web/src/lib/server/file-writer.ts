@@ -17,7 +17,7 @@ export async function writeProjectFile(
   const normalizedPath = safeNormalizeRelativePath(request.relativePath);
 
   if (!isWritableProjectFile(normalizedPath)) {
-    throw new AppError("FILE_NOT_WRITABLE", 400, "This file is not writable through the workbench.");
+    throw new AppError("FILE_NOT_WRITABLE", 400, "这个文件不能在工作台中写入。");
   }
 
   const absolutePath = safeResolvePathInsideRoot(projectRoot, normalizedPath);
@@ -27,7 +27,7 @@ export async function writeProjectFile(
     const currentLastModified = currentStats?.mtime.toISOString() ?? null;
 
     if (request.lastModified !== currentLastModified) {
-      throw new AppError("FILE_WRITE_CONFLICT", 409, "File changed since it was last read.", {
+      throw new AppError("FILE_WRITE_CONFLICT", 409, "文件在上次读取后已经发生变化。", {
         publicDetails: {
           relativePath: normalizedPath,
           currentLastModified,
@@ -52,7 +52,7 @@ async function getExistingFileStats(filePath: string): Promise<Stats | null> {
     const stats = await fs.stat(filePath);
 
     if (!stats.isFile()) {
-      throw new AppError("FILE_NOT_FOUND", 404, "Requested file was not found.");
+      throw new AppError("FILE_NOT_FOUND", 404, "找不到请求的文件。");
     }
 
     return stats;
@@ -73,7 +73,7 @@ function safeNormalizeRelativePath(relativePath: string): string {
   try {
     return normalizeRelativePath(relativePath);
   } catch (error) {
-    throw new AppError("INVALID_FILE_PATH", 400, "File path must be a safe relative path.", {
+    throw new AppError("INVALID_FILE_PATH", 400, "文件路径必须是安全的相对路径。", {
       cause: error instanceof Error ? error : undefined,
     });
   }
@@ -83,7 +83,7 @@ function safeResolvePathInsideRoot(projectRoot: string, relativePath: string): s
   try {
     return resolvePathInsideRoot(projectRoot, relativePath);
   } catch (error) {
-    throw new AppError("PATH_OUTSIDE_PROJECT", 400, "File path escapes the project root.", {
+    throw new AppError("PATH_OUTSIDE_PROJECT", 400, "文件路径不能离开项目根目录。", {
       cause: error instanceof Error ? error : undefined,
     });
   }

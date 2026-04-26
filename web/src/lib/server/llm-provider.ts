@@ -89,7 +89,7 @@ export async function generateProjectAnswer({
       throw new AppError(
         "PROJECT_QA_PROVIDER_ERROR",
         502,
-        "Project question answer provider returned an error.",
+        "项目问答服务返回了错误。",
         {
           publicDetails: {
             providerStatus: response.status,
@@ -106,7 +106,7 @@ export async function generateProjectAnswer({
       throw new AppError(
         "PROJECT_QA_PROVIDER_INVALID_RESPONSE",
         502,
-        "Project question answer provider returned an invalid response.",
+        "项目问答服务返回的数据无效。",
         {
           cause: error,
         },
@@ -121,7 +121,7 @@ export async function generateProjectAnswer({
       throw new AppError(
         "PROJECT_QA_PROVIDER_INVALID_RESPONSE",
         502,
-        "Project question answer provider returned an invalid response.",
+        "项目问答服务返回的数据无效。",
       );
     }
 
@@ -137,7 +137,7 @@ export async function generateProjectAnswer({
     throw new AppError(
       "PROJECT_QA_PROVIDER_ERROR",
       502,
-      "Project question answer provider request failed.",
+      "项目问答服务请求失败。",
       {
         cause: error,
       },
@@ -167,7 +167,7 @@ function assertCompletedOpenAIResponse(payload: unknown): void {
   throw new AppError(
     "PROJECT_QA_PROVIDER_ERROR",
     502,
-    "Project question answer provider returned an error.",
+    "项目问答服务返回了错误。",
     {
       publicDetails: buildOpenAIProviderErrorDetails(status, response),
     },

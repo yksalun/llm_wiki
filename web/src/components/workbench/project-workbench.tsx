@@ -607,7 +607,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
     loadState.status === "ready" ? loadState.detail.name : "项目工作台";
   const description =
     loadState.status === "ready"
-      ? "打开项目文件树，检查来源文件，并通过项目路由编辑允许修改的 Markdown 记录。"
+      ? "打开项目文件树，检查来源文件，并通过项目路由编辑允许修改的标记文档记录。"
       : "正在加载项目档案和文件树。";
 
   return (
@@ -922,7 +922,7 @@ function ProjectInfoPanel({
       </CardHeader>
       <CardContent className="grid gap-4 pt-4 md:grid-cols-2 xl:grid-cols-3">
         <InfoBlock label="项目名称" value={detail.name} />
-        <InfoBlock label="项目 ID" value={detail.id} mono />
+        <InfoBlock label="项目编号" value={detail.id} mono />
         <InfoBlock label="状态" value={formatProjectStatusLabel(detail.status)} />
         <InfoBlock label="访问模式" value={formatAccessModeLabel(detail.access.mode)} />
         <InfoBlock label="写入权限" value={detail.access.canWrite ? "是" : "否"} />

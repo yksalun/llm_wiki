@@ -31,7 +31,7 @@ async function parseJsonRequestBody(request: Request): Promise<unknown> {
   try {
     return await request.json();
   } catch (error) {
-    throw new AppError("INVALID_REQUEST_BODY", 400, "Request body must be valid JSON.", {
+    throw new AppError("INVALID_REQUEST_BODY", 400, "请求内容格式无效。", {
       cause: error instanceof Error ? error : undefined,
     });
   }
@@ -39,7 +39,7 @@ async function parseJsonRequestBody(request: Request): Promise<unknown> {
 
 function validateProjectQuestionRequest(payload: unknown): ProjectQuestionRequest {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new AppError("INVALID_REQUEST_BODY", 400, "Request body must be a JSON object.");
+    throw new AppError("INVALID_REQUEST_BODY", 400, "请求内容必须是对象。");
   }
 
   const candidate = payload as {
@@ -48,11 +48,11 @@ function validateProjectQuestionRequest(payload: unknown): ProjectQuestionReques
   };
 
   if (typeof candidate.question !== "string") {
-    throw new AppError("INVALID_REQUEST_BODY", 400, "question must be a string.");
+    throw new AppError("INVALID_REQUEST_BODY", 400, "问题必须是文本。");
   }
 
   if (candidate.history !== undefined && !Array.isArray(candidate.history)) {
-    throw new AppError("INVALID_REQUEST_BODY", 400, "history must be an array.");
+    throw new AppError("INVALID_REQUEST_BODY", 400, "历史记录必须是列表。");
   }
 
   return {

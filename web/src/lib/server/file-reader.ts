@@ -83,7 +83,7 @@ async function statProjectFile(filePath: string): Promise<Stats> {
     const stats = await fs.stat(filePath);
 
     if (!stats.isFile()) {
-      throw new AppError("FILE_NOT_FOUND", 404, "Requested file was not found.");
+      throw new AppError("FILE_NOT_FOUND", 404, "找不到请求的文件。");
     }
 
     return stats;
@@ -93,7 +93,7 @@ async function statProjectFile(filePath: string): Promise<Stats> {
     }
 
     if (isNodeError(error) && error.code === "ENOENT") {
-      throw new AppError("FILE_NOT_FOUND", 404, "Requested file was not found.", { cause: error });
+      throw new AppError("FILE_NOT_FOUND", 404, "找不到请求的文件。", { cause: error });
     }
 
     throw error;
@@ -111,7 +111,7 @@ async function readUtf8TextFile(
     };
   } catch (error) {
     if (isNodeError(error) && error.code === "ENOENT") {
-      throw new AppError("FILE_NOT_FOUND", 404, "Requested file was not found.", { cause: error });
+      throw new AppError("FILE_NOT_FOUND", 404, "找不到请求的文件。", { cause: error });
     }
 
     if (error instanceof TypeError) {
@@ -126,7 +126,7 @@ function safeNormalizeRelativePath(relativePath: string): string {
   try {
     return normalizeRelativePath(relativePath);
   } catch (error) {
-    throw new AppError("INVALID_FILE_PATH", 400, "File path must be a safe relative path.", {
+    throw new AppError("INVALID_FILE_PATH", 400, "文件路径必须是安全的相对路径。", {
       cause: error instanceof Error ? error : undefined,
     });
   }
@@ -136,7 +136,7 @@ function safeResolvePathInsideRoot(projectRoot: string, relativePath: string): s
   try {
     return resolvePathInsideRoot(projectRoot, relativePath);
   } catch (error) {
-    throw new AppError("PATH_OUTSIDE_PROJECT", 400, "File path escapes the project root.", {
+    throw new AppError("PATH_OUTSIDE_PROJECT", 400, "文件路径不能离开项目根目录。", {
       cause: error instanceof Error ? error : undefined,
     });
   }

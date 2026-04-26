@@ -343,7 +343,7 @@ export async function resolveProjectById(
     }
   }
 
-  throw new AppError("PROJECT_NOT_FOUND", 404, "Project not found");
+  throw new AppError("PROJECT_NOT_FOUND", 404, "找不到项目。");
 }
 
 async function readProjectState(rootDir: string): Promise<{

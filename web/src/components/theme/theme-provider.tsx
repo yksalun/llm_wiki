@@ -54,7 +54,7 @@ export function useTheme() {
   const value = useContext(ThemeContext);
 
   if (!value) {
-    throw new Error("useTheme must be used inside ThemeProvider.");
+    throw new Error("useTheme 必须在 ThemeProvider 内使用。");
   }
 
   return value;

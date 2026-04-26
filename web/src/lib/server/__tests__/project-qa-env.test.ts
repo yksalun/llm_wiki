@@ -6,8 +6,7 @@ import { getProjectQuestionAnswerConfigFromEnv } from "../env";
 const notConfiguredError = {
   code: "PROJECT_QA_PROVIDER_NOT_CONFIGURED",
   status: 503,
-  publicMessage:
-    "项目问答还没有配置 LLM provider。请配置 LLM_WIKI_OPENAI_API_KEY 和 LLM_WIKI_OPENAI_MODEL。",
+  publicMessage: "项目问答还没有配置大模型服务。请先配置问答服务的密钥和模型。",
 };
 
 describe("project question answer env helper", () => {

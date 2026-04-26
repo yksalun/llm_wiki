@@ -403,7 +403,7 @@ function Fact({ label, value }: { label: string; value: string }) {
 
 function buildDescription(file: FileReadResult) {
   if (file.mode === "editable") {
-    return "文件策略允许的 Markdown 文件可手动编辑并保存。";
+    return "文件策略允许的标记文档可手动编辑并保存。";
   }
 
   if (file.mode === "preview") {

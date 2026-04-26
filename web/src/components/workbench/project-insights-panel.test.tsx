@@ -48,6 +48,7 @@ describe("ProjectInsightsPanel", () => {
     expect(container?.textContent).toContain("2 个文件");
     expect(container?.textContent).toContain("1 条边");
     expect(container?.textContent).toContain("wiki/index.md -> wiki/schema.md");
+    expect(container?.textContent).toContain("警告");
     expect(container?.textContent).toContain("Broken schema link");
     expect(container?.textContent).toContain("Document the schema owner");
     expect(container?.textContent).toContain("Who owns schema updates?");

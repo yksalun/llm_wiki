@@ -8,7 +8,7 @@ const LLM_WIKI_OPENAI_MODEL_ENV_KEY = "LLM_WIKI_OPENAI_MODEL";
 const LLM_WIKI_OPENAI_BASE_URL_ENV_KEY = "LLM_WIKI_OPENAI_BASE_URL";
 const DEFAULT_OPENAI_RESPONSES_BASE_URL = "https://api.openai.com/v1/responses";
 const PROJECT_QA_PROVIDER_NOT_CONFIGURED_MESSAGE =
-  "项目问答还没有配置 LLM provider。请配置 LLM_WIKI_OPENAI_API_KEY 和 LLM_WIKI_OPENAI_MODEL。";
+  "项目问答还没有配置大模型服务。请先配置问答服务的密钥和模型。";
 
 type EnvironmentLike = Readonly<Record<string, string | undefined>>;
 

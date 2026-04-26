@@ -150,7 +150,7 @@ function throwInvalidQuestion(): never {
   throw new AppError(
     "INVALID_REQUEST_BODY",
     400,
-    "Question must be a string between 2 and 500 characters.",
+    "问题必须是 2 到 500 个字符之间的文本。",
   );
 }
 

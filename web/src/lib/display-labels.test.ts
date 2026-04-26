@@ -6,6 +6,7 @@ import {
   formatHeavyTaskBridgeStatusLabel,
   formatHeavyTaskEngineLabel,
   formatHeavyTaskNameLabel,
+  formatInsightSeverityLabel,
   formatProjectStatusLabel,
   formatWorkbenchSectionLabel,
 } from "./display-labels";
@@ -46,5 +47,11 @@ describe("display labels", () => {
   it("formats heavy task name labels in Chinese", () => {
     expect(formatHeavyTaskNameLabel("project-search")).toBe("项目搜索");
     expect(formatHeavyTaskNameLabel("project-insights")).toBe("项目洞察");
+  });
+
+  it("formats insight severity labels in Chinese", () => {
+    expect(formatInsightSeverityLabel("info")).toBe("信息");
+    expect(formatInsightSeverityLabel("warning")).toBe("警告");
+    expect(formatInsightSeverityLabel("risk")).toBe("风险");
   });
 });

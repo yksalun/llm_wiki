@@ -72,7 +72,7 @@ describe("/api/projects routes", () => {
     expect(repoMocks.upsertProjectSnapshot).toHaveBeenCalledTimes(1);
     expect(repoMocks.insertSyncRun).toHaveBeenCalledTimes(2);
     expect(payload.warnings).toHaveLength(1);
-    expect(payload.warnings[0]).toMatch(/project root/i);
+    expect(payload.warnings[0]).toBe("无法扫描已配置的项目根目录。");
     expect(payload.warnings[0]).not.toContain(missingRoot);
     expect(payload.warnings[0]).not.toContain(path.dirname(fixture.rootDir));
   });

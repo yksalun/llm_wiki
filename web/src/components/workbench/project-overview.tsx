@@ -84,7 +84,7 @@ export function ProjectOverview({
             description={
               preferredWikiMarkdownPath
                 ? "直接从项目树打开第一个知识库阅读文件。"
-                : "缺少知识库 Markdown 文件。"
+                : "缺少知识库标记文档。"
             }
             actionLabel="从知识库开始"
             disabled={!preferredWikiMarkdownPath}
@@ -109,10 +109,10 @@ export function ProjectOverview({
           <Metric label="工作区" value={String(project.sections.length)} />
           <Metric label="文件数" value={String(fileCount)} />
           <Metric label="目录数" value={String(directoryCount)} />
-          <Metric label="Markdown 文件" value={String(readingStats.markdownFiles)} />
+          <Metric label="标记文档" value={String(readingStats.markdownFiles)} />
           <Metric label="预览文件" value={String(readingStats.previewFiles)} />
           <Metric label="元数据文件" value={String(readingStats.metadataFiles)} />
-          <Metric label="项目 ID" value={project.id} mono />
+          <Metric label="项目编号" value={project.id} mono />
         </CardContent>
       </Card>
     </div>

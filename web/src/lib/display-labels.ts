@@ -3,6 +3,7 @@ import type {
   HeavyTaskBridgeStatus,
   HeavyTaskEngine,
   HeavyTaskName,
+  ProjectInsightFinding,
   ProjectAccessMode,
   ProjectStatus,
   WorkbenchSection,
@@ -48,6 +49,12 @@ const heavyTaskNameLabels = {
   "project-insights": "项目洞察",
 } satisfies Record<HeavyTaskName, string>;
 
+const insightSeverityLabels = {
+  info: "信息",
+  warning: "警告",
+  risk: "风险",
+} satisfies Record<ProjectInsightFinding["severity"], string>;
+
 export function formatWorkbenchSectionLabel(section: WorkbenchSection): string {
   return workbenchSectionLabels[section];
 }
@@ -76,4 +83,10 @@ export function formatHeavyTaskBridgeStatusLabel(
 
 export function formatHeavyTaskNameLabel(task: HeavyTaskName): string {
   return heavyTaskNameLabels[task];
+}
+
+export function formatInsightSeverityLabel(
+  severity: ProjectInsightFinding["severity"],
+): string {
+  return insightSeverityLabels[severity];
 }

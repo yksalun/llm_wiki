@@ -144,7 +144,7 @@ async function requestJson<T>(input: RequestInfo | URL, init?: RequestInit): Pro
   if (!response.ok) {
     const apiError = payload as ApiErrorPayload | null;
     throw new ClientApiError(
-      apiError?.error?.message ?? "Request failed.",
+      apiError?.error?.message ?? "请求失败。",
       response.status,
       apiError?.error?.code,
       apiError?.error?.details,
@@ -152,7 +152,7 @@ async function requestJson<T>(input: RequestInfo | URL, init?: RequestInit): Pro
   }
 
   if (payload === null) {
-    throw new ClientApiError("Received an empty response from the server.", response.status);
+    throw new ClientApiError("服务器返回了空响应。", response.status);
   }
 
   return payload as T;
@@ -168,6 +168,6 @@ async function parseJsonPayload<T>(response: Response): Promise<T | null> {
   try {
     return JSON.parse(body) as T;
   } catch {
-    throw new ClientApiError("Received an invalid JSON response.", response.status);
+    throw new ClientApiError("服务器返回的数据格式无效。", response.status);
   }
 }

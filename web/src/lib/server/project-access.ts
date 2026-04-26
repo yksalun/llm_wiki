@@ -28,7 +28,7 @@ export function getProjectAccessPolicyFromEnv(
   throw new AppError(
     "PROJECT_ACCESS_MODE_INVALID",
     500,
-    "Server project access mode must be read-write or read-only.",
+    "服务器项目访问模式配置无效。",
   );
 }
 
@@ -37,7 +37,7 @@ export function requireProjectWriteAccess(policy: ProjectAccessPolicy): void {
     throw new AppError(
       "PROJECT_ACCESS_READ_ONLY",
       403,
-      "This project is currently opened in read-only mode.",
+      "当前项目以只读模式打开。",
     );
   }
 }

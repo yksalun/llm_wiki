@@ -194,11 +194,11 @@ function WarningsAlert({ warnings }: { warnings: string[] }) {
 }
 
 function formatWarningMessage(warning: string) {
-  if (warning === "A configured project root could not be scanned.") {
+  if (warning === "无法扫描已配置的项目根目录。") {
     return "无法扫描已配置的项目根目录。";
   }
 
-  return warning;
+  return "项目扫描返回了未知警告。";
 }
 
 function LoadingState() {
@@ -326,7 +326,7 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
             </div>
           </div>
           <CardDescription className="leading-6">
-            项目 ID：<span className="font-mono text-xs text-[color:var(--ink-soft)]">{project.id}</span>
+            项目编号：<span className="font-mono text-xs text-[color:var(--ink-soft)]">{project.id}</span>
           </CardDescription>
         </CardHeader>
 

@@ -18,6 +18,6 @@ export async function GET() {
   }
 }
 
-function sanitizeWarning(_warning: string): string {
-  return "A configured project root could not be scanned.";
+function sanitizeWarning(): string {
+  return "无法扫描已配置的项目根目录。";
 }

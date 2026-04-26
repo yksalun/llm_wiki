@@ -56,7 +56,7 @@ async function parseJsonRequestBody(request: Request): Promise<unknown> {
   try {
     return await request.json();
   } catch (error) {
-    throw new AppError("INVALID_REQUEST_BODY", 400, "Request body must be valid JSON.", {
+    throw new AppError("INVALID_REQUEST_BODY", 400, "请求内容格式无效。", {
       cause: error instanceof Error ? error : undefined,
     });
   }
@@ -64,21 +64,21 @@ async function parseJsonRequestBody(request: Request): Promise<unknown> {
 
 function validateFileWriteRequest(payload: unknown): FileWriteRequest {
   if (!payload || typeof payload !== "object") {
-    throw new AppError("INVALID_REQUEST_BODY", 400, "Request body must be a JSON object.");
+    throw new AppError("INVALID_REQUEST_BODY", 400, "请求内容必须是对象。");
   }
 
   const candidate = payload as Partial<FileWriteRequest>;
 
   if (typeof candidate.relativePath !== "string") {
-    throw new AppError("INVALID_REQUEST_BODY", 400, "relativePath must be a string.");
+    throw new AppError("INVALID_REQUEST_BODY", 400, "文件路径必须是文本。");
   }
 
   if (typeof candidate.content !== "string") {
-    throw new AppError("INVALID_REQUEST_BODY", 400, "content must be a string.");
+    throw new AppError("INVALID_REQUEST_BODY", 400, "文件内容必须是文本。");
   }
 
   if (candidate.lastModified !== null && typeof candidate.lastModified !== "string") {
-    throw new AppError("INVALID_REQUEST_BODY", 400, "lastModified must be a string or null.");
+    throw new AppError("INVALID_REQUEST_BODY", 400, "最后修改时间必须是文本或空值。");
   }
 
   return {

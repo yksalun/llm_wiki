@@ -32,13 +32,13 @@ describe("getProjectAccessPolicyFromEnv", () => {
   it("rejects invalid project access modes", () => {
     expect(() =>
       getProjectAccessPolicyFromEnv({ LLM_WIKI_PROJECT_ACCESS_MODE: "preview-only" }),
-    ).toThrow("Server project access mode must be read-write or read-only.");
+    ).toThrow("服务器项目访问模式配置无效。");
     expect(catchError(() =>
       getProjectAccessPolicyFromEnv({ LLM_WIKI_PROJECT_ACCESS_MODE: "preview-only" }),
     )).toMatchObject({
       code: "PROJECT_ACCESS_MODE_INVALID",
       status: 500,
-      publicMessage: "Server project access mode must be read-write or read-only.",
+      publicMessage: "服务器项目访问模式配置无效。",
     });
   });
 });
@@ -51,7 +51,7 @@ describe("requireProjectWriteAccess", () => {
         canRead: true,
         canWrite: false,
       }),
-    ).toThrow("This project is currently opened in read-only mode.");
+    ).toThrow("当前项目以只读模式打开。");
     expect(catchError(() =>
       requireProjectWriteAccess({
         mode: "read-only",
@@ -61,7 +61,7 @@ describe("requireProjectWriteAccess", () => {
     )).toMatchObject({
       code: "PROJECT_ACCESS_READ_ONLY",
       status: 403,
-      publicMessage: "This project is currently opened in read-only mode.",
+      publicMessage: "当前项目以只读模式打开。",
     });
   });
 });
