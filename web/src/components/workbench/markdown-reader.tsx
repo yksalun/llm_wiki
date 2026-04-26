@@ -27,7 +27,7 @@ export function MarkdownReader({ content }: { content: string }) {
   );
 }
 
-function parseMarkdownBlocks(content: string) {
+function parseMarkdownBlocks(content: string): MarkdownBlock[] {
   const lines = content.replace(/\r\n?/g, "\n").split("\n");
   const blocks: MarkdownBlock[] = [];
   let index = 0;
@@ -211,7 +211,7 @@ function renderBlock(block: MarkdownBlock, index: number) {
 
 function renderInlineMarkdown(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
-  const inlinePattern = /(`[^`]+`|\[[^\]]+\]\([^)]+\))/g;
+  const inlinePattern = /((?<!`)`[^`\n]+`(?!`)|\[[^\]]+\]\([^)]+\))/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -234,12 +234,14 @@ function renderInlineMarkdown(text: string): ReactNode[] {
     } else {
       const link = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
 
-      if (link) {
+      if (link && isSafeHref(link[2])) {
         nodes.push(
           <a key={`link-${match.index}`} href={link[2]} className="font-medium underline">
             {link[1]}
           </a>,
         );
+      } else if (link) {
+        nodes.push(link[1]);
       } else {
         nodes.push(token);
       }
@@ -271,12 +273,35 @@ function isBlockquoteLine(line: string) {
   return /^\s*>\s?/.test(line);
 }
 
+function isSafeHref(href: string) {
+  const value = href.trim();
+
+  if (!value || /[\u0000-\u001F\u007F\s]/.test(value)) {
+    return false;
+  }
+
+  if (value.startsWith("/") || value.startsWith("#")) {
+    return !value.startsWith("//");
+  }
+
+  if (/^(https?:|mailto:)/i.test(value)) {
+    return true;
+  }
+
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)) {
+    return false;
+  }
+
+  return /^[A-Za-z0-9._~!$&'()*+,;=:@%-]+(?:\/[A-Za-z0-9._~!$&'()*+,;=:@%-]+)*\/?(?:[?#][A-Za-z0-9._~!$&'()*+,;=:@%/?-]*)?$/.test(
+    value,
+  );
+}
+
 function shouldContinueParagraph(line: string) {
   const trimmed = line.trim();
 
   return (
     Boolean(trimmed) &&
-    !trimmed.startsWith("```") &&
     !/^(#{1,3})\s+/.test(trimmed) &&
     !isHorizontalRule(trimmed) &&
     !isUnorderedListItem(line) &&

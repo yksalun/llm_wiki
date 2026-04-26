@@ -68,6 +68,34 @@ describe("MarkdownReader", () => {
     expect(html).toContain("console.log(message);");
   });
 
+  it("renders malformed fence openers as plain content without hanging", () => {
+    const html = renderToStaticMarkup(
+      <MarkdownReader
+        content={[
+          '```tsx title="example"',
+          "const value = 1;",
+          "```",
+          "",
+          "After the malformed fence.",
+        ].join("\n")}
+      />,
+    );
+
+    expect(html).toContain("```tsx title=&quot;example&quot;");
+    expect(html).toContain("const value = 1;");
+    expect(html).toContain("After the malformed fence.");
+  });
+
+  it("does not render unsafe javascript link hrefs", () => {
+    const html = renderToStaticMarkup(
+      <MarkdownReader content={"Read [click](javascript:alert(1)) before continuing."} />,
+    );
+
+    expect(html).toContain("click");
+    expect(html).not.toContain("href=\"javascript:");
+    expect(html).not.toContain("javascript:alert");
+  });
+
   it("renders an empty state for blank content", () => {
     const html = renderToStaticMarkup(<MarkdownReader content={"  \n\t  "} />);
 
