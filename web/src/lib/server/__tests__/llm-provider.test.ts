@@ -27,15 +27,23 @@ describe("parseOpenAIResponseText", () => {
     ).toBe("direct answer");
   });
 
-  it("falls back to concatenating output content text values", () => {
+  it("falls back to concatenating output_text content values", () => {
     expect(
       parseOpenAIResponseText({
         output: [
           {
-            content: [{ text: "first " }, { text: "" }],
+            content: [
+              { text: "ignored" },
+              { type: "refusal", text: "also ignored" },
+              { type: "output_text", text: "first " },
+            ],
           },
           {
-            content: [{ type: "output_text", text: "second" }],
+            content: [
+              { type: "other", text: "ignored" },
+              { type: "output_text", text: "second" },
+              { type: "output_text", text: "" },
+            ],
           },
         ],
       }),
@@ -123,6 +131,62 @@ describe("generateProjectAnswer", () => {
       expect.objectContaining({
         code: "PROJECT_QA_PROVIDER_INVALID_RESPONSE",
         status: 502,
+      }),
+    );
+  });
+
+  it("throws provider error when a 200 response is incomplete", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          status: "incomplete",
+          incomplete_details: { reason: "max_output_tokens" },
+          output_text: "partial",
+        }),
+      }),
+    );
+
+    await expect(
+      generateProjectAnswer({ question: "Q", prompt: "P", config }),
+    ).rejects.toThrow(
+      expect.objectContaining({
+        code: "PROJECT_QA_PROVIDER_ERROR",
+        status: 502,
+        publicDetails: {
+          providerStatus: "incomplete",
+          providerReason: "max_output_tokens",
+        },
+      }),
+    );
+  });
+
+  it("throws provider error when a 200 response failed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          status: "failed",
+          error: { code: "server_error", message: "provider internals" },
+          output_text: "partial",
+        }),
+      }),
+    );
+
+    await expect(
+      generateProjectAnswer({ question: "Q", prompt: "P", config }),
+    ).rejects.toThrow(
+      expect.objectContaining({
+        code: "PROJECT_QA_PROVIDER_ERROR",
+        status: 502,
+        publicDetails: {
+          providerStatus: "failed",
+          providerReason: "server_error",
+        },
       }),
     );
   });

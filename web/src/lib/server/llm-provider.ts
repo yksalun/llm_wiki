@@ -46,7 +46,11 @@ export function parseOpenAIResponseText(payload: unknown): string | null {
           return [];
         }
 
-        const contentText = (contentItem as { text?: unknown }).text;
+        const { text: contentText, type } = contentItem as { text?: unknown; type?: unknown };
+        if (type !== "output_text") {
+          return [];
+        }
+
         return typeof contentText === "string" && contentText.length > 0 ? [contentText] : [];
       });
     })
@@ -109,6 +113,8 @@ export async function generateProjectAnswer({
       );
     }
 
+    assertCompletedOpenAIResponse(payload);
+
     const answer = parseOpenAIResponseText(payload);
 
     if (!answer) {
@@ -139,6 +145,78 @@ export async function generateProjectAnswer({
   } finally {
     timeout.cleanup();
   }
+}
+
+function assertCompletedOpenAIResponse(payload: unknown): void {
+  if (!payload || typeof payload !== "object") {
+    return;
+  }
+
+  const response = payload as {
+    status?: unknown;
+    error?: unknown;
+    incomplete_details?: unknown;
+  };
+  const status = typeof response.status === "string" ? response.status : undefined;
+  const hasError = hasNonEmptyValue(response.error);
+
+  if ((!status || status === "completed") && !hasError) {
+    return;
+  }
+
+  throw new AppError(
+    "PROJECT_QA_PROVIDER_ERROR",
+    502,
+    "Project question answer provider returned an error.",
+    {
+      publicDetails: buildOpenAIProviderErrorDetails(status, response),
+    },
+  );
+}
+
+function buildOpenAIProviderErrorDetails(
+  status: string | undefined,
+  response: { error?: unknown; incomplete_details?: unknown },
+): Record<string, string | number | boolean | null> {
+  const providerReason = getOpenAIProviderReason(response);
+  return {
+    ...(status ? { providerStatus: status } : {}),
+    ...(providerReason ? { providerReason } : {}),
+  };
+}
+
+function getOpenAIProviderReason(response: { error?: unknown; incomplete_details?: unknown }): string | null {
+  if (response.incomplete_details && typeof response.incomplete_details === "object") {
+    const reason = (response.incomplete_details as { reason?: unknown }).reason;
+    if (typeof reason === "string" && reason.length > 0) {
+      return reason;
+    }
+  }
+
+  if (response.error && typeof response.error === "object") {
+    const code = (response.error as { code?: unknown }).code;
+    if (typeof code === "string" && code.length > 0) {
+      return code;
+    }
+  }
+
+  return null;
+}
+
+function hasNonEmptyValue(value: unknown): boolean {
+  if (value == null) {
+    return false;
+  }
+
+  if (typeof value === "string") {
+    return value.length > 0;
+  }
+
+  if (typeof value === "object") {
+    return Object.keys(value).length > 0;
+  }
+
+  return true;
 }
 
 function createTimeoutSignal(milliseconds: number): { signal: AbortSignal; cleanup: () => void } {
