@@ -22,16 +22,19 @@ interface ProjectOverviewProps {
   project: ProjectDetail;
   tree: FileTreeNode[];
   onChangeSection: (section: WorkbenchSection) => void;
+  onOpenFile?: (relativePath: string) => void;
 }
 
 export function ProjectOverview({
   project,
   tree,
   onChangeSection,
+  onOpenFile,
 }: ProjectOverviewProps) {
   const fileCount = countFiles(tree);
   const directoryCount = countDirectories(tree);
   const readingStats = collectReadingStats(tree);
+  const preferredWikiMarkdownPath = findPreferredWikiMarkdownPath(tree);
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
@@ -77,10 +80,18 @@ export function ProjectOverview({
           <ActionCard
             icon={FileSearch}
             title="Wiki directory"
-            description="Move into the Files section and browse the wiki records from the tree."
+            description={
+              preferredWikiMarkdownPath
+                ? "Open the first wiki reading file directly from the project tree."
+                : "No wiki markdown file is available yet."
+            }
             actionLabel="Start with wiki"
-            disabled={!hasPath(tree, "wiki")}
-            onClick={() => onChangeSection("Files")}
+            disabled={!preferredWikiMarkdownPath}
+            onClick={() => {
+              if (preferredWikiMarkdownPath) {
+                onOpenFile?.(preferredWikiMarkdownPath);
+              }
+            }}
           />
         </CardContent>
       </Card>
@@ -225,16 +236,37 @@ function collectReadingStats(nodes: FileTreeNode[]): ReadingStats {
   );
 }
 
-function hasPath(nodes: FileTreeNode[], relativePath: string): boolean {
-  return nodes.some((node) => {
-    if (node.relativePath === relativePath) {
-      return true;
-    }
+function findPreferredWikiMarkdownPath(nodes: FileTreeNode[]): string | null {
+  let firstWikiMarkdownPath: string | null = null;
 
-    if (node.nodeType === "directory") {
-      return hasPath(node.children ?? [], relativePath);
+  function visit(nextNodes: FileTreeNode[]) {
+    for (const node of nextNodes) {
+      if (node.nodeType === "file") {
+        if (node.relativePath === "wiki/index.md") {
+          firstWikiMarkdownPath = node.relativePath;
+          return true;
+        }
+
+        if (
+          firstWikiMarkdownPath === null &&
+          node.relativePath.startsWith("wiki/") &&
+          isMarkdownFileExtension(getFileExtension(node.relativePath))
+        ) {
+          firstWikiMarkdownPath = node.relativePath;
+        }
+
+        continue;
+      }
+
+      if (visit(node.children ?? [])) {
+        return true;
+      }
     }
 
     return false;
-  });
+  }
+
+  visit(nodes);
+
+  return firstWikiMarkdownPath;
 }

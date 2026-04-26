@@ -1,9 +1,16 @@
+// @vitest-environment jsdom
+
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { FileTreeNode, ProjectDetail } from "@/lib/types";
 
 import { ProjectOverview } from "./project-overview";
+
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
+  .IS_REACT_ACT_ENVIRONMENT = true;
 
 const project: ProjectDetail = {
   id: "project-alpha",
@@ -44,6 +51,22 @@ const tree: FileTreeNode[] = [
 ];
 
 describe("ProjectOverview", () => {
+  let container: HTMLDivElement | null = null;
+  let root: Root | null = null;
+
+  afterEach(() => {
+    if (root) {
+      act(() => {
+        root?.unmount();
+      });
+    }
+
+    container?.remove();
+    container = null;
+    root = null;
+    vi.clearAllMocks();
+  });
+
   it("renders reading structure metrics and a wiki entry point", () => {
     const html = renderToStaticMarkup(
       <ProjectOverview project={project} tree={tree} onChangeSection={() => undefined} />,
@@ -57,6 +80,76 @@ describe("ProjectOverview", () => {
     expectMetric(html, "Preview files", "1");
     expectMetric(html, "Metadata files", "1");
   });
+
+  it("opens wiki/index.md when starting with wiki and index exists", () => {
+    const onOpenFile = vi.fn();
+
+    renderProjectOverview(
+      [
+        {
+          name: "wiki",
+          relativePath: "wiki",
+          nodeType: "directory",
+          children: [
+            {
+              name: "intro",
+              relativePath: "wiki/intro.md",
+              nodeType: "file",
+            },
+            {
+              name: "index",
+              relativePath: "wiki/index.md",
+              nodeType: "file",
+            },
+          ],
+        },
+      ],
+      onOpenFile,
+    );
+
+    startWithWikiButton().click();
+
+    expect(onOpenFile).toHaveBeenCalledWith("wiki/index.md");
+  });
+
+  it("opens the first wiki markdown file when index is missing", () => {
+    const onOpenFile = vi.fn();
+
+    renderProjectOverview(tree, onOpenFile);
+
+    startWithWikiButton().click();
+
+    expect(onOpenFile).toHaveBeenCalledWith("wiki/intro.md");
+  });
+
+  function renderProjectOverview(nextTree: FileTreeNode[], onOpenFile: (relativePath: string) => void) {
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    act(() => {
+      root?.render(
+        <ProjectOverview
+          project={project}
+          tree={nextTree}
+          onChangeSection={() => undefined}
+          onOpenFile={onOpenFile}
+        />,
+      );
+    });
+  }
+
+  function startWithWikiButton(): HTMLButtonElement {
+    const button = Array.from(container?.querySelectorAll("button") ?? []).find(
+      (candidate) => candidate.textContent === "Start with wiki",
+    );
+
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Start with wiki button not found");
+    }
+
+    return button;
+  }
 });
 
 function expectMetric(html: string, label: string, value: string) {

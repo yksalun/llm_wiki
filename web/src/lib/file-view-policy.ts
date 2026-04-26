@@ -13,7 +13,7 @@ export function getFileExtension(relativePath: string): string {
   const lastSegment = segments[segments.length - 1] ?? "";
   const extensionStart = lastSegment.lastIndexOf(".");
 
-  if (extensionStart === -1) {
+  if (extensionStart <= 0) {
     return "";
   }
 

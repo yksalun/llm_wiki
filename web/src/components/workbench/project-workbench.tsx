@@ -655,6 +655,9 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
               onChangeSection={(nextSection) => {
                 void handleSectionChange(nextSection);
               }}
+              onOpenFile={(relativePath) => {
+                void requestOpenRelativePath(relativePath, "Files");
+              }}
             />
           ) : null}
 
