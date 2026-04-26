@@ -25,6 +25,7 @@ export function ProjectOverview({
 }: ProjectOverviewProps) {
   const fileCount = countFiles(tree);
   const directoryCount = countDirectories(tree);
+  const readingStats = collectReadingStats(tree);
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
@@ -71,7 +72,7 @@ export function ProjectOverview({
             icon={FileSearch}
             title="Wiki directory"
             description="Move into the Files section and browse the wiki records from the tree."
-            actionLabel="Browse wiki"
+            actionLabel="Start with wiki"
             disabled={!hasPath(tree, "wiki")}
             onClick={() => onChangeSection("Files")}
           />
@@ -90,6 +91,9 @@ export function ProjectOverview({
           <Metric label="Sections" value={String(project.sections.length)} />
           <Metric label="Files in tree" value={String(fileCount)} />
           <Metric label="Directories" value={String(directoryCount)} />
+          <Metric label="Markdown files" value={String(readingStats.markdownFiles)} />
+          <Metric label="Preview files" value={String(readingStats.previewFiles)} />
+          <Metric label="Metadata files" value={String(readingStats.metadataFiles)} />
           <Metric label="Project ID" value={project.id} mono />
         </CardContent>
       </Card>
@@ -167,6 +171,62 @@ function countDirectories(nodes: FileTreeNode[]): number {
 
     return total;
   }, 0);
+}
+
+interface ReadingStats {
+  markdownFiles: number;
+  previewFiles: number;
+  metadataFiles: number;
+  unsupportedFiles: number;
+}
+
+function collectReadingStats(nodes: FileTreeNode[]): ReadingStats {
+  return nodes.reduce<ReadingStats>(
+    (stats, node) => {
+      if (node.nodeType === "directory") {
+        const childStats = collectReadingStats(node.children ?? []);
+
+        return {
+          markdownFiles: stats.markdownFiles + childStats.markdownFiles,
+          previewFiles: stats.previewFiles + childStats.previewFiles,
+          metadataFiles: stats.metadataFiles + childStats.metadataFiles,
+          unsupportedFiles: stats.unsupportedFiles + childStats.unsupportedFiles,
+        };
+      }
+
+      const extension = getFileExtension(node.name);
+
+      if (extension === ".md") {
+        return { ...stats, markdownFiles: stats.markdownFiles + 1 };
+      }
+
+      if ([".txt", ".json", ".yaml", ".yml"].includes(extension)) {
+        return { ...stats, previewFiles: stats.previewFiles + 1 };
+      }
+
+      if ([".pdf", ".docx", ".pptx", ".xlsx"].includes(extension)) {
+        return { ...stats, metadataFiles: stats.metadataFiles + 1 };
+      }
+
+      return { ...stats, unsupportedFiles: stats.unsupportedFiles + 1 };
+    },
+    {
+      markdownFiles: 0,
+      previewFiles: 0,
+      metadataFiles: 0,
+      unsupportedFiles: 0,
+    },
+  );
+}
+
+function getFileExtension(fileName: string): string {
+  const extensionStart = fileName.lastIndexOf(".");
+
+  if (extensionStart === -1) {
+    return "";
+  }
+
+  return fileName.slice(extensionStart).toLowerCase();
 }
 
 function hasPath(nodes: FileTreeNode[], relativePath: string): boolean {
