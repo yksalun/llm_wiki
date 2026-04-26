@@ -59,18 +59,26 @@ export interface ProjectQuestionMessage {
 
 export interface ProjectQuestionRequest {
   question: string;
-  messages: ProjectQuestionMessage[];
+  history?: ProjectQuestionMessage[];
 }
 
 export interface ProjectQuestionSource {
+  id: number;
   relativePath: string;
-  title: string | null;
-  excerpt: string;
+  lineNumber: number;
+  preview: string;
 }
 
 export interface ProjectQuestionResponse {
+  question: string;
   answer: string;
   sources: ProjectQuestionSource[];
+  retrieval: {
+    queries: string[];
+    totalMatches: number;
+    truncated: boolean;
+  };
+  model: string;
 }
 
 export interface FileTreeNode {
