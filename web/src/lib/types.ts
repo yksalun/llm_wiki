@@ -30,6 +30,27 @@ export interface ProjectDetail extends ProjectSummary {
   rootPathHint: string | null;
 }
 
+export interface ProjectSearchResult {
+  relativePath: string;
+  lineNumber: number;
+  lineText: string;
+  preview: string;
+  matchStart: number;
+  matchEnd: number;
+}
+
+export interface ProjectSearchResponse {
+  query: string;
+  results: ProjectSearchResult[];
+  summary: {
+    scannedFiles: number;
+    skippedFiles: number;
+    matchedFiles: number;
+    totalMatches: number;
+    truncated: boolean;
+  };
+}
+
 export interface FileTreeNode {
   name: string;
   relativePath: string;

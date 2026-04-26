@@ -28,6 +28,10 @@ export function isPreviewFileExtension(extension: string): boolean {
   return PREVIEW_EXTENSION_SET.has(extension);
 }
 
+export function isSearchableTextFileExtension(extension: string): boolean {
+  return isMarkdownFileExtension(extension) || isPreviewFileExtension(extension);
+}
+
 export function isMetadataFileExtension(extension: string): boolean {
   return METADATA_EXTENSION_SET.has(extension);
 }
