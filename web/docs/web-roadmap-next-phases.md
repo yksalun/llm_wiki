@@ -413,6 +413,8 @@ flowchart TD
 
 ### 10.3 阶段 7：多用户 / 权限 / 协作
 
+> 状态：已完成。阶段 7 已按 [spec](../../docs/superpowers/specs/2026-04-26-phase-7-project-access-design.md) 和 [implementation plan](../../docs/superpowers/plans/2026-04-26-phase-7-project-access.md) 落地，采用符合当前单用户自部署前提的权限基础层方案，覆盖 read-write / read-only 项目访问模式、服务端写权限闸门、只读文件预览、工作台访问模式展示和关键测试。
+
 当前产品假设是 **单用户、自部署、同机访问项目目录**。
 
 只要这个前提不变，多用户并不是当前主线优先级。只有未来产品定位真的变成团队协作平台，这一阶段才值得进入主线。
