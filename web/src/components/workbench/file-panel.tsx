@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AlertCircle, Edit3, Eye, FileText, RefreshCcw, Save } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -53,6 +53,14 @@ interface FilePanelProps {
   onReloadRemote: () => void;
 }
 
+type FileView = "read" | "edit";
+
+interface FileViewState {
+  path: string | null;
+  view: FileView;
+  dirty: boolean;
+}
+
 export function FilePanel({
   section,
   selectedPath,
@@ -72,17 +80,27 @@ export function FilePanel({
   onReset,
   onReloadRemote,
 }: FilePanelProps) {
-  const [fileView, setFileView] = useState<"read" | "edit">("read");
+  const currentFilePath = file?.relativePath ?? null;
+  const [fileViewState, setFileViewState] = useState<FileViewState>(() => ({
+    path: currentFilePath,
+    view: dirty ? "edit" : "read",
+    dirty,
+  }));
+  let fileView = fileViewState.view;
 
-  useEffect(() => {
-    setFileView("read");
-  }, [file?.relativePath]);
+  if (fileViewState.path !== currentFilePath) {
+    fileView = "read";
+    setFileViewState({ path: currentFilePath, view: "read", dirty });
+  } else if (!fileViewState.dirty && dirty) {
+    fileView = "edit";
+    setFileViewState({ path: currentFilePath, view: "edit", dirty });
+  } else if (fileViewState.dirty !== dirty) {
+    setFileViewState({ ...fileViewState, dirty });
+  }
 
-  useEffect(() => {
-    if (dirty) {
-      setFileView("edit");
-    }
-  }, [dirty]);
+  const updateFileView = (view: FileView) => {
+    setFileViewState({ path: currentFilePath, view, dirty });
+  };
 
   if (loading) {
     return (
@@ -176,7 +194,7 @@ export function FilePanel({
                   size="sm"
                   variant={fileView === "read" ? "default" : "outline"}
                   aria-pressed={fileView === "read"}
-                  onClick={() => setFileView("read")}
+                  onClick={() => updateFileView("read")}
                   disabled={saving}
                 >
                   <Eye className="size-4" />
@@ -187,7 +205,7 @@ export function FilePanel({
                   size="sm"
                   variant={fileView === "edit" ? "default" : "outline"}
                   aria-pressed={fileView === "edit"}
-                  onClick={() => setFileView("edit")}
+                  onClick={() => updateFileView("edit")}
                   disabled={saving}
                 >
                   <Edit3 className="size-4" />
