@@ -30,12 +30,12 @@ const tree: FileTreeNode[] = [
         nodeType: "file",
       },
       {
-        name: "data.json",
+        name: "data",
         relativePath: "wiki/data.json",
         nodeType: "file",
       },
       {
-        name: "brief.pdf",
+        name: "brief",
         relativePath: "wiki/brief.pdf",
         nodeType: "file",
       },
@@ -53,6 +53,12 @@ describe("ProjectOverview", () => {
     expect(html).toContain("Preview files");
     expect(html).toContain("Metadata files");
     expect(html).toContain("Start with wiki");
-    expect(html).toMatch(/Markdown files<\/p><p class="[^"]*">1<\/p>/);
+    expectMetric(html, "Markdown files", "1");
+    expectMetric(html, "Preview files", "1");
+    expectMetric(html, "Metadata files", "1");
   });
 });
+
+function expectMetric(html: string, label: string, value: string) {
+  expect(html).toMatch(new RegExp(`${label}</p><p class="[^"]*">${value}</p>`));
+}

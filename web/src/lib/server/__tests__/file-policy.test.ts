@@ -23,6 +23,7 @@ describe("classifyFileView", () => {
     expect(classifyFileView("wiki/intro.md")).toBe("editable");
     expect(classifyFileView("package.json")).toBe("preview");
     expect(classifyFileView("raw/sources/demo.pdf")).toBe("metadata");
+    expect(classifyFileView("raw.v1/sources/demo")).toBe("unsupported");
     expect(classifyFileView("assets/logo.png")).toBe("unsupported");
   });
 

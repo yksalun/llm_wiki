@@ -10,6 +10,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  getFileExtension,
+  isMarkdownFileExtension,
+  isMetadataFileExtension,
+  isPreviewFileExtension,
+} from "@/lib/file-view-policy";
 import type { FileTreeNode, ProjectDetail, WorkbenchSection } from "@/lib/types";
 
 interface ProjectOverviewProps {
@@ -196,15 +202,15 @@ function collectReadingStats(nodes: FileTreeNode[]): ReadingStats {
 
       const extension = getFileExtension(node.relativePath);
 
-      if (extension === ".md") {
+      if (isMarkdownFileExtension(extension)) {
         return { ...stats, markdownFiles: stats.markdownFiles + 1 };
       }
 
-      if ([".txt", ".json", ".yaml", ".yml"].includes(extension)) {
+      if (isPreviewFileExtension(extension)) {
         return { ...stats, previewFiles: stats.previewFiles + 1 };
       }
 
-      if ([".pdf", ".docx", ".pptx", ".xlsx"].includes(extension)) {
+      if (isMetadataFileExtension(extension)) {
         return { ...stats, metadataFiles: stats.metadataFiles + 1 };
       }
 
@@ -217,16 +223,6 @@ function collectReadingStats(nodes: FileTreeNode[]): ReadingStats {
       unsupportedFiles: 0,
     },
   );
-}
-
-function getFileExtension(fileName: string): string {
-  const extensionStart = fileName.lastIndexOf(".");
-
-  if (extensionStart === -1) {
-    return "";
-  }
-
-  return fileName.slice(extensionStart).toLowerCase();
 }
 
 function hasPath(nodes: FileTreeNode[], relativePath: string): boolean {
