@@ -426,7 +426,7 @@ describe("resolveProjectById", () => {
       hasRawSourcesDirectory: true,
       rootDir: fixture.rootDir,
       rootPathHint: fixture.rootDir,
-      sections: ["Overview", "Files", "Purpose", "Schema", "Project Info"],
+      sections: ["Overview", "Ask", "Files", "Purpose", "Schema", "Project Info"],
     });
   });
 
