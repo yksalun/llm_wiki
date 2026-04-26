@@ -23,6 +23,11 @@ const project: ProjectDetail = {
   updatedAt: "2026-04-26T00:00:00.000Z",
   sections: ["Overview", "Files", "Purpose", "Schema", "Project Info"],
   rootPathHint: null,
+  access: {
+    mode: "read-write",
+    canRead: true,
+    canWrite: true,
+  },
 };
 
 const tree: FileTreeNode[] = [

@@ -407,6 +407,11 @@ function toResolvedProject(project: ProjectScanResult): ResolvedProject {
     ...project.summary,
     sections: PROJECT_SECTIONS,
     rootPathHint: project.rootDir,
+    access: {
+      mode: "read-write",
+      canRead: true,
+      canWrite: true,
+    },
     rootDir: project.rootDir,
   };
 }

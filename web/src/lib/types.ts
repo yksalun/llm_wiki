@@ -9,7 +9,14 @@ export type WorkbenchSection =
 
 export type FileNodeType = "file" | "directory";
 export type FileViewMode = "editable" | "preview" | "metadata" | "unsupported";
+export type ProjectAccessMode = "read-write" | "read-only";
 export type ProjectStatus = "ready" | "incomplete";
+
+export interface ProjectAccessPolicy {
+  mode: ProjectAccessMode;
+  canRead: true;
+  canWrite: boolean;
+}
 
 export interface ProjectSummary {
   id: string;
@@ -30,6 +37,7 @@ export interface ProjectsListResponse {
 export interface ProjectDetail extends ProjectSummary {
   sections: WorkbenchSection[];
   rootPathHint: string | null;
+  access: ProjectAccessPolicy;
 }
 
 export interface ProjectSearchResult {
