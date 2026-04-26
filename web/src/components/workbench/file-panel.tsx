@@ -175,6 +175,7 @@ export function FilePanel({
                   type="button"
                   size="sm"
                   variant={fileView === "read" ? "default" : "outline"}
+                  aria-pressed={fileView === "read"}
                   onClick={() => setFileView("read")}
                   disabled={saving}
                 >
@@ -185,7 +186,9 @@ export function FilePanel({
                   type="button"
                   size="sm"
                   variant={fileView === "edit" ? "default" : "outline"}
+                  aria-pressed={fileView === "edit"}
                   onClick={() => setFileView("edit")}
+                  disabled={saving}
                 >
                   <Edit3 className="size-4" />
                   Edit
