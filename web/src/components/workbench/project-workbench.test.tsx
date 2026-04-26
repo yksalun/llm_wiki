@@ -186,7 +186,7 @@ describe("ProjectWorkbench draft guard", () => {
     await waitForButton("目标");
     await clickButton("目标");
     await waitForText("purpose.md");
-    await clickButton("Edit");
+    await clickButton("编辑");
 
     updateEditor("# purpose.md\n\nLocal unsaved edit.");
 
@@ -196,12 +196,12 @@ describe("ProjectWorkbench draft guard", () => {
 
     await clickButton("打开来源");
 
-    expect(container?.textContent).toContain("Unsaved draft");
+    expect(container?.textContent).toContain("未保存草稿");
     expect(container?.textContent).toContain("wiki/schema.md");
 
-    await clickButton("Cancel");
+    await clickButton("取消");
 
-    expect(container?.textContent).not.toContain("Unsaved draft");
+    expect(container?.textContent).not.toContain("未保存草稿");
     expect(container?.textContent).not.toContain("wiki/schema.md");
   });
 
@@ -211,7 +211,7 @@ describe("ProjectWorkbench draft guard", () => {
     await waitForButton("目标");
     await clickButton("目标");
     await waitForText("purpose.md");
-    await clickButton("Edit");
+    await clickButton("编辑");
 
     updateEditor("# purpose.md\n\nLocal unsaved edit.");
 
@@ -221,12 +221,12 @@ describe("ProjectWorkbench draft guard", () => {
 
     await clickButton("打开洞察来源");
 
-    expect(container?.textContent).toContain("Unsaved draft");
+    expect(container?.textContent).toContain("未保存草稿");
     expect(container?.textContent).toContain("wiki/schema.md");
 
-    await clickButton("Cancel");
+    await clickButton("取消");
 
-    expect(container?.textContent).not.toContain("Unsaved draft");
+    expect(container?.textContent).not.toContain("未保存草稿");
     expect(container?.textContent).not.toContain("wiki/schema.md");
   });
 });
