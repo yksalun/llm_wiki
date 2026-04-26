@@ -223,6 +223,8 @@ flowchart TD
 
 ## 8. 阶段 3：阅读与预览能力补强
 
+> 状态：已完成。阶段 3 已按 [spec](../../docs/superpowers/specs/2026-04-26-phase-3-reading-preview-design.md) 和 [implementation plan](../../docs/superpowers/plans/2026-04-26-phase-3-reading-preview.md) 落地，覆盖 Markdown 阅读视图、只读文件预览、阅读 / 编辑切换、项目结构摘要和关键测试。
+
 ### 8.1 阶段目标
 
 把当前工作台从“能看内容”提升到“看内容舒服、看结构清楚、看文件更顺手”。
