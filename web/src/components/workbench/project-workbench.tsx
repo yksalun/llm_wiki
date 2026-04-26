@@ -17,6 +17,7 @@ import {
 } from "@/components/workbench/draft-guard";
 import { FileTree } from "@/components/workbench/file-tree";
 import { ProjectOverview } from "@/components/workbench/project-overview";
+import { ProjectSearch } from "@/components/workbench/project-search";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -647,6 +648,13 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
               ))}
             </TabsList>
           </Tabs>
+
+          <ProjectSearch
+            projectId={projectId}
+            onOpenFile={(relativePath) => {
+              void requestOpenRelativePath(relativePath, "Files");
+            }}
+          />
 
           {section === "Overview" ? (
             <ProjectOverview
