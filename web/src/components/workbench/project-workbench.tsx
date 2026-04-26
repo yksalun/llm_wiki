@@ -814,12 +814,20 @@ function WorkbenchAside({
         </div>
 
         {loadState.status === "ready" ? (
-          <Badge
-            variant="secondary"
-            className="w-fit border border-amber-900/10 bg-amber-700/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-900"
-          >
-            {loadState.detail.status}
-          </Badge>
+          <div className="flex flex-wrap gap-2">
+            <Badge
+              variant="secondary"
+              className="w-fit border border-amber-900/10 bg-amber-700/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-900"
+            >
+              {loadState.detail.status}
+            </Badge>
+            <Badge
+              variant="secondary"
+              className="w-fit border border-sky-900/10 bg-sky-700/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-900"
+            >
+              Access {loadState.detail.access.mode}
+            </Badge>
+          </div>
         ) : null}
 
         <Button variant="outline" onClick={onReload} disabled={saving} className="w-full">
@@ -908,6 +916,8 @@ function ProjectInfoPanel({
         <InfoBlock label="Project name" value={detail.name} />
         <InfoBlock label="Project ID" value={detail.id} mono />
         <InfoBlock label="Status" value={detail.status} />
+        <InfoBlock label="Access mode" value={detail.access.mode} />
+        <InfoBlock label="Write access" value={detail.access.canWrite ? "Yes" : "No"} />
         <InfoBlock label="Purpose present" value={detail.hasPurpose ? "Yes" : "No"} />
         <InfoBlock label="Schema present" value={detail.hasSchema ? "Yes" : "No"} />
         <InfoBlock label="Wiki directory" value={detail.hasWikiDirectory ? "Yes" : "No"} />

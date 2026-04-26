@@ -5,6 +5,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useWorkbenchStore } from "@/stores/workbench-store";
+import { fetchProjectDetail } from "@/lib/client/api";
+import type { ProjectDetail } from "@/lib/types";
 
 import { ProjectWorkbench } from "./project-workbench";
 
@@ -12,7 +14,18 @@ import { ProjectWorkbench } from "./project-workbench";
   .IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("@/components/app/app-shell", () => ({
-  AppShell: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
+  AppShell: ({
+    aside,
+    children,
+  }: {
+    aside?: React.ReactNode;
+    children: React.ReactNode;
+  }) => (
+    <main>
+      {aside}
+      {children}
+    </main>
+  ),
 }));
 
 vi.mock("@/components/workbench/project-search", () => ({
@@ -62,6 +75,7 @@ vi.mock("@/lib/client/api", () => ({
     hasSchema: true,
     hasWikiDirectory: true,
     hasRawSourcesDirectory: false,
+    access: { mode: "read-write", canRead: true, canWrite: true },
     updatedAt: null,
     rootPathHint: null,
     sections: ["Overview", "Ask", "Insights", "Files", "Purpose", "Schema", "Project Info"],
@@ -114,9 +128,36 @@ afterEach(() => {
   container = null;
   root = null;
   vi.clearAllMocks();
+  vi.mocked(fetchProjectDetail).mockResolvedValue(defaultProjectDetail());
 });
 
 describe("ProjectWorkbench draft guard", () => {
+  it("shows read-only project access in the aside and project info", async () => {
+    vi.mocked(fetchProjectDetail).mockResolvedValue({
+      id: "project-1",
+      name: "Project One",
+      status: "ready",
+      hasPurpose: true,
+      hasSchema: true,
+      hasWikiDirectory: true,
+      hasRawSourcesDirectory: false,
+      access: { mode: "read-only", canRead: true, canWrite: false },
+      updatedAt: null,
+      rootPathHint: null,
+      sections: ["Overview", "Ask", "Insights", "Files", "Purpose", "Schema", "Project Info"],
+    });
+
+    renderProjectWorkbench();
+
+    await waitForText("read-only");
+    await clickButton("Project Info");
+
+    expect(container?.textContent).toContain("Access mode");
+    expect(container?.textContent).toContain("read-only");
+    expect(container?.textContent).toContain("Write access");
+    expect(container?.textContent).toContain("No");
+  });
+
   it("shows and cancels the dirty draft guard from an Ask source open", async () => {
     renderProjectWorkbench();
 
@@ -242,4 +283,20 @@ function buttonNamed(name: string) {
   return Array.from(container?.querySelectorAll("button") ?? []).find(
     (candidate) => candidate.textContent?.trim() === name,
   ) ?? null;
+}
+
+function defaultProjectDetail(): ProjectDetail {
+  return {
+    id: "project-1",
+    name: "Project One",
+    status: "ready" as const,
+    hasPurpose: true,
+    hasSchema: true,
+    hasWikiDirectory: true,
+    hasRawSourcesDirectory: false,
+    access: { mode: "read-write" as const, canRead: true, canWrite: true },
+    updatedAt: null,
+    rootPathHint: null,
+    sections: ["Overview", "Ask", "Insights", "Files", "Purpose", "Schema", "Project Info"],
+  };
 }
