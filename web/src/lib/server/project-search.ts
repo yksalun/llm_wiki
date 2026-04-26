@@ -10,8 +10,10 @@ import { FILE_VIEW_SIZE_LIMIT_BYTES } from "./file-policy";
 
 export const MAX_PROJECT_SEARCH_RESULTS = 50;
 export const MAX_PROJECT_SEARCH_LINE_TEXT_LENGTH = 160;
+export const MAX_PROJECT_SEARCH_QUERY_LENGTH = 120;
 
 const MAX_MATCHES_PER_FILE = 5;
+const SEARCH_READ_LIMIT_BYTES = FILE_VIEW_SIZE_LIMIT_BYTES + 1;
 const PREVIEW_RADIUS = 48;
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
@@ -21,7 +23,7 @@ export async function searchProjectFiles(
 ): Promise<ProjectSearchResponse> {
   const trimmedQuery = query.trim();
 
-  if (trimmedQuery.length < 2) {
+  if (trimmedQuery.length < 2 || trimmedQuery.length > MAX_PROJECT_SEARCH_QUERY_LENGTH) {
     return emptySearchResponse(trimmedQuery);
   }
 
@@ -137,16 +139,22 @@ async function safeStatFile(filePath: string): Promise<{ size: number } | null> 
 }
 
 async function safeReadUtf8(filePath: string): Promise<string | null> {
-  try {
-    const buffer = await fs.readFile(filePath);
+  let fileHandle: Awaited<ReturnType<typeof fs.open>> | null = null;
 
-    if (buffer.byteLength > FILE_VIEW_SIZE_LIMIT_BYTES) {
+  try {
+    fileHandle = await fs.open(filePath, "r");
+    const buffer = Buffer.allocUnsafe(SEARCH_READ_LIMIT_BYTES);
+    const { bytesRead } = await fileHandle.read(buffer, 0, buffer.byteLength, 0);
+
+    if (bytesRead > FILE_VIEW_SIZE_LIMIT_BYTES) {
       return null;
     }
 
-    return utf8Decoder.decode(buffer);
+    return utf8Decoder.decode(buffer.subarray(0, bytesRead));
   } catch {
     return null;
+  } finally {
+    await fileHandle?.close().catch(() => undefined);
   }
 }
 

@@ -5,7 +5,12 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FILE_VIEW_SIZE_LIMIT_BYTES } from "../file-policy";
-import { MAX_PROJECT_SEARCH_RESULTS, searchProjectFiles } from "../project-search";
+import {
+  MAX_PROJECT_SEARCH_LINE_TEXT_LENGTH,
+  MAX_PROJECT_SEARCH_QUERY_LENGTH,
+  MAX_PROJECT_SEARCH_RESULTS,
+  searchProjectFiles,
+} from "../project-search";
 
 const cleanupTasks: Array<() => Promise<void>> = [];
 
@@ -77,6 +82,30 @@ describe("searchProjectFiles", () => {
 
     expect(response).toEqual({
       query: "t",
+      results: [],
+      summary: {
+        scannedFiles: 0,
+        skippedFiles: 0,
+        matchedFiles: 0,
+        totalMatches: 0,
+        truncated: false,
+      },
+    });
+  });
+
+  it("returns an empty zero summary for overlong trimmed queries without scanning", async () => {
+    const projectRoot = await createProject("long-query");
+    await writeProjectFile(projectRoot, "target.md", "target\n");
+    const readdirSpy = vi.spyOn(fs, "readdir");
+    expect(MAX_PROJECT_SEARCH_QUERY_LENGTH).toBeGreaterThan(1);
+    expect(MAX_PROJECT_SEARCH_QUERY_LENGTH).toBeLessThan(MAX_PROJECT_SEARCH_LINE_TEXT_LENGTH);
+    const query = "a".repeat(MAX_PROJECT_SEARCH_QUERY_LENGTH + 1);
+
+    const response = await searchProjectFiles(projectRoot, query);
+
+    expect(readdirSpy).not.toHaveBeenCalled();
+    expect(response).toEqual({
+      query,
       results: [],
       summary: {
         scannedFiles: 0,
@@ -200,7 +229,7 @@ describe("searchProjectFiles", () => {
     const response = await searchProjectFiles(projectRoot, "target");
     const result = response.results[0];
 
-    expect(result.lineText.length).toBeLessThanOrEqual(160);
+    expect(result.lineText.length).toBeLessThanOrEqual(MAX_PROJECT_SEARCH_LINE_TEXT_LENGTH);
     expect(result.lineText.startsWith("...")).toBe(true);
     expect(result.lineText.endsWith("...")).toBe(true);
     expect(result.matchStart).toBeGreaterThanOrEqual(0);
@@ -212,17 +241,14 @@ describe("searchProjectFiles", () => {
   it("skips files that become oversized after the initial stat guard", async () => {
     const projectRoot = await createProject("post-read-size");
     const relativePath = "race.md";
-    const absolutePath = path.join(projectRoot, relativePath);
     await writeProjectFile(projectRoot, relativePath, "target\n");
-
-    const originalReadFile = fs.readFile;
-    vi.spyOn(fs, "readFile").mockImplementation(async (...args: Parameters<typeof fs.readFile>) => {
-      if (args[0] === absolutePath) {
-        return Buffer.alloc(FILE_VIEW_SIZE_LIMIT_BYTES + 1, "target");
-      }
-
-      return originalReadFile(...args);
-    });
+    vi.spyOn(fs, "open").mockResolvedValue({
+      read: vi.fn(async (buffer: Buffer) => ({
+        bytesRead: buffer.byteLength,
+        buffer,
+      })),
+      close: vi.fn(async () => undefined),
+    } as unknown as Awaited<ReturnType<typeof fs.open>>);
 
     const response = await searchProjectFiles(projectRoot, "target");
 
@@ -234,6 +260,34 @@ describe("searchProjectFiles", () => {
       totalMatches: 0,
       truncated: false,
     });
+  });
+
+  it("reads searchable files with a bounded read buffer and closes the file handle", async () => {
+    const projectRoot = await createProject("bounded-read");
+    const relativePath = "bounded.md";
+    await writeProjectFile(projectRoot, relativePath, "target\n");
+    const content = Buffer.from("target\n", "utf8");
+    const read = vi.fn(async (buffer: Buffer) => {
+      content.copy(buffer);
+
+      return { bytesRead: content.byteLength, buffer };
+    });
+    const close = vi.fn(async () => undefined);
+    const openSpy = vi.spyOn(fs, "open").mockResolvedValue({
+      read,
+      close,
+    } as unknown as Awaited<ReturnType<typeof fs.open>>);
+    const readFileSpy = vi.spyOn(fs, "readFile");
+
+    const response = await searchProjectFiles(projectRoot, "target");
+
+    expect(response.results).toHaveLength(1);
+    expect(openSpy).toHaveBeenCalledWith(path.join(projectRoot, relativePath), "r");
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(read.mock.calls[0][0]).toBeInstanceOf(Buffer);
+    expect(read.mock.calls[0][0].byteLength).toBe(FILE_VIEW_SIZE_LIMIT_BYTES + 1);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(readFileSpy).not.toHaveBeenCalled();
   });
 });
 
