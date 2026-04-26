@@ -204,18 +204,40 @@ function cropLineAroundMatch(
   matchStart: number,
   matchEnd: number,
 ): { lineText: string; matchStart: number; matchEnd: number } {
-  const queryLength = matchEnd - matchStart;
-  const initialStart = Math.max(0, matchStart - PREVIEW_RADIUS);
-  const initialEnd = Math.min(lineText.length, matchEnd + PREVIEW_RADIUS);
-  const hasPrefix = initialStart > 0;
-  const hasSuffix = initialEnd < lineText.length;
-  const ellipsisLength = (hasPrefix ? 3 : 0) + (hasSuffix ? 3 : 0);
-  const maxContextLength = Math.max(0, MAX_PROJECT_SEARCH_LINE_TEXT_LENGTH - ellipsisLength - queryLength);
-  const beforeContextLength = Math.min(matchStart - initialStart, Math.floor(maxContextLength / 2));
-  const afterContextLength = Math.min(
-    initialEnd - matchEnd,
-    maxContextLength - beforeContextLength,
-  );
+  let beforeContextLength = Math.min(matchStart, PREVIEW_RADIUS);
+  let afterContextLength = Math.min(lineText.length - matchEnd, PREVIEW_RADIUS);
+
+  while (true) {
+    const start = matchStart - beforeContextLength;
+    const end = matchEnd + afterContextLength;
+    const prefixLength = start > 0 ? 3 : 0;
+    const suffixLength = end < lineText.length ? 3 : 0;
+    const croppedLength = prefixLength + (end - start) + suffixLength;
+
+    if (croppedLength <= MAX_PROJECT_SEARCH_LINE_TEXT_LENGTH) {
+      break;
+    }
+
+    const overflow = croppedLength - MAX_PROJECT_SEARCH_LINE_TEXT_LENGTH;
+
+    if (afterContextLength >= beforeContextLength && afterContextLength > 0) {
+      afterContextLength -= Math.min(afterContextLength, overflow);
+      continue;
+    }
+
+    if (beforeContextLength > 0) {
+      beforeContextLength -= Math.min(beforeContextLength, overflow);
+      continue;
+    }
+
+    if (afterContextLength > 0) {
+      afterContextLength -= Math.min(afterContextLength, overflow);
+      continue;
+    }
+
+    break;
+  }
+
   const start = matchStart - beforeContextLength;
   const end = matchEnd + afterContextLength;
   const prefix = start > 0 ? "..." : "";

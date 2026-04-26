@@ -238,6 +238,34 @@ describe("searchProjectFiles", () => {
     expect(result.preview).toBe(result.lineText);
   });
 
+  it("hard-bounds line text for a max-length query near the start of a long line", async () => {
+    const projectRoot = await createProject("max-query-start");
+    const query = "a".repeat(MAX_PROJECT_SEARCH_QUERY_LENGTH);
+    await writeProjectFile(projectRoot, "start.md", `${query}${"b".repeat(43)}\n`);
+
+    const response = await searchProjectFiles(projectRoot, query);
+    const result = response.results[0];
+
+    expect(result.lineText.length).toBeLessThanOrEqual(MAX_PROJECT_SEARCH_LINE_TEXT_LENGTH);
+    expect(result.matchStart).toBeGreaterThanOrEqual(0);
+    expect(result.matchEnd).toBeLessThanOrEqual(result.lineText.length);
+    expect(result.lineText.slice(result.matchStart, result.matchEnd)).toBe(query);
+  });
+
+  it("hard-bounds line text for a max-length query near the end of a long line", async () => {
+    const projectRoot = await createProject("max-query-end");
+    const query = "z".repeat(MAX_PROJECT_SEARCH_QUERY_LENGTH);
+    await writeProjectFile(projectRoot, "end.md", `${"b".repeat(43)}${query}\n`);
+
+    const response = await searchProjectFiles(projectRoot, query);
+    const result = response.results[0];
+
+    expect(result.lineText.length).toBeLessThanOrEqual(MAX_PROJECT_SEARCH_LINE_TEXT_LENGTH);
+    expect(result.matchStart).toBeGreaterThanOrEqual(0);
+    expect(result.matchEnd).toBeLessThanOrEqual(result.lineText.length);
+    expect(result.lineText.slice(result.matchStart, result.matchEnd)).toBe(query);
+  });
+
   it("skips files that become oversized after the initial stat guard", async () => {
     const projectRoot = await createProject("post-read-size");
     const relativePath = "race.md";
