@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { cn } from "@/lib/utils";
 
 interface AppShellProps {
@@ -22,13 +23,13 @@ export function AppShell({
   return (
     <main className="relative min-h-screen overflow-hidden">
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(168,112,40,0.16),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(47,41,35,0.08),transparent_30%)]" />
-        <div className="absolute inset-x-0 top-0 h-48 border-b border-black/5 bg-[linear-gradient(180deg,rgba(255,250,240,0.86),rgba(255,250,240,0))]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--paper-accent)_18%,transparent),transparent_28%),radial-gradient(circle_at_bottom_right,color-mix(in_oklab,var(--ink-soft)_10%,transparent),transparent_30%)]" />
+        <div className="absolute inset-x-0 top-0 h-48 border-b border-[color:var(--paper-border)] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--paper-base)_88%,transparent),transparent)]" />
       </div>
 
       <div className={cn("relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10", className)}>
-        <header className="relative overflow-hidden rounded-[28px] border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/95 p-6 shadow-[0_22px_80px_rgba(61,52,40,0.08)] backdrop-blur-sm sm:p-8">
-          <div className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(135,98,41,0.35),transparent)]" />
+        <header className="relative overflow-hidden rounded-[28px] border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/95 p-6 shadow-[0_22px_80px_rgba(var(--shadow-panel),0.08)] backdrop-blur-sm sm:p-8">
+          <div className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,color-mix(in_oklab,var(--paper-accent)_42%,transparent),transparent)]" />
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-end">
             <div className="space-y-4">
               {eyebrow ? (
@@ -45,7 +46,18 @@ export function AppShell({
                 </p>
               </div>
             </div>
-            {aside ? <div className="lg:justify-self-end">{aside}</div> : null}
+            {aside ? (
+              <div className="flex flex-col gap-3 lg:justify-self-end">
+                <div className="flex justify-end">
+                  <ThemeToggle />
+                </div>
+                {aside}
+              </div>
+            ) : (
+              <div className="flex justify-end lg:justify-self-end">
+                <ThemeToggle />
+              </div>
+            )}
           </div>
         </header>
 

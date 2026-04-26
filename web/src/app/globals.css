@@ -83,44 +83,64 @@
   --sidebar-ring: oklch(0.708 0 0);
   --paper-base: oklch(0.985 0.012 84.2);
   --paper-panel: oklch(0.995 0.008 84.1);
+  --paper-elevated: oklch(0.99 0.011 84.2);
+  --paper-muted: oklch(0.955 0.014 81.7);
   --paper-accent: oklch(0.8 0.067 73.5);
   --paper-border: oklch(0.88 0.015 73.6);
   --ink-strong: oklch(0.24 0.024 44.2);
   --ink-soft: oklch(0.44 0.024 49.4);
+  --shadow-panel: 61 52 40;
+  --tone-warning-bg: oklch(0.94 0.035 77.8);
+  --tone-warning-fg: oklch(0.34 0.05 58.4);
+  --tone-success-bg: oklch(0.93 0.038 151.2);
+  --tone-success-fg: oklch(0.35 0.06 153.1);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: oklch(0.14 0.012 55);
+  --foreground: oklch(0.93 0.018 82);
+  --card: oklch(0.19 0.014 58);
+  --card-foreground: oklch(0.93 0.018 82);
+  --popover: oklch(0.19 0.014 58);
+  --popover-foreground: oklch(0.93 0.018 82);
+  --primary: oklch(0.82 0.061 75);
+  --primary-foreground: oklch(0.17 0.014 55);
+  --secondary: oklch(0.24 0.014 58);
+  --secondary-foreground: oklch(0.92 0.018 82);
+  --muted: oklch(0.24 0.014 58);
+  --muted-foreground: oklch(0.72 0.018 78);
+  --accent: oklch(0.31 0.026 70);
+  --accent-foreground: oklch(0.92 0.018 82);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --border: oklch(0.92 0.018 82 / 14%);
+  --input: oklch(0.92 0.018 82 / 18%);
+  --ring: oklch(0.72 0.055 75);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar: oklch(0.19 0.014 58);
+  --sidebar-foreground: oklch(0.93 0.018 82);
+  --sidebar-primary: oklch(0.82 0.061 75);
+  --sidebar-primary-foreground: oklch(0.17 0.014 55);
+  --sidebar-accent: oklch(0.24 0.014 58);
+  --sidebar-accent-foreground: oklch(0.92 0.018 82);
+  --sidebar-border: oklch(0.92 0.018 82 / 14%);
+  --sidebar-ring: oklch(0.72 0.055 75);
+  --paper-base: oklch(0.14 0.012 55);
+  --paper-panel: oklch(0.19 0.014 58);
+  --paper-elevated: oklch(0.23 0.016 60);
+  --paper-muted: oklch(0.24 0.014 58);
+  --paper-accent: oklch(0.72 0.072 75);
+  --paper-border: oklch(0.92 0.018 82 / 15%);
+  --ink-strong: oklch(0.93 0.018 82);
+  --ink-soft: oklch(0.73 0.02 79);
+  --shadow-panel: 0 0 0;
+  --tone-warning-bg: oklch(0.27 0.03 70);
+  --tone-warning-fg: oklch(0.84 0.06 78);
+  --tone-success-bg: oklch(0.24 0.032 152);
+  --tone-success-fg: oklch(0.78 0.07 153);
 }
 
 @layer base {
@@ -130,6 +150,9 @@
   html {
     @apply h-full scroll-smooth;
     color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
   }
   body {
     @apply min-h-full bg-background font-sans text-foreground antialiased;
@@ -143,8 +166,20 @@
         rgba(120, 96, 62, 0.028) 1px,
         transparent 1px,
         transparent 14px
-      );
+    );
     background-color: var(--paper-base);
+  }
+  html.dark body {
+    background-image:
+      linear-gradient(180deg, rgba(26, 23, 20, 0.94), rgba(16, 14, 12, 0.98)),
+      radial-gradient(circle at top left, rgb(216 166 87 / 0.1), transparent 28%),
+      repeating-linear-gradient(
+        0deg,
+        rgba(235, 216, 185, 0.025) 0,
+        rgba(235, 216, 185, 0.025) 1px,
+        transparent 1px,
+        transparent 14px
+      );
   }
   ::selection {
     background: color-mix(in oklab, var(--paper-accent) 48%, white);
