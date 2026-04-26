@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import type { Dirent } from "node:fs";
 
@@ -483,5 +484,7 @@ function slugify(value: string): string {
 }
 
 function createIdSegment(value: string): string {
-  return value.trim() || "link";
+  const normalized = value.trim() || "link";
+
+  return createHash("sha256").update(normalized).digest("hex").slice(0, 16);
 }

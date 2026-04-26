@@ -253,6 +253,26 @@ describe("buildProjectInsights", () => {
     expect([...unsafeFindings.map((finding) => finding.id), ...promptIds].join("\n")).not.toContain(projectRoot);
   });
 
+  it("redacts real project root absolute hrefs from finding and prompt ids", async () => {
+    const projectRoot = await createProject("absolute-id-redaction");
+    const absoluteHref = path.join(projectRoot, "docs", "secret.md");
+    await writeProjectFile(projectRoot, "README.md", `See [Secret](${absoluteHref}).\n`);
+
+    const response = await buildProjectInsights(projectRoot);
+    const unsafeFindings = response.findings.filter((finding) => finding.title === "Unsafe markdown link");
+    const ids = [
+      ...response.findings.map((finding) => finding.id),
+      ...response.researchPrompts.map((prompt) => prompt.id),
+    ];
+    const idText = ids.join("\n");
+
+    expect(unsafeFindings).toHaveLength(1);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(idText).not.toContain(projectRoot);
+    expect(idText).not.toContain(absoluteHref);
+    expect(idText).not.toContain(path.basename(path.dirname(projectRoot)));
+  });
+
   it("limits research prompts to six after link deduplication", async () => {
     const projectRoot = await createProject("prompt-limit");
     await writeProjectFile(
