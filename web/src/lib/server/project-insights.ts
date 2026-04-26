@@ -1,13 +1,8 @@
 import fs from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
-import type { Dirent } from "node:fs";
 
-import {
-  getFileExtension,
-  isMarkdownFileExtension,
-  isSearchableTextFileExtension,
-} from "@/lib/file-view-policy";
+import { isMarkdownFileExtension } from "@/lib/file-view-policy";
 import type {
   ProjectInsightEdge,
   ProjectInsightFinding,
@@ -16,12 +11,10 @@ import type {
   ProjectInsightsResponse,
 } from "@/lib/types";
 
-import { FILE_VIEW_SIZE_LIMIT_BYTES } from "./file-policy";
+import { scanProjectTextFiles } from "./project-text-scan";
 
 const MARKDOWN_LINK_PATTERN = /\[([^\]]+)\]\(([^)]+)\)/g;
 const MAX_RESEARCH_PROMPTS = 6;
-const INSIGHTS_READ_LIMIT_BYTES = FILE_VIEW_SIZE_LIMIT_BYTES + 1;
-const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
 interface AnalyzedFile {
   relativePath: string;
@@ -46,34 +39,13 @@ export async function buildProjectInsights(
 ): Promise<ProjectInsightsResponse> {
   const rootDir = path.resolve(projectRoot);
   const analyzedFiles: AnalyzedFile[] = [];
-  const skippedSearchablePaths = new Set<string>();
+  const scan = scanProjectTextFiles(rootDir);
 
-  for await (const relativePath of walkProjectFiles(rootDir, "")) {
-    const extension = getFileExtension(relativePath);
-
-    if (!isSearchableTextFileExtension(extension)) {
-      continue;
-    }
-
-    const absolutePath = path.join(rootDir, relativePath);
-    const stats = await safeStatFile(absolutePath);
-
-    if (!stats || stats.size > FILE_VIEW_SIZE_LIMIT_BYTES) {
-      skippedSearchablePaths.add(relativePath);
-      continue;
-    }
-
-    const content = await safeReadUtf8(absolutePath);
-
-    if (content === null) {
-      skippedSearchablePaths.add(relativePath);
-      continue;
-    }
-
+  for await (const file of scan.files) {
     analyzedFiles.push({
-      relativePath,
-      content,
-      isMarkdown: isMarkdownFileExtension(extension),
+      relativePath: file.relativePath,
+      content: file.content,
+      isMarkdown: isMarkdownFileExtension(file.extension),
     });
   }
 
@@ -128,7 +100,7 @@ export async function buildProjectInsights(
       }
 
       if (!targetPaths.has(targetPath)) {
-        if (skippedSearchablePaths.has(targetPath)) {
+        if (await projectPathExists(rootDir, targetPath)) {
           continue;
         }
 
@@ -214,73 +186,6 @@ export async function buildProjectInsights(
     findings,
     researchPrompts,
   };
-}
-
-async function* walkProjectFiles(
-  rootDir: string,
-  relativeDir: string,
-): AsyncGenerator<string> {
-  const directoryPath = relativeDir === "" ? rootDir : path.join(rootDir, relativeDir);
-  let entries: Dirent[];
-
-  try {
-    entries = await fs.readdir(directoryPath, { withFileTypes: true });
-  } catch {
-    return;
-  }
-
-  entries.sort((left, right) => left.name.localeCompare(right.name));
-
-  for (const entry of entries) {
-    if (relativeDir === "" && entry.name === ".llm-wiki") {
-      continue;
-    }
-
-    const relativePath = relativeDir === "" ? entry.name : path.posix.join(relativeDir, entry.name);
-
-    if (entry.isDirectory()) {
-      yield* walkProjectFiles(rootDir, relativePath);
-      continue;
-    }
-
-    if (entry.isFile()) {
-      yield relativePath;
-    }
-  }
-}
-
-async function safeStatFile(filePath: string): Promise<{ size: number } | null> {
-  try {
-    const stats = await fs.stat(filePath);
-
-    if (!stats.isFile()) {
-      return null;
-    }
-
-    return { size: stats.size };
-  } catch {
-    return null;
-  }
-}
-
-async function safeReadUtf8(filePath: string): Promise<string | null> {
-  let fileHandle: Awaited<ReturnType<typeof fs.open>> | null = null;
-
-  try {
-    fileHandle = await fs.open(filePath, "r");
-    const buffer = Buffer.allocUnsafe(INSIGHTS_READ_LIMIT_BYTES);
-    const { bytesRead } = await fileHandle.read(buffer, 0, buffer.byteLength, 0);
-
-    if (bytesRead > FILE_VIEW_SIZE_LIMIT_BYTES) {
-      return null;
-    }
-
-    return utf8Decoder.decode(buffer.subarray(0, bytesRead));
-  } catch {
-    return null;
-  } finally {
-    await fileHandle?.close();
-  }
 }
 
 function createNode(relativePath: string): ProjectInsightNode {
@@ -373,6 +278,42 @@ function stripHashAndQuery(href: string): string {
   const endIndex = indexes.length > 0 ? Math.min(...indexes) : href.length;
 
   return href.slice(0, endIndex);
+}
+
+async function projectPathExists(rootDir: string, targetPath: string): Promise<boolean> {
+  if (
+    targetPath.length === 0 ||
+    targetPath.startsWith("..") ||
+    path.posix.isAbsolute(targetPath) ||
+    isWindowsAbsoluteHref(targetPath)
+  ) {
+    return false;
+  }
+
+  const normalizedTargetPath = path.posix.normalize(targetPath);
+
+  if (normalizedTargetPath.startsWith("..") || path.posix.isAbsolute(normalizedTargetPath)) {
+    return false;
+  }
+
+  const absolutePath = path.resolve(rootDir, ...normalizedTargetPath.split("/"));
+  const relativeFromRoot = path.relative(rootDir, absolutePath);
+
+  if (
+    relativeFromRoot.length === 0 ||
+    relativeFromRoot.startsWith("..") ||
+    path.isAbsolute(relativeFromRoot)
+  ) {
+    return false;
+  }
+
+  try {
+    const stats = await fs.stat(absolutePath);
+
+    return stats.isFile();
+  } catch {
+    return false;
+  }
 }
 
 function createFinding(

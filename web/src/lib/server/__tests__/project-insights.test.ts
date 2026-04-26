@@ -84,6 +84,20 @@ describe("buildProjectInsights", () => {
     expect(response.summary.analyzedFiles).toBe(1);
   });
 
+  it("does not report broken markdown links for existing invalid UTF-8 targets", async () => {
+    const projectRoot = await createProject("invalid-utf8-target-skip");
+    await writeProjectFile(projectRoot, "README.md", "# Home\n\nSee [Bad](bad.md).\n");
+    await fs.writeFile(path.join(projectRoot, "bad.md"), Buffer.from([0xc3, 0x28]));
+
+    const response = await buildProjectInsights(projectRoot);
+
+    expect(response.graph.nodes.map((node) => node.relativePath)).toEqual(["README.md"]);
+    expect(response.graph.edges).toEqual([]);
+    expect(response.findings.some((finding) => finding.message.includes("bad.md"))).toBe(false);
+    expect(response.findings.some((finding) => finding.relativePath === "bad.md")).toBe(false);
+    expect(response.summary.analyzedFiles).toBe(1);
+  });
+
   it("creates a risk finding for broken markdown links without creating an edge", async () => {
     const projectRoot = await createProject("broken-link");
     await writeProjectFile(projectRoot, "README.md", "See [Missing](docs/missing.md).\n");
