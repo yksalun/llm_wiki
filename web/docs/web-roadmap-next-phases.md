@@ -399,6 +399,8 @@ flowchart TD
 
 ### 10.2 阶段 6：图谱 / Review / Deep Research
 
+> 状态：已完成。阶段 6 已按 [spec](../../docs/superpowers/specs/2026-04-26-phase-6-project-insights-design.md) 和 [implementation plan](../../docs/superpowers/plans/2026-04-26-phase-6-project-insights.md) 落地，覆盖项目 Insights 入口、确定性文件关系图、结构发现、研究问题建议、source 打开联动和关键测试。
+
 这一阶段开始进入“项目理解增强”层，不只是找内容和回答问题，而是开始帮助用户：
 
 - 看结构
