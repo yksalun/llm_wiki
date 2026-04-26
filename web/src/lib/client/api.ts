@@ -6,6 +6,7 @@ import type {
   FileWriteRequest,
   FileWriteResult,
   ProjectDetail,
+  ProjectSearchResponse,
   ProjectsListResponse,
 } from "@/lib/types";
 
@@ -74,6 +75,15 @@ export async function fetchProjectFile(
       cache: "no-store",
       signal,
     },
+  );
+}
+
+export async function searchProject(projectId: string, query: string, signal?: AbortSignal) {
+  const params = new URLSearchParams({ q: query });
+
+  return requestJson<ProjectSearchResponse>(
+    `/api/projects/${encodeURIComponent(projectId)}/search?${params.toString()}`,
+    { method: "GET", cache: "no-store", signal },
   );
 }
 
