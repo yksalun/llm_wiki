@@ -10,7 +10,9 @@ import {
   MAX_PROJECT_SEARCH_QUERY_LENGTH,
   MAX_PROJECT_SEARCH_RESULTS,
   searchProjectFiles,
+  searchProjectFilesForQueries,
 } from "../project-search";
+import type { ProjectTextScanResult } from "../project-text-scan";
 
 const cleanupTasks: Array<() => Promise<void>> = [];
 
@@ -336,6 +338,93 @@ describe("searchProjectFiles", () => {
     expect(close).toHaveBeenCalledTimes(1);
     expect(readFileSpy).not.toHaveBeenCalled();
   });
+
+  it("searches multiple valid queries from one scan while keeping independent summaries", async () => {
+    const projectRoot = await createProject("multi-query-one-scan");
+    const yieldedScans: string[] = [];
+    const scanTextFiles = vi.fn((root: string): ProjectTextScanResult => ({
+      files: scanInjectedFiles([
+        { relativePath: "alpha.md", content: "alpha target\nbeta only\n" },
+        { relativePath: "beta.md", content: "beta target\nbeta again\n" },
+      ], yieldedScans),
+      stats: { skippedFiles: 1 },
+    }));
+
+    const responses = await searchProjectFilesForQueries(projectRoot, ["alpha", "beta"], {
+      scanTextFiles,
+    });
+
+    expect(scanTextFiles).toHaveBeenCalledTimes(1);
+    expect(scanTextFiles).toHaveBeenCalledWith(projectRoot);
+    expect(yieldedScans).toEqual(["alpha.md", "beta.md"]);
+    expect(responses.map((response) => response.query)).toEqual(["alpha", "beta"]);
+    expect(responses[0].results.map((result) => result.relativePath)).toEqual(["alpha.md"]);
+    expect(responses[0].summary).toEqual({
+      scannedFiles: 2,
+      skippedFiles: 1,
+      matchedFiles: 1,
+      totalMatches: 1,
+      truncated: false,
+    });
+    expect(responses[1].results.map((result) => `${result.relativePath}:${result.lineNumber}`)).toEqual([
+      "beta.md:1",
+      "beta.md:2",
+      "alpha.md:2",
+    ]);
+    expect(responses[1].summary).toEqual({
+      scannedFiles: 2,
+      skippedFiles: 1,
+      matchedFiles: 2,
+      totalMatches: 3,
+      truncated: false,
+    });
+  });
+
+  it("does not scan for invalid multi-query entries and keeps valid results independent", async () => {
+    const projectRoot = await createProject("multi-query-invalid");
+    const scanTextFiles = vi.fn((root: string): ProjectTextScanResult => ({
+      files: scanInjectedFiles([{ relativePath: "valid.md", content: "target\n" }]),
+      stats: { skippedFiles: 0 },
+    }));
+
+    const responses = await searchProjectFilesForQueries(
+      projectRoot,
+      [" t ", " target ", "a".repeat(MAX_PROJECT_SEARCH_QUERY_LENGTH + 1)],
+      { scanTextFiles },
+    );
+
+    expect(scanTextFiles).toHaveBeenCalledTimes(1);
+    expect(responses[0]).toEqual({
+      query: "t",
+      results: [],
+      summary: {
+        scannedFiles: 0,
+        skippedFiles: 0,
+        matchedFiles: 0,
+        totalMatches: 0,
+        truncated: false,
+      },
+    });
+    expect(responses[1].results.map((result) => result.relativePath)).toEqual(["valid.md"]);
+    expect(responses[1].summary).toEqual({
+      scannedFiles: 1,
+      skippedFiles: 0,
+      matchedFiles: 1,
+      totalMatches: 1,
+      truncated: false,
+    });
+    expect(responses[2]).toEqual({
+      query: "a".repeat(MAX_PROJECT_SEARCH_QUERY_LENGTH + 1),
+      results: [],
+      summary: {
+        scannedFiles: 0,
+        skippedFiles: 0,
+        matchedFiles: 0,
+        totalMatches: 0,
+        truncated: false,
+      },
+    });
+  });
 });
 
 async function createProject(name: string): Promise<string> {
@@ -353,4 +442,19 @@ async function writeProjectFile(projectRoot: string, relativePath: string, conte
 
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, content, "utf8");
+}
+
+async function* scanInjectedFiles(
+  files: Array<{ relativePath: string; content: string }>,
+  yieldedPaths: string[] = [],
+): ProjectTextScanResult["files"] {
+  for (const file of files) {
+    yieldedPaths.push(file.relativePath);
+    yield {
+      relativePath: file.relativePath,
+      content: file.content,
+      size: Buffer.byteLength(file.content),
+      extension: path.extname(file.relativePath).slice(1),
+    };
+  }
 }

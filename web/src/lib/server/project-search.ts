@@ -1,161 +1,125 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import type { Dirent } from "node:fs";
-import { TextDecoder } from "node:util";
-
-import { getFileExtension, isSearchableTextFileExtension } from "@/lib/file-view-policy";
 import type { ProjectSearchResponse, ProjectSearchResult } from "@/lib/types";
 
-import { FILE_VIEW_SIZE_LIMIT_BYTES } from "./file-policy";
+import { scanProjectTextFiles } from "./project-text-scan";
+import type { ProjectTextScanResult } from "./project-text-scan";
 
 export const MAX_PROJECT_SEARCH_RESULTS = 50;
 export const MAX_PROJECT_SEARCH_LINE_TEXT_LENGTH = 160;
 export const MAX_PROJECT_SEARCH_QUERY_LENGTH = 120;
 
 const MAX_MATCHES_PER_FILE = 5;
-const SEARCH_READ_LIMIT_BYTES = FILE_VIEW_SIZE_LIMIT_BYTES + 1;
 const PREVIEW_RADIUS = 48;
-const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+
+type ProjectSearchDependencies = {
+  scanTextFiles?: (projectRoot: string) => ProjectTextScanResult;
+};
+
+type ValidQuerySearchState = {
+  query: string;
+  lowerQuery: string;
+  searchResults: ProjectSearchResult[];
+  scannedFiles: number;
+  matchedFiles: number;
+  totalMatches: number;
+  truncatedByPerFileCap: boolean;
+  truncatedByGlobalCap: boolean;
+};
 
 export async function searchProjectFiles(
   projectRoot: string,
   query: string,
 ): Promise<ProjectSearchResponse> {
-  const trimmedQuery = query.trim();
+  const [response] = await searchProjectFilesForQueries(projectRoot, [query]);
 
-  if (trimmedQuery.length < 2 || trimmedQuery.length > MAX_PROJECT_SEARCH_QUERY_LENGTH) {
-    return emptySearchResponse(trimmedQuery);
+  return response;
+}
+
+export async function searchProjectFilesForQueries(
+  projectRoot: string,
+  queries: string[],
+  dependencies: ProjectSearchDependencies = {},
+): Promise<ProjectSearchResponse[]> {
+  const responses = queries.map((query) => {
+    const trimmedQuery = query.trim();
+
+    if (!isValidSearchQuery(trimmedQuery)) {
+      return {
+        response: emptySearchResponse(trimmedQuery),
+        state: null,
+      };
+    }
+
+    return {
+      response: null,
+      state: createSearchState(trimmedQuery),
+    };
+  });
+  const validStates = responses.flatMap((response) => (response.state ? [response.state] : []));
+
+  if (validStates.length === 0) {
+    return responses.map((response) => response.response ?? finalizeSearchState(response.state!, 0));
   }
 
-  const rootDir = path.resolve(projectRoot);
-  const searchResults: ProjectSearchResult[] = [];
-  const lowerQuery = trimmedQuery.toLowerCase();
-  let scannedFiles = 0;
-  let skippedFiles = 0;
-  let matchedFiles = 0;
-  let totalMatches = 0;
-  let truncatedByPerFileCap = false;
-  let truncatedByGlobalCap = false;
+  const scan = (dependencies.scanTextFiles ?? scanProjectTextFiles)(projectRoot);
 
-  for await (const relativePath of walkProjectFiles(rootDir, "")) {
-    const extension = getFileExtension(relativePath);
+  for await (const file of scan.files) {
+    for (const state of validStates) {
+      state.scannedFiles += 1;
 
-    if (!isSearchableTextFileExtension(extension)) {
-      skippedFiles += 1;
-      continue;
-    }
+      const fileSearchResult = findLineMatches(file.relativePath, file.content, state.query);
 
-    const absolutePath = path.join(rootDir, relativePath);
-    const stats = await safeStatFile(absolutePath);
-
-    if (!stats || stats.size > FILE_VIEW_SIZE_LIMIT_BYTES) {
-      skippedFiles += 1;
-      continue;
-    }
-
-    const content = await safeReadUtf8(absolutePath);
-
-    if (content === null) {
-      skippedFiles += 1;
-      continue;
-    }
-
-    scannedFiles += 1;
-
-    const fileSearchResult = findLineMatches(relativePath, content, trimmedQuery);
-
-    if (fileSearchResult.totalMatches > 0) {
-      matchedFiles += 1;
-      totalMatches += fileSearchResult.totalMatches;
-      truncatedByPerFileCap ||= fileSearchResult.truncated;
-      searchResults.push(...fileSearchResult.results);
-      truncatedByGlobalCap ||= trimToTopResults(searchResults, lowerQuery);
+      if (fileSearchResult.totalMatches > 0) {
+        state.matchedFiles += 1;
+        state.totalMatches += fileSearchResult.totalMatches;
+        state.truncatedByPerFileCap ||= fileSearchResult.truncated;
+        state.searchResults.push(...fileSearchResult.results);
+        state.truncatedByGlobalCap ||= trimToTopResults(state.searchResults, state.lowerQuery);
+      }
     }
   }
 
-  const sortedResults = searchResults.sort((left, right) =>
-    compareSearchResults(left, right, lowerQuery),
+  return responses.map((response) =>
+    response.response ?? finalizeSearchState(response.state!, scan.stats.skippedFiles),
   );
-  const truncated = truncatedByPerFileCap || truncatedByGlobalCap;
+}
 
+function isValidSearchQuery(trimmedQuery: string): boolean {
+  return trimmedQuery.length >= 2 && trimmedQuery.length <= MAX_PROJECT_SEARCH_QUERY_LENGTH;
+}
+
+function createSearchState(query: string): ValidQuerySearchState {
   return {
-    query: trimmedQuery,
-    results: sortedResults.slice(0, MAX_PROJECT_SEARCH_RESULTS),
-    summary: {
-      scannedFiles,
-      skippedFiles,
-      matchedFiles,
-      totalMatches,
-      truncated,
-    },
+    query,
+    lowerQuery: query.toLowerCase(),
+    searchResults: [],
+    scannedFiles: 0,
+    matchedFiles: 0,
+    totalMatches: 0,
+    truncatedByPerFileCap: false,
+    truncatedByGlobalCap: false,
   };
 }
 
-async function* walkProjectFiles(
-  rootDir: string,
-  relativeDir: string,
-): AsyncGenerator<string> {
-  const directoryPath = relativeDir === "" ? rootDir : path.join(rootDir, relativeDir);
-  let entries: Dirent[];
+function finalizeSearchState(
+  state: ValidQuerySearchState,
+  skippedFiles: number,
+): ProjectSearchResponse {
+  const sortedResults = state.searchResults.sort((left, right) =>
+    compareSearchResults(left, right, state.lowerQuery),
+  );
+  const truncated = state.truncatedByPerFileCap || state.truncatedByGlobalCap;
 
-  try {
-    entries = await fs.readdir(directoryPath, { withFileTypes: true });
-  } catch {
-    return;
-  }
-
-  entries.sort((left, right) => left.name.localeCompare(right.name));
-
-  for (const entry of entries) {
-    if (relativeDir === "" && entry.name === ".llm-wiki") {
-      continue;
-    }
-
-    const relativePath = relativeDir === "" ? entry.name : path.posix.join(relativeDir, entry.name);
-
-    if (entry.isDirectory()) {
-      yield* walkProjectFiles(rootDir, relativePath);
-      continue;
-    }
-
-    if (entry.isFile()) {
-      yield relativePath;
-    }
-  }
-}
-
-async function safeStatFile(filePath: string): Promise<{ size: number } | null> {
-  try {
-    const stats = await fs.stat(filePath);
-
-    if (!stats.isFile()) {
-      return null;
-    }
-
-    return { size: stats.size };
-  } catch {
-    return null;
-  }
-}
-
-async function safeReadUtf8(filePath: string): Promise<string | null> {
-  let fileHandle: Awaited<ReturnType<typeof fs.open>> | null = null;
-
-  try {
-    fileHandle = await fs.open(filePath, "r");
-    const buffer = Buffer.allocUnsafe(SEARCH_READ_LIMIT_BYTES);
-    const { bytesRead } = await fileHandle.read(buffer, 0, buffer.byteLength, 0);
-
-    if (bytesRead > FILE_VIEW_SIZE_LIMIT_BYTES) {
-      return null;
-    }
-
-    return utf8Decoder.decode(buffer.subarray(0, bytesRead));
-  } catch {
-    return null;
-  } finally {
-    await fileHandle?.close().catch(() => undefined);
-  }
+  return {
+    query: state.query,
+    results: sortedResults.slice(0, MAX_PROJECT_SEARCH_RESULTS),
+    summary: {
+      scannedFiles: state.scannedFiles,
+      skippedFiles,
+      matchedFiles: state.matchedFiles,
+      totalMatches: state.totalMatches,
+      truncated,
+    },
+  };
 }
 
 function findLineMatches(
