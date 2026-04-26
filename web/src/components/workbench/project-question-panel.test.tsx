@@ -127,6 +127,79 @@ describe("ProjectQuestionPanel", () => {
     expect(container?.textContent).toContain("Retry answer");
   });
 
+  it("clears the prior answer and sources when the next question fails", async () => {
+    const askFn = vi
+      .fn()
+      .mockResolvedValueOnce(
+        createQuestionResponse({
+          answer: "The schema is in wiki/schema.md.",
+          sources: [
+            {
+              id: 1,
+              relativePath: "wiki/schema.md",
+              lineNumber: 1,
+              preview: "Schema overview",
+            },
+          ],
+        }),
+      )
+      .mockRejectedValueOnce(new Error("Question service unavailable"));
+
+    renderProjectQuestionPanel({ askFn });
+    updateQuestion("Where is the schema?");
+    await clickButton("Ask");
+
+    expect(container?.textContent).toContain("The schema is in wiki/schema.md.");
+    expect(container?.textContent).toContain("wiki/schema.md");
+
+    updateQuestion("What owns it?");
+    await clickButton("Ask");
+
+    expect(container?.textContent).toContain("Question service unavailable");
+    expect(container?.textContent).toContain("Retry");
+    expect(container?.textContent).not.toContain("The schema is in wiki/schema.md.");
+    expect(container?.textContent).not.toContain("wiki/schema.md");
+  });
+
+  it("aborts and resets state when the project changes", async () => {
+    const deferred = createDeferred<ProjectQuestionResponse>();
+    const askFn = vi.fn().mockReturnValueOnce(deferred.promise);
+    const { rerender } = renderProjectQuestionPanel({ projectId: "project-a", askFn });
+
+    updateQuestion("Where is the schema?");
+    await clickButton("Ask");
+
+    const firstSignal = askFn.mock.calls[0]?.[2] as AbortSignal;
+
+    rerender({ projectId: "project-b", askFn });
+
+    expect(firstSignal.aborted).toBe(true);
+    expect(questionTextarea().value).toBe("");
+    expect(container?.textContent).not.toContain("Asking project");
+    expect(container?.textContent).not.toContain("Question failed");
+    expect(container?.textContent).not.toContain("Retry");
+
+    await act(async () => {
+      deferred.resolve(
+        createQuestionResponse({
+          answer: "Project A answer",
+          sources: [
+            {
+              id: 1,
+              relativePath: "project-a/schema.md",
+              lineNumber: 1,
+              preview: "Project A source",
+            },
+          ],
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(container?.textContent).not.toContain("Project A answer");
+    expect(container?.textContent).not.toContain("project-a/schema.md");
+  });
+
   it("includes prior user and assistant messages in a second submission", async () => {
     const askFn = vi
       .fn()
@@ -182,14 +255,28 @@ function renderProjectQuestionPanel({
       <ProjectQuestionPanel projectId={projectId} onOpenFile={onOpenFile} askFn={askFn} />,
     );
   });
+
+  return {
+    rerender(nextProps: {
+      projectId?: string;
+      onOpenFile?: (relativePath: string) => void;
+      askFn?: ComponentProps<typeof ProjectQuestionPanel>["askFn"];
+    }) {
+      act(() => {
+        root?.render(
+          <ProjectQuestionPanel
+            projectId={nextProps.projectId ?? projectId}
+            onOpenFile={nextProps.onOpenFile ?? onOpenFile}
+            askFn={nextProps.askFn ?? askFn}
+          />,
+        );
+      });
+    },
+  };
 }
 
 function updateQuestion(value: string) {
-  const textarea = container?.querySelector("textarea");
-
-  if (!textarea) {
-    throw new Error("Expected question textarea.");
-  }
+  const textarea = questionTextarea();
 
   act(() => {
     const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")
@@ -197,6 +284,16 @@ function updateQuestion(value: string) {
     valueSetter?.call(textarea, value);
     textarea.dispatchEvent(new Event("input", { bubbles: true }));
   });
+}
+
+function questionTextarea() {
+  const textarea = container?.querySelector("textarea");
+
+  if (!textarea) {
+    throw new Error("Expected question textarea.");
+  }
+
+  return textarea;
 }
 
 async function clickButton(name: string) {
@@ -240,4 +337,15 @@ function requiredButton(name: string) {
   }
 
   return button;
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+
+  return { promise, resolve, reject };
 }

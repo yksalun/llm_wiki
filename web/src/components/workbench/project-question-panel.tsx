@@ -40,10 +40,20 @@ export function ProjectQuestionPanel({
   const canAsk = trimmedQuestion.length >= 2 && status !== "loading";
 
   useEffect(() => {
+    controllerRef.current?.abort();
+    controllerRef.current = null;
+    setQuestion("");
+    setMessages([]);
+    setLastResponse(null);
+    setStatus("idle");
+    setErrorMessage(null);
+    setLastRequest(null);
+
     return () => {
       controllerRef.current?.abort();
+      controllerRef.current = null;
     };
-  }, []);
+  }, [projectId]);
 
   function submitQuestion(nextQuestion: string, history: ProjectQuestionMessage[]) {
     controllerRef.current?.abort();
@@ -52,6 +62,7 @@ export function ProjectQuestionPanel({
     controllerRef.current = controller;
     setStatus("loading");
     setErrorMessage(null);
+    setLastResponse(null);
     setLastRequest({ question: nextQuestion, history });
 
     askFn(projectId, { question: nextQuestion, history }, controller.signal)
@@ -154,7 +165,7 @@ export function ProjectQuestionPanel({
         </Alert>
       ) : null}
 
-      {lastResponse ? (
+      {status === "ready" && lastResponse ? (
         <div className="space-y-3">
           <div className="rounded-lg border border-black/10 bg-white/75 p-3">
             <p className="whitespace-pre-wrap text-sm leading-6 text-[color:var(--ink-strong)]">
