@@ -1,5 +1,6 @@
 export type WorkbenchSection =
   | "Overview"
+  | "Ask"
   | "Files"
   | "Purpose"
   | "Schema"
@@ -49,6 +50,27 @@ export interface ProjectSearchResponse {
     totalMatches: number;
     truncated: boolean;
   };
+}
+
+export interface ProjectQuestionMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ProjectQuestionRequest {
+  question: string;
+  messages: ProjectQuestionMessage[];
+}
+
+export interface ProjectQuestionSource {
+  relativePath: string;
+  title: string | null;
+  excerpt: string;
+}
+
+export interface ProjectQuestionResponse {
+  answer: string;
+  sources: ProjectQuestionSource[];
 }
 
 export interface FileTreeNode {
