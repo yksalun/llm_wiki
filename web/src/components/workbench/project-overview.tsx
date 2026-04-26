@@ -194,7 +194,7 @@ function collectReadingStats(nodes: FileTreeNode[]): ReadingStats {
         };
       }
 
-      const extension = getFileExtension(node.name);
+      const extension = getFileExtension(node.relativePath);
 
       if (extension === ".md") {
         return { ...stats, markdownFiles: stats.markdownFiles + 1 };

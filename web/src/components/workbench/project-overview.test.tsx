@@ -25,7 +25,7 @@ const tree: FileTreeNode[] = [
     nodeType: "directory",
     children: [
       {
-        name: "intro.md",
+        name: "intro",
         relativePath: "wiki/intro.md",
         nodeType: "file",
       },
@@ -53,5 +53,6 @@ describe("ProjectOverview", () => {
     expect(html).toContain("Preview files");
     expect(html).toContain("Metadata files");
     expect(html).toContain("Start with wiki");
+    expect(html).toMatch(/Markdown files<\/p><p class="[^"]*">1<\/p>/);
   });
 });
