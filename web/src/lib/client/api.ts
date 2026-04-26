@@ -6,6 +6,7 @@ import type {
   FileWriteRequest,
   FileWriteResult,
   ProjectDetail,
+  ProjectInsightsResponse,
   ProjectQuestionRequest,
   ProjectQuestionResponse,
   ProjectSearchResponse,
@@ -85,6 +86,13 @@ export async function searchProject(projectId: string, query: string, signal?: A
 
   return requestJson<ProjectSearchResponse>(
     `/api/projects/${encodeURIComponent(projectId)}/search?${params.toString()}`,
+    { method: "GET", cache: "no-store", signal },
+  );
+}
+
+export async function fetchProjectInsights(projectId: string, signal?: AbortSignal) {
+  return requestJson<ProjectInsightsResponse>(
+    `/api/projects/${encodeURIComponent(projectId)}/insights`,
     { method: "GET", cache: "no-store", signal },
   );
 }
