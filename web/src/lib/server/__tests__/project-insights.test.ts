@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { FILE_VIEW_SIZE_LIMIT_BYTES } from "../file-policy";
 import { buildProjectInsights } from "../project-insights";
 
 const cleanupTasks: Array<() => Promise<void>> = [];
@@ -67,6 +68,20 @@ describe("buildProjectInsights", () => {
       findings: response.findings.length,
       researchPrompts: response.researchPrompts.length,
     });
+  });
+
+  it("skips searchable text files larger than the file view size limit", async () => {
+    const projectRoot = await createProject("large-file-skip");
+    await writeProjectFile(projectRoot, "README.md", "# Home\n\nSee [Big](big.md).\n");
+    await writeProjectFile(projectRoot, "big.md", `${"a".repeat(FILE_VIEW_SIZE_LIMIT_BYTES + 1)}\n`);
+
+    const response = await buildProjectInsights(projectRoot);
+
+    expect(response.graph.nodes.map((node) => node.relativePath)).toEqual(["README.md"]);
+    expect(response.graph.edges).toEqual([]);
+    expect(response.findings.some((finding) => finding.message.includes("big.md"))).toBe(false);
+    expect(response.findings.some((finding) => finding.relativePath === "big.md")).toBe(false);
+    expect(response.summary.analyzedFiles).toBe(1);
   });
 
   it("creates a risk finding for broken markdown links without creating an edge", async () => {
@@ -154,6 +169,34 @@ describe("buildProjectInsights", () => {
         targetId: "file:docs/guide.md",
       }),
     ]);
+  });
+
+  it("normalizes Windows separators in relative markdown hrefs", async () => {
+    const projectRoot = await createProject("windows-relative-link");
+    await writeProjectFile(projectRoot, "README.md", "See [Guide](docs\\guide.md).\n");
+    await writeProjectFile(projectRoot, "docs/guide.md", "# Guide\n");
+
+    const response = await buildProjectInsights(projectRoot);
+
+    expect(response.graph.edges).toEqual([
+      expect.objectContaining({
+        id: "edge:README.md:1:docs/guide.md",
+        sourceId: "file:README.md",
+        targetId: "file:docs/guide.md",
+      }),
+    ]);
+    expect(response.findings.filter((finding) => finding.title === "Broken markdown link")).toEqual([]);
+  });
+
+  it("does not treat markdown image syntax as project links", async () => {
+    const projectRoot = await createProject("markdown-image-skip");
+    await writeProjectFile(projectRoot, "README.md", "![Diagram](diagram.png)\n");
+
+    const response = await buildProjectInsights(projectRoot);
+
+    expect(response.graph.edges).toEqual([]);
+    expect(response.findings.filter((finding) => finding.title === "Broken markdown link")).toEqual([]);
+    expect(response.findings.filter((finding) => finding.title === "Unsafe markdown link")).toEqual([]);
   });
 
   it("keeps finding and research prompt ids unique for repeated broken links on one line", async () => {

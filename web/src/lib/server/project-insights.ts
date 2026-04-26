@@ -15,8 +15,12 @@ import type {
   ProjectInsightsResponse,
 } from "@/lib/types";
 
+import { FILE_VIEW_SIZE_LIMIT_BYTES } from "./file-policy";
+
 const MARKDOWN_LINK_PATTERN = /\[([^\]]+)\]\(([^)]+)\)/g;
 const MAX_RESEARCH_PROMPTS = 6;
+const INSIGHTS_READ_LIMIT_BYTES = FILE_VIEW_SIZE_LIMIT_BYTES + 1;
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
 interface AnalyzedFile {
   relativePath: string;
@@ -41,6 +45,7 @@ export async function buildProjectInsights(
 ): Promise<ProjectInsightsResponse> {
   const rootDir = path.resolve(projectRoot);
   const analyzedFiles: AnalyzedFile[] = [];
+  const skippedSearchablePaths = new Set<string>();
 
   for await (const relativePath of walkProjectFiles(rootDir, "")) {
     const extension = getFileExtension(relativePath);
@@ -49,9 +54,18 @@ export async function buildProjectInsights(
       continue;
     }
 
-    const content = await safeReadUtf8(path.join(rootDir, relativePath));
+    const absolutePath = path.join(rootDir, relativePath);
+    const stats = await safeStatFile(absolutePath);
+
+    if (!stats || stats.size > FILE_VIEW_SIZE_LIMIT_BYTES) {
+      skippedSearchablePaths.add(relativePath);
+      continue;
+    }
+
+    const content = await safeReadUtf8(absolutePath);
 
     if (content === null) {
+      skippedSearchablePaths.add(relativePath);
       continue;
     }
 
@@ -113,6 +127,10 @@ export async function buildProjectInsights(
       }
 
       if (!targetPaths.has(targetPath)) {
+        if (skippedSearchablePaths.has(targetPath)) {
+          continue;
+        }
+
         addFindingOnce(
           findings,
           findingIds,
@@ -230,11 +248,37 @@ async function* walkProjectFiles(
   }
 }
 
-async function safeReadUtf8(filePath: string): Promise<string | null> {
+async function safeStatFile(filePath: string): Promise<{ size: number } | null> {
   try {
-    return await fs.readFile(filePath, "utf8");
+    const stats = await fs.stat(filePath);
+
+    if (!stats.isFile()) {
+      return null;
+    }
+
+    return { size: stats.size };
   } catch {
     return null;
+  }
+}
+
+async function safeReadUtf8(filePath: string): Promise<string | null> {
+  let fileHandle: Awaited<ReturnType<typeof fs.open>> | null = null;
+
+  try {
+    fileHandle = await fs.open(filePath, "r");
+    const buffer = Buffer.allocUnsafe(INSIGHTS_READ_LIMIT_BYTES);
+    const { bytesRead } = await fileHandle.read(buffer, 0, buffer.byteLength, 0);
+
+    if (bytesRead > FILE_VIEW_SIZE_LIMIT_BYTES) {
+      return null;
+    }
+
+    return utf8Decoder.decode(buffer.subarray(0, bytesRead));
+  } catch {
+    return null;
+  } finally {
+    await fileHandle?.close();
   }
 }
 
@@ -254,6 +298,10 @@ function parseMarkdownLinks(
   const links: Array<{ text: string; href: string; lineNumber: number }> = [];
 
   for (const match of content.matchAll(MARKDOWN_LINK_PATTERN)) {
+    if (match.index !== undefined && content[match.index - 1] === "!") {
+      continue;
+    }
+
     links.push({
       text: match[1] ?? "",
       href: match[2] ?? "",
@@ -292,7 +340,7 @@ function shouldIgnoreHref(href: string): boolean {
 }
 
 function resolveMarkdownTarget(sourcePath: string, href: string): string | null {
-  const hrefWithoutHash = stripHashAndQuery(href);
+  const hrefWithoutHash = normalizeMarkdownHrefPath(stripHashAndQuery(href));
 
   if (hrefWithoutHash.length === 0) {
     return null;
@@ -307,6 +355,14 @@ function resolveMarkdownTarget(sourcePath: string, href: string): string | null 
 
 function isWindowsAbsoluteHref(href: string): boolean {
   return /^[a-z]:[\\/]/i.test(href);
+}
+
+function normalizeMarkdownHrefPath(href: string): string {
+  if (isWindowsAbsoluteHref(href)) {
+    return href;
+  }
+
+  return href.replace(/\\/g, "/");
 }
 
 function stripHashAndQuery(href: string): string {
