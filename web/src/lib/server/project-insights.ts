@@ -94,7 +94,7 @@ export async function buildProjectInsights(
             `Markdown link "${link.href}" points outside the project and was not linked.`,
             file.relativePath,
             link.lineNumber,
-            link.text,
+            link.href,
           ),
         );
         addBrokenLinkOnce(brokenLinks, brokenLinkIds, {
@@ -102,7 +102,7 @@ export async function buildProjectInsights(
           targetPath: link.href,
           lineNumber: link.lineNumber,
           linkText: link.text,
-          idTarget: link.text,
+          idTarget: link.href,
         });
         continue;
       }

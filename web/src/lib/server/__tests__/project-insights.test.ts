@@ -173,6 +173,22 @@ describe("buildProjectInsights", () => {
     expect(new Set(promptIds).size).toBe(promptIds.length);
   });
 
+  it("keeps same-text unsafe absolute hrefs distinct without leaking project roots in ids", async () => {
+    const projectRoot = await createProject("same-text-unsafe-links");
+    await writeProjectFile(projectRoot, "README.md", "See [Same](/a.md) and [Same](/b.md).\n");
+
+    const response = await buildProjectInsights(projectRoot);
+    const unsafeFindings = response.findings.filter((finding) => finding.title === "Unsafe markdown link");
+    const promptIds = response.researchPrompts
+      .filter((prompt) => prompt.id.startsWith("prompt:broken-link:"))
+      .map((prompt) => prompt.id);
+
+    expect(unsafeFindings).toHaveLength(2);
+    expect(new Set(unsafeFindings.map((finding) => finding.id)).size).toBe(2);
+    expect(new Set(promptIds).size).toBe(promptIds.length);
+    expect([...unsafeFindings.map((finding) => finding.id), ...promptIds].join("\n")).not.toContain(projectRoot);
+  });
+
   it("limits research prompts to six after link deduplication", async () => {
     const projectRoot = await createProject("prompt-limit");
     await writeProjectFile(
