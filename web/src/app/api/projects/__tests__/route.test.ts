@@ -19,8 +19,11 @@ vi.mock("@/lib/db/project-snapshot-repo", () => ({
 }));
 
 const cleanupTasks: Array<() => Promise<void>> = [];
+let originalProjectAccessMode: string | undefined;
 
 beforeEach(() => {
+  originalProjectAccessMode = process.env.LLM_WIKI_PROJECT_ACCESS_MODE;
+  delete process.env.LLM_WIKI_PROJECT_ACCESS_MODE;
   repoMocks.upsertProjectSnapshot.mockClear();
   repoMocks.insertSyncRun.mockClear();
   repoMocks.findProjectSnapshotById.mockClear();
@@ -29,7 +32,11 @@ beforeEach(() => {
 
 afterEach(async () => {
   delete process.env.LLM_WIKI_PROJECT_ROOTS;
-  delete process.env.LLM_WIKI_PROJECT_ACCESS_MODE;
+  if (originalProjectAccessMode === undefined) {
+    delete process.env.LLM_WIKI_PROJECT_ACCESS_MODE;
+  } else {
+    process.env.LLM_WIKI_PROJECT_ACCESS_MODE = originalProjectAccessMode;
+  }
   vi.resetModules();
 
   while (cleanupTasks.length > 0) {

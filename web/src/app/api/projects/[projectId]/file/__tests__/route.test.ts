@@ -20,8 +20,11 @@ vi.mock("@/lib/db/project-snapshot-repo", () => ({
 }));
 
 const cleanupTasks: Array<() => Promise<void>> = [];
+let originalProjectAccessMode: string | undefined;
 
 beforeEach(() => {
+  originalProjectAccessMode = process.env.LLM_WIKI_PROJECT_ACCESS_MODE;
+  delete process.env.LLM_WIKI_PROJECT_ACCESS_MODE;
   repoMocks.upsertProjectSnapshot.mockClear();
   repoMocks.insertSyncRun.mockClear();
   repoMocks.findProjectSnapshotById.mockClear();
@@ -30,7 +33,11 @@ beforeEach(() => {
 
 afterEach(async () => {
   delete process.env.LLM_WIKI_PROJECT_ROOTS;
-  delete process.env.LLM_WIKI_PROJECT_ACCESS_MODE;
+  if (originalProjectAccessMode === undefined) {
+    delete process.env.LLM_WIKI_PROJECT_ACCESS_MODE;
+  } else {
+    process.env.LLM_WIKI_PROJECT_ACCESS_MODE = originalProjectAccessMode;
+  }
   vi.resetModules();
 
   while (cleanupTasks.length > 0) {
@@ -118,6 +125,33 @@ describe("/api/projects/[projectId]/file route", () => {
       metadata: {
         accessMode: "read-only",
       },
+    });
+  });
+
+  it("GET returns editable markdown when project access is explicitly read-write", async () => {
+    process.env.LLM_WIKI_PROJECT_ACCESS_MODE = "read-write";
+    const { projectId } = await createProjectContext("read-write-editable");
+
+    const { GET } = await import("../route");
+    const response = await GET(
+      new Request(`http://localhost/api/projects/${projectId}/file?path=purpose.md`),
+      {
+        params: Promise.resolve({ projectId }),
+      },
+    );
+    const payload = (await response.json()) as {
+      relativePath: string;
+      content: string | null;
+      mode: string;
+      editable: boolean;
+    };
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      relativePath: "purpose.md",
+      content: "# Purpose\n\nDemo project.\n",
+      mode: "editable",
+      editable: true,
     });
   });
 
