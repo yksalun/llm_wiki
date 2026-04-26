@@ -102,6 +102,11 @@ export function FilePanel({
     setFileViewState({ path: currentFilePath, view, dirty });
   };
 
+  const resetDraft = () => {
+    onReset();
+    updateFileView("read");
+  };
+
   if (loading) {
     return (
       <PanelCard
@@ -231,7 +236,7 @@ export function FilePanel({
                     <Save className="size-4" />
                     {saving ? "Saving..." : "Save changes"}
                   </Button>
-                  <Button variant="outline" onClick={onReset} disabled={!dirty || saving}>
+                  <Button variant="outline" onClick={resetDraft} disabled={!dirty || saving}>
                     Reset draft
                   </Button>
                   <span className="text-sm text-muted-foreground">

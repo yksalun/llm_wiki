@@ -18,6 +18,7 @@ interface RenderOptions {
   draft?: string;
   dirty?: boolean;
   saving?: boolean;
+  onReset?: () => void;
 }
 
 const baseProps = {
@@ -107,6 +108,25 @@ describe("FilePanel reading mode", () => {
 
     expect(readButton().disabled).toBe(true);
     expect(editButton().disabled).toBe(true);
+  });
+
+  it("returns to read mode immediately when resetting a dirty draft", () => {
+    const onReset = vi.fn();
+
+    renderFilePanel({ dirty: true, onReset });
+
+    act(() => {
+      requiredButton("Reset draft").click();
+    });
+
+    expect(onReset).toHaveBeenCalledTimes(1);
+    expect(readButton().getAttribute("aria-pressed")).toBe("true");
+    expect(editButton().getAttribute("aria-pressed")).toBe("false");
+    expect(container?.querySelector("textarea")).toBeNull();
+    expect(buttonNamed("Save changes")).toBeNull();
+    expect(buttonNamed("Reset draft")).toBeNull();
+    expect(container?.textContent).toContain("Guide");
+    expect(container?.textContent).toContain("Read this first.");
   });
 });
 
