@@ -421,6 +421,8 @@ flowchart TD
 
 ### 10.4 阶段 8：Rust bridge / 重能力下沉
 
+> 状态：已完成前置基线。阶段 8 已按 [spec](../../docs/superpowers/specs/2026-04-26-phase-8-heavy-task-runtime-baseline-design.md) 和 [implementation plan](../../docs/superpowers/plans/2026-04-26-phase-8-heavy-task-runtime-baseline.md) 落地为“重任务能力基线与适配层”，覆盖共享项目文本扫描边界、多 query 单次扫描、问答检索复用、Insights 扫描复用、结构化 runtime capabilities、Search / Insights 执行元数据、Project Info 诊断展示和关键测试。当前未引入 Rust crate、native bridge、FFI、WASM、后台任务或持久化索引；active engine 仍为 `node`，Rust bridge 仍是瓶颈驱动的后置选项。
+
 Rust bridge 不应该作为“为了高级而高级”的技术动作进入路线图。
 
 它更像一个后置选项，只有在下面这些问题真实出现时才值得启动：
