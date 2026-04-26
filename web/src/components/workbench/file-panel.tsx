@@ -16,6 +16,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { FilePreview } from "@/components/workbench/file-preview";
 import { MarkdownReader } from "@/components/workbench/markdown-reader";
+import { formatFileModeLabel, formatWorkbenchSectionLabel } from "@/lib/display-labels";
 import type { FileReadResult, WorkbenchSection } from "@/lib/types";
 import type { FileConflictState, SaveStatus } from "@/stores/workbench-store";
 
@@ -110,11 +111,11 @@ export function FilePanel({
   if (loading) {
     return (
       <PanelCard
-        title={selectedPath ? `Opening ${selectedPath}` : "Opening file"}
-        description="The workbench is reading the requested file from the project route."
+        title={selectedPath ? `正在打开 ${selectedPath}` : "正在打开文件"}
+        description="工作台正在从项目路径读取请求的文件。"
       >
-        <div className="rounded-[20px] border border-dashed border-black/10 bg-black/[0.02] p-5 text-sm text-muted-foreground">
-          Loading file content...
+        <div className="rounded-[20px] border border-dashed border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-5 text-sm text-muted-foreground">
+          正在加载文件内容...
         </div>
       </PanelCard>
     );
@@ -123,8 +124,8 @@ export function FilePanel({
   if (!file && notice) {
     return (
       <PanelCard
-        title={selectedPath ? `Unable to open ${selectedPath}` : getEmptyPanelTitle(section)}
-        description="The request completed with an error, so no inline file content is available."
+        title={selectedPath ? `无法打开 ${selectedPath}` : getEmptyPanelTitle(section)}
+        description="请求已返回错误，因此没有可内联显示的文件内容。"
       >
         <div className="space-y-4">
           <Alert
@@ -132,14 +133,14 @@ export function FilePanel({
             className={
               notice.tone === "error"
                 ? "border-destructive/20 bg-destructive/5"
-                : "border-amber-900/15 bg-amber-700/5 text-amber-950"
+                : "border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] text-[color:var(--ink-strong)]"
             }
           >
             <AlertCircle className="size-4" />
             <AlertTitle>{notice.title}</AlertTitle>
             <AlertDescription>{notice.message}</AlertDescription>
           </Alert>
-          <div className="rounded-[20px] border border-dashed border-black/10 bg-[linear-gradient(180deg,rgba(255,252,246,0.65),rgba(245,239,229,0.42))] p-6 text-sm leading-7 text-muted-foreground">
+          <div className="rounded-[20px] border border-dashed border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-6 text-sm leading-7 text-muted-foreground">
             {getEmptyPanelMessage(section, selectedPath)}
           </div>
         </div>
@@ -153,7 +154,7 @@ export function FilePanel({
         title={getEmptyPanelTitle(section)}
         description={getEmptyPanelDescription(section)}
       >
-        <div className="rounded-[20px] border border-dashed border-black/10 bg-[linear-gradient(180deg,rgba(255,252,246,0.65),rgba(245,239,229,0.42))] p-6 text-sm leading-7 text-muted-foreground">
+        <div className="rounded-[20px] border border-dashed border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-6 text-sm leading-7 text-muted-foreground">
           {getEmptyPanelMessage(section, selectedPath)}
         </div>
       </PanelCard>
@@ -179,7 +180,7 @@ export function FilePanel({
             className={
               notice.tone === "error"
                 ? "border-destructive/20 bg-destructive/5"
-                : "border-amber-900/15 bg-amber-700/5 text-amber-950"
+                : "border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] text-[color:var(--ink-strong)]"
             }
           >
             <AlertCircle className="size-4" />
@@ -192,7 +193,7 @@ export function FilePanel({
 
         {file.mode === "editable" ? (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-black/8 bg-white/55 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-3">
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
@@ -203,7 +204,7 @@ export function FilePanel({
                   disabled={saving}
                 >
                   <Eye className="size-4" />
-                  Read
+                  阅读
                 </Button>
                 <Button
                   type="button"
@@ -214,11 +215,11 @@ export function FilePanel({
                   disabled={saving}
                 >
                   <Edit3 className="size-4" />
-                  Edit
+                  编辑
                 </Button>
               </div>
               <span className="text-sm text-muted-foreground">
-                {fileView === "read" ? "Reading draft preview" : "Editing local draft"}
+                {fileView === "read" ? "正在阅读草稿预览" : "正在编辑本地草稿"}
               </span>
             </div>
 
@@ -229,18 +230,18 @@ export function FilePanel({
                 <Textarea
                   value={draft}
                   onChange={(event) => onDraftChange(event.target.value)}
-                  className="min-h-[420px] resize-y rounded-[20px] border-black/10 bg-white/70 font-mono text-sm leading-7"
+                  className="min-h-[420px] resize-y rounded-[20px] border-[color:var(--paper-border)] bg-[color:var(--paper-panel)] font-mono text-sm leading-7"
                 />
                 <div className="flex flex-wrap items-center gap-3">
                   <Button onClick={onSave} disabled={!dirty || saving}>
                     <Save className="size-4" />
-                    {saving ? "Saving..." : "Save changes"}
+                    {saving ? "正在保存..." : "保存修改"}
                   </Button>
                   <Button variant="outline" onClick={resetDraft} disabled={!dirty || saving}>
-                    Reset draft
+                    重置草稿
                   </Button>
                   <span className="text-sm text-muted-foreground">
-                    Manual save only. Unsaved edits stay local in the panel.
+                    仅手动保存。未保存编辑会保留在本面板的本地草稿中。
                   </span>
                 </div>
               </>
@@ -256,15 +257,15 @@ export function FilePanel({
 
 export function DraftGuardAlert({ prompt }: { prompt: DraftGuardPrompt }) {
   return (
-    <Alert className="border-amber-900/15 bg-amber-700/5 text-amber-950">
+    <Alert className="border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] text-[color:var(--ink-strong)]">
       <AlertCircle className="size-4" />
-      <AlertTitle>Unsaved draft</AlertTitle>
+      <AlertTitle>未保存草稿</AlertTitle>
       <AlertDescription className="space-y-3">
         <p>{prompt.message}</p>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" onClick={prompt.onSaveAndContinue} disabled={prompt.saving}>
             <Save className="size-4" />
-            {prompt.saving ? "Saving..." : "Save and continue"}
+            {prompt.saving ? "正在保存..." : "保存并继续"}
           </Button>
           <Button
             size="sm"
@@ -272,10 +273,10 @@ export function DraftGuardAlert({ prompt }: { prompt: DraftGuardPrompt }) {
             onClick={prompt.onDiscardAndContinue}
             disabled={prompt.saving}
           >
-            Discard draft
+            放弃草稿
           </Button>
           <Button size="sm" variant="ghost" onClick={prompt.onCancel} disabled={prompt.saving}>
-            Cancel
+            取消
           </Button>
         </div>
       </AlertDescription>
@@ -299,7 +300,7 @@ function SaveStatusMessage({
   if (refreshing) {
     return (
       <p className="text-sm text-muted-foreground">
-        Refreshing saved file from disk...
+        正在从磁盘刷新已保存文件...
       </p>
     );
   }
@@ -311,33 +312,32 @@ function SaveStatusMessage({
   if (lastSaveStatus === "success") {
     return (
       <p className="text-sm text-emerald-700">
-        Saved{lastSavedAt ? ` at ${formatSavedAt(lastSavedAt)}` : ""}.
+        已保存{lastSavedAt ? `于 ${formatSavedAt(lastSavedAt)}` : ""}。
       </p>
     );
   }
 
   if (lastSaveStatus === "failed") {
-    return <p className="text-sm text-destructive">Save failed. Your draft is still local.</p>;
+    return <p className="text-sm text-destructive">保存失败。你的草稿仍保留在本地。</p>;
   }
 
   if (lastSaveStatus === "refresh_failed") {
     return (
       <p className="text-sm text-amber-800">
-        Saved{lastSavedAt ? ` at ${formatSavedAt(lastSavedAt)}` : ""}, but refresh failed.
+        已保存{lastSavedAt ? `于 ${formatSavedAt(lastSavedAt)}` : ""}，但刷新失败。你的草稿仍保留在本地。
       </p>
     );
   }
 
   if (lastSaveStatus === "conflict") {
     return (
-      <div className="flex flex-wrap items-center gap-3 rounded-[16px] border border-amber-900/15 bg-amber-700/5 px-4 py-3 text-sm text-amber-950">
+      <div className="flex flex-wrap items-center gap-3 rounded-[16px] border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-4 py-3 text-sm text-[color:var(--ink-strong)]">
         <span>
-          Conflict{conflict?.relativePath ? ` in ${conflict.relativePath}` : ""}. Your draft was not
-          saved.
+          检测到冲突{conflict?.relativePath ? `：${conflict.relativePath}` : ""}。你的草稿未保存。
         </span>
         <Button size="sm" variant="outline" onClick={onReloadRemote}>
           <RefreshCcw className="size-4" />
-          Reload remote
+          重新加载远端文件
         </Button>
       </div>
     );
@@ -369,7 +369,7 @@ function PanelCard({
 }) {
   return (
     <Card className="h-full border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/92 shadow-[0_18px_56px_rgba(61,52,40,0.08)]">
-      <CardHeader className="border-b border-black/5">
+      <CardHeader className="border-b border-[color:var(--paper-border)]">
         <CardTitle className="flex items-center gap-2 text-[color:var(--ink-strong)]">
           <FileText className="size-4 text-[color:var(--ink-soft)]" />
           <span className="truncate">{title}</span>
@@ -383,11 +383,11 @@ function PanelCard({
 
 function FileFacts({ file, dirty }: { file: FileReadResult; dirty: boolean }) {
   return (
-    <div className="grid gap-3 rounded-[20px] border border-black/8 bg-white/55 p-4 md:grid-cols-4">
-      <Fact label="Mode" value={file.mode} />
-      <Fact label="Editable" value={file.editable ? "Yes" : "No"} />
-      <Fact label="Size" value={`${file.size} bytes`} />
-      <Fact label="Status" value={dirty ? "Unsaved changes" : "In sync"} />
+    <div className="grid gap-3 rounded-[20px] border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-4 md:grid-cols-4">
+      <Fact label="模式" value={formatFileModeLabel(file.mode)} />
+      <Fact label="可编辑" value={file.editable ? "是" : "否"} />
+      <Fact label="大小" value={`${file.size} 字节`} />
+      <Fact label="状态" value={dirty ? "有未保存修改" : "已同步"} />
     </div>
   );
 }
@@ -403,42 +403,42 @@ function Fact({ label, value }: { label: string; value: string }) {
 
 function buildDescription(file: FileReadResult) {
   if (file.mode === "editable") {
-    return "Markdown files allowed by the file policy can be edited and saved manually.";
+    return "文件策略允许的 Markdown 文件可手动编辑并保存。";
   }
 
   if (file.mode === "preview") {
-    return "This file is available for read-only preview in the workbench.";
+    return "此文件可在工作台中只读预览。";
   }
 
   if (file.mode === "metadata") {
-    return "This file is represented as metadata instead of inline content.";
+    return "此文件以元数据形式展示，不提供内联内容。";
   }
 
-  return "This file cannot be opened for inline editing in the workbench.";
+  return "此文件无法在工作台中打开进行内联编辑。";
 }
 
 function getEmptyPanelTitle(section: WorkbenchSection) {
   if (section === "Purpose") {
-    return "Purpose file";
+    return `${formatWorkbenchSectionLabel(section)}文件`;
   }
 
   if (section === "Schema") {
-    return "Schema file";
+    return `${formatWorkbenchSectionLabel(section)}文件`;
   }
 
-  return "No file selected";
+  return "未选择文件";
 }
 
 function getEmptyPanelDescription(section: WorkbenchSection) {
   if (section === "Purpose") {
-    return "This section opens purpose.md when the project includes it.";
+    return "项目包含 purpose.md 时，此区域会打开该文件。";
   }
 
   if (section === "Schema") {
-    return "This section opens schema.md when the project includes it.";
+    return "项目包含 schema.md 时，此区域会打开该文件。";
   }
 
-  return "Choose a file from the tree, or use the section shortcuts above.";
+  return "从文件树选择文件，或使用上方区域快捷入口。";
 }
 
 function getEmptyPanelMessage(
@@ -446,16 +446,16 @@ function getEmptyPanelMessage(
   selectedPath: string | null,
 ) {
   if (selectedPath) {
-    return `The workbench kept ${selectedPath} selected so you can retry or choose another file from the tree.`;
+    return `工作台已保留 ${selectedPath} 的选择，你可以重试或从文件树选择其他文件。`;
   }
 
   if (section === "Purpose") {
-    return "purpose.md will render here when the project exposes that file.";
+    return "项目提供 purpose.md 后会在这里显示。";
   }
 
   if (section === "Schema") {
-    return "schema.md will render here when the project exposes that file.";
+    return "项目提供 schema.md 后会在这里显示。";
   }
 
-  return "The panel stays empty until a project file is opened.";
+  return "打开项目文件前，此面板会保持为空。";
 }

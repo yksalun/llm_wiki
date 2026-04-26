@@ -1,4 +1,5 @@
 import type { FileViewMode, WorkbenchSection } from "@/lib/types";
+import { formatWorkbenchSectionLabel } from "@/lib/display-labels";
 
 export type PendingWorkbenchIntent =
   | {
@@ -36,12 +37,12 @@ export function hasBlockingDraft({
 export function buildPendingDraftMessage(intent: PendingWorkbenchIntent) {
   switch (intent.type) {
     case "open-file":
-      return `You have unsaved changes. Save or discard them before opening ${intent.path}.`;
+      return `你有未保存修改。请先保存或放弃草稿，再打开 ${intent.path}。`;
     case "open-section-file":
-      return `You have unsaved changes. Save or discard them before opening ${intent.section} in ${intent.path}.`;
+      return `你有未保存修改。请先保存或放弃草稿，再打开${formatWorkbenchSectionLabel(intent.section)} ${intent.path}。`;
     case "reload-project":
-      return "You have unsaved changes. Save or discard them before reloading the project.";
+      return "你有未保存修改。请先保存或放弃草稿，再重新加载项目。";
     case "show-missing-section-file":
-      return `You have unsaved changes. Save or discard them before opening ${intent.section}. ${intent.path} is not available.`;
+      return `你有未保存修改。请先保存或放弃草稿，再打开${formatWorkbenchSectionLabel(intent.section)}。${intent.path} 不可用。`;
   }
 }

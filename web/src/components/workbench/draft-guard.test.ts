@@ -37,24 +37,29 @@ describe("buildPendingDraftMessage", () => {
       path: "docs/overview.md",
     });
 
-    expect(message).toContain("docs/overview.md");
+    expect(message).toBe(
+      "你有未保存修改。请先保存或放弃草稿，再打开 docs/overview.md。",
+    );
   });
 
-  it("includes the target path and section for open-section-file intents", () => {
+  it("includes the localized section and target path for open-section-file intents", () => {
     const message = buildPendingDraftMessage({
       type: "open-section-file",
       path: "docs/overview.md",
       section: "Purpose",
     });
 
-    expect(message).toContain("docs/overview.md");
-    expect(message).toContain("Purpose");
+    expect(message).toBe(
+      "你有未保存修改。请先保存或放弃草稿，再打开目标 docs/overview.md。",
+    );
   });
 
   it("describes reload semantics for reload-project intents", () => {
     const intent: PendingWorkbenchIntent = { type: "reload-project" };
 
-    expect(buildPendingDraftMessage(intent).toLowerCase()).toContain("reload");
+    expect(buildPendingDraftMessage(intent)).toBe(
+      "你有未保存修改。请先保存或放弃草稿，再重新加载项目。",
+    );
   });
 
   it("describes replacing a conflicted draft with the remote file", () => {
@@ -64,8 +69,9 @@ describe("buildPendingDraftMessage", () => {
       section: "Purpose",
     });
 
-    expect(message).toContain("Save or discard");
-    expect(message).toContain("purpose.md");
+    expect(message).toBe(
+      "你有未保存修改。请先保存或放弃草稿，再打开目标 purpose.md。",
+    );
   });
 
   it("describes showing a missing section file notice without opening the file", () => {
@@ -77,8 +83,8 @@ describe("buildPendingDraftMessage", () => {
       message: "schema.md is not available for this project.",
     });
 
-    expect(message).toContain("Save or discard");
-    expect(message).toContain("Schema");
-    expect(message).toContain("schema.md");
+    expect(message).toBe(
+      "你有未保存修改。请先保存或放弃草稿，再打开结构。schema.md 不可用。",
+    );
   });
 });
