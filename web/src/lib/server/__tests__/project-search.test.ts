@@ -127,9 +127,43 @@ describe("searchProjectFiles", () => {
       scannedFiles: 12,
       skippedFiles: 0,
       matchedFiles: 12,
-      totalMatches: 60,
+      totalMatches: 72,
       truncated: true,
     });
+  });
+
+  it("marks truncated and counts all matches when one file exceeds the per-file result cap", async () => {
+    const projectRoot = await createProject("per-file-cap");
+    await writeProjectFile(
+      projectRoot,
+      "many.md",
+      Array.from({ length: 6 }, (_, lineIndex) => `target line ${lineIndex + 1}`).join("\n"),
+    );
+
+    const response = await searchProjectFiles(projectRoot, "target");
+
+    expect(response.results).toHaveLength(5);
+    expect(response.results.map((result) => result.lineNumber)).toEqual([1, 2, 3, 4, 5]);
+    expect(response.summary).toEqual({
+      scannedFiles: 1,
+      skippedFiles: 0,
+      matchedFiles: 1,
+      totalMatches: 6,
+      truncated: true,
+    });
+  });
+
+  it("sorts by line number before relative path after path match priority", async () => {
+    const projectRoot = await createProject("sorts-by-line");
+    await writeProjectFile(projectRoot, "alpha.md", "intro\nsecond target\n");
+    await writeProjectFile(projectRoot, "zeta.md", "first target\n");
+
+    const response = await searchProjectFiles(projectRoot, "target");
+
+    expect(response.results.map((result) => `${result.relativePath}:${result.lineNumber}`)).toEqual([
+      "zeta.md:1",
+      "alpha.md:2",
+    ]);
   });
 });
 

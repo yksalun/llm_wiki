@@ -31,6 +31,7 @@ export async function searchProjectFiles(
   let skippedFiles = 0;
   let matchedFiles = 0;
   let totalMatches = 0;
+  let truncatedByPerFileCap = false;
 
   for await (const relativePath of walkProjectFiles(rootDir, "")) {
     const extension = getFileExtension(relativePath);
@@ -57,19 +58,21 @@ export async function searchProjectFiles(
 
     scannedFiles += 1;
 
-    const fileMatches = findLineMatches(relativePath, content, trimmedQuery, lowerQuery);
+    const fileSearchResult = findLineMatches(relativePath, content, trimmedQuery, lowerQuery);
 
-    if (fileMatches.length > 0) {
+    if (fileSearchResult.totalMatches > 0) {
       matchedFiles += 1;
-      totalMatches += fileMatches.length;
-      searchResults.push(...fileMatches);
+      totalMatches += fileSearchResult.totalMatches;
+      truncatedByPerFileCap ||= fileSearchResult.truncated;
+      searchResults.push(...fileSearchResult.results);
     }
   }
 
   const sortedResults = searchResults.sort((left, right) =>
     compareSearchResults(left, right, lowerQuery),
   );
-  const truncated = sortedResults.length > MAX_PROJECT_SEARCH_RESULTS;
+  const truncated =
+    truncatedByPerFileCap || sortedResults.length > MAX_PROJECT_SEARCH_RESULTS;
 
   return {
     query: trimmedQuery,
@@ -146,8 +149,9 @@ function findLineMatches(
   content: string,
   query: string,
   lowerQuery: string,
-): ProjectSearchResult[] {
+): { results: ProjectSearchResult[]; totalMatches: number; truncated: boolean } {
   const matches: ProjectSearchResult[] = [];
+  let totalMatches = 0;
   const lines = content.split(/\r?\n/);
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
@@ -158,21 +162,25 @@ function findLineMatches(
       continue;
     }
 
-    matches.push({
-      relativePath,
-      lineNumber: lineIndex + 1,
-      lineText,
-      preview: buildPreview(lineText, matchStart, matchStart + query.length),
-      matchStart,
-      matchEnd: matchStart + query.length,
-    });
+    totalMatches += 1;
 
-    if (matches.length >= MAX_MATCHES_PER_FILE) {
-      break;
+    if (matches.length < MAX_MATCHES_PER_FILE) {
+      matches.push({
+        relativePath,
+        lineNumber: lineIndex + 1,
+        lineText,
+        preview: buildPreview(lineText, matchStart, matchStart + query.length),
+        matchStart,
+        matchEnd: matchStart + query.length,
+      });
     }
   }
 
-  return matches;
+  return {
+    results: matches,
+    totalMatches,
+    truncated: totalMatches > matches.length,
+  };
 }
 
 function buildPreview(lineText: string, matchStart: number, matchEnd: number): string {
@@ -196,13 +204,11 @@ function compareSearchResults(
     return leftPathMatches ? -1 : 1;
   }
 
-  const pathComparison = left.relativePath.localeCompare(right.relativePath);
-
-  if (pathComparison !== 0) {
-    return pathComparison;
+  if (left.lineNumber !== right.lineNumber) {
+    return left.lineNumber - right.lineNumber;
   }
 
-  return left.lineNumber - right.lineNumber;
+  return left.relativePath.localeCompare(right.relativePath);
 }
 
 function emptySearchResponse(query: string): ProjectSearchResponse {
