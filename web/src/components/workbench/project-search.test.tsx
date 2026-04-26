@@ -38,7 +38,7 @@ describe("ProjectSearch", () => {
     await advanceSearch();
 
     expect(searchFn).not.toHaveBeenCalled();
-    expect(container?.textContent).toContain("Type at least 2 characters");
+    expect(container?.textContent).toContain("请输入至少 2 个字符");
   });
 
   it("renders successful results and delegates opening by relative path", async () => {
@@ -64,11 +64,11 @@ describe("ProjectSearch", () => {
     await advanceSearch();
 
     expect(container?.textContent).toContain("wiki/index.md");
-    expect(container?.textContent).toContain("Line 3");
+    expect(container?.textContent).toContain("第 3 行");
     expect(container?.textContent).toContain("Alpha preview text");
 
     act(() => {
-      requiredButton("Open result").click();
+      requiredButton("打开结果").click();
     });
 
     expect(onOpenFile).toHaveBeenCalledWith("wiki/index.md");
@@ -104,7 +104,7 @@ describe("ProjectSearch", () => {
 
     expect(searchFn).toHaveBeenCalledTimes(1);
     expect(container?.textContent).toContain("Alpha preview text");
-    expect(container?.textContent).not.toContain("Searching");
+    expect(container?.textContent).not.toContain("正在搜索");
   });
 
   it("renders an empty state when a search returns no results", async () => {
@@ -115,7 +115,7 @@ describe("ProjectSearch", () => {
     updateSearchInput("missing");
     await advanceSearch();
 
-    expect(container?.textContent).toContain("No results");
+    expect(container?.textContent).toContain("没有结果");
   });
 
   it("renders errors and retries the current search", async () => {
@@ -133,7 +133,7 @@ describe("ProjectSearch", () => {
     expect(searchFn).toHaveBeenCalledTimes(1);
 
     act(() => {
-      requiredButton("Retry").click();
+      requiredButton("重试").click();
     });
     await advanceSearch();
 

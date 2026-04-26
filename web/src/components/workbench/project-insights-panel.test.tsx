@@ -34,7 +34,7 @@ describe("ProjectInsightsPanel", () => {
 
     renderProjectInsightsPanel({ fetchFn });
 
-    expect(container?.textContent).toContain("Loading insights");
+    expect(container?.textContent).toContain("正在加载洞察");
     expect(fetchFn).toHaveBeenCalledWith("project-1", expect.any(AbortSignal));
   });
 
@@ -44,9 +44,9 @@ describe("ProjectInsightsPanel", () => {
     renderProjectInsightsPanel({ fetchFn });
     await flushPromises();
 
-    expect(container?.textContent).toContain("Project insights");
-    expect(container?.textContent).toContain("2 analyzed files");
-    expect(container?.textContent).toContain("1 graph edge");
+    expect(container?.textContent).toContain("项目洞察");
+    expect(container?.textContent).toContain("2 个文件");
+    expect(container?.textContent).toContain("1 条边");
     expect(container?.textContent).toContain("wiki/index.md -> wiki/schema.md");
     expect(container?.textContent).toContain("Broken schema link");
     expect(container?.textContent).toContain("Document the schema owner");
@@ -78,14 +78,14 @@ describe("ProjectInsightsPanel", () => {
     renderProjectInsightsPanel({ fetchFn });
     await flushPromises();
 
-    expect(container?.textContent).toContain("Insights failed");
+    expect(container?.textContent).toContain("洞察加载失败");
     expect(container?.textContent).toContain("Insights service unavailable");
     expect(fetchFn).toHaveBeenCalledTimes(1);
 
-    await clickButton("Retry");
+    await clickButton("重试");
 
     expect(fetchFn).toHaveBeenCalledTimes(2);
-    expect(container?.textContent).toContain("Project insights");
+    expect(container?.textContent).toContain("项目洞察");
   });
 
   it("aborts the prior request and resets loading state when the project changes", async () => {
@@ -99,7 +99,7 @@ describe("ProjectInsightsPanel", () => {
     rerender({ projectId: "project-b", fetchFn });
 
     expect(firstSignal.aborted).toBe(true);
-    expect(container?.textContent).toContain("Loading insights");
+    expect(container?.textContent).toContain("正在加载洞察");
     expect(fetchFn).toHaveBeenLastCalledWith("project-b", expect.any(AbortSignal));
 
     await act(async () => {
@@ -193,11 +193,11 @@ function requiredButton(name: string) {
 
 function openSourceButtons() {
   const buttons = Array.from(container?.querySelectorAll("button") ?? []).filter(
-    (candidate) => candidate.textContent?.trim() === "Open source",
+    (candidate) => candidate.textContent?.trim() === "打开来源",
   );
 
   if (buttons.length < 2) {
-    throw new Error("Expected at least two Open source buttons.");
+    throw new Error("Expected at least two 打开来源 buttons.");
   }
 
   return buttons;

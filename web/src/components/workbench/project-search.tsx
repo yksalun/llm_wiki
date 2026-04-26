@@ -74,9 +74,9 @@ export function ProjectSearch({
     }
 
     const { summary } = response;
-    const totalLabel = summary.totalMatches === 1 ? "1 match" : `${summary.totalMatches} matches`;
-    const scannedLabel = `${summary.scannedFiles} scanned`;
-    const truncatedLabel = summary.truncated ? "truncated" : null;
+    const totalLabel = `${summary.totalMatches} 个匹配`;
+    const scannedLabel = `已扫描 ${summary.scannedFiles} 个文件`;
+    const truncatedLabel = summary.truncated ? "结果已截断" : null;
 
     return [totalLabel, scannedLabel, truncatedLabel].filter(Boolean).join(" / ");
   }, [response]);
@@ -112,43 +112,43 @@ export function ProjectSearch({
   }
 
   return (
-    <section className="space-y-3 rounded-lg border border-black/10 bg-white/60 p-3">
+    <section className="space-y-3 rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)] p-3">
       <div className="flex items-center gap-2">
         <Search className="size-4 text-muted-foreground" aria-hidden="true" />
         <Input
           type="search"
           value={query}
           onChange={(event) => handleQueryChange(event.target.value)}
-          placeholder="Search project files"
-          aria-label="Search project files"
+          placeholder="搜索项目文件"
+          aria-label="搜索项目文件"
         />
       </div>
 
       {status === "idle" ? (
-        <p className="text-sm text-muted-foreground">Search paths and file text.</p>
+        <p className="text-sm text-muted-foreground">搜索路径和文件内容。</p>
       ) : null}
 
       {status === "short" ? (
-        <Alert className="border-amber-900/15 bg-amber-700/5 text-amber-950">
+        <Alert className="border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] text-[color:var(--ink-strong)]">
           <FileSearch className="size-4" />
-          <AlertTitle>Type at least 2 characters</AlertTitle>
-          <AlertDescription>Shorter queries stay local.</AlertDescription>
+          <AlertTitle>请输入至少 2 个字符</AlertTitle>
+          <AlertDescription>更短的查询会留在本地。</AlertDescription>
         </Alert>
       ) : null}
 
       {status === "loading" ? (
-        <div className="flex items-center gap-2 rounded-lg border border-black/10 bg-white/70 px-3 py-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-          Searching
+          正在搜索
         </div>
       ) : null}
 
       {status === "error" ? (
         <Alert variant="destructive" className="border-destructive/20 bg-destructive/5">
           <FileSearch className="size-4" />
-          <AlertTitle>Search failed</AlertTitle>
+          <AlertTitle>搜索失败</AlertTitle>
           <AlertDescription className="space-y-3">
-            <p>{errorMessage ?? "Search failed."}</p>
+            <p>{errorMessage ?? "搜索失败"}</p>
             <Button
               type="button"
               size="sm"
@@ -159,7 +159,7 @@ export function ProjectSearch({
               }}
             >
               <RotateCcw className="size-4" />
-              Retry
+              重试
             </Button>
           </AlertDescription>
         </Alert>
@@ -169,8 +169,8 @@ export function ProjectSearch({
         <div className="space-y-3">
           {summaryText ? <p className="text-xs text-muted-foreground">{summaryText}</p> : null}
           {results.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-black/10 bg-white/55 px-3 py-4 text-sm text-muted-foreground">
-              No results
+            <div className="rounded-lg border border-dashed border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-4 text-sm text-muted-foreground">
+              没有结果
             </div>
           ) : (
             <ul className="space-y-2">
@@ -197,13 +197,13 @@ function SearchResultItem({
   onOpenFile: (relativePath: string) => void;
 }) {
   return (
-    <li className="rounded-lg border border-black/10 bg-white/75 p-3">
+    <li className="rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <p className="truncate text-sm font-medium text-[color:var(--ink-strong)]">
             {result.relativePath}
           </p>
-          <p className="text-xs text-muted-foreground">Line {result.lineNumber}</p>
+          <p className="text-xs text-muted-foreground">第 {result.lineNumber} 行</p>
         </div>
         <Button
           type="button"
@@ -211,7 +211,7 @@ function SearchResultItem({
           variant="outline"
           onClick={() => onOpenFile(result.relativePath)}
         >
-          Open result
+          打开结果
         </Button>
       </div>
       <p className="mt-2 line-clamp-3 text-sm leading-6 text-muted-foreground">
@@ -230,5 +230,5 @@ function getErrorMessage(error: unknown) {
     return error.message;
   }
 
-  return "Search failed.";
+  return "搜索失败";
 }

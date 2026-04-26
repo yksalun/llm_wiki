@@ -87,25 +87,25 @@ function ProjectInsightsPanelSession({
   }, [response]);
 
   return (
-    <section className="space-y-3 rounded-lg border border-black/10 bg-white/60 p-3">
+    <section className="space-y-3 rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)] p-3">
       <div className="flex items-center gap-2">
         <Lightbulb className="size-4 text-muted-foreground" aria-hidden="true" />
-        <h2 className="text-sm font-medium text-[color:var(--ink-strong)]">Project insights</h2>
+        <h2 className="text-sm font-medium text-[color:var(--ink-strong)]">项目洞察</h2>
       </div>
 
       {status === "loading" ? (
-        <div className="flex items-center gap-2 rounded-lg border border-black/10 bg-white/70 px-3 py-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-          Loading insights
+          正在加载洞察
         </div>
       ) : null}
 
       {status === "error" ? (
         <Alert variant="destructive" className="border-destructive/20 bg-destructive/5">
           <Lightbulb className="size-4" />
-          <AlertTitle>Insights failed</AlertTitle>
+          <AlertTitle>洞察加载失败</AlertTitle>
           <AlertDescription className="space-y-3">
-            <p>{errorMessage ?? "Insights failed."}</p>
+            <p>{errorMessage ?? "洞察加载失败"}</p>
             <Button
               type="button"
               size="sm"
@@ -113,7 +113,7 @@ function ProjectInsightsPanelSession({
               onClick={onRetry}
             >
               <RotateCcw className="size-4" />
-              Retry
+              重试
             </Button>
           </AlertDescription>
         </Alert>
@@ -123,9 +123,9 @@ function ProjectInsightsPanelSession({
         <div className="space-y-3">
           <SummaryGrid response={response} />
 
-          <InsightGroup title="Graph edges">
+          <InsightGroup title="关系图边">
             {response.graph.edges.length === 0 ? (
-              <EmptyState>No graph edges</EmptyState>
+              <EmptyState>没有关系图边</EmptyState>
             ) : (
               <ul className="space-y-2">
                 {response.graph.edges.map((edge) => (
@@ -135,9 +135,9 @@ function ProjectInsightsPanelSession({
             )}
           </InsightGroup>
 
-          <InsightGroup title="Findings">
+          <InsightGroup title="发现">
             {response.findings.length === 0 ? (
-              <EmptyState>No findings</EmptyState>
+              <EmptyState>没有发现</EmptyState>
             ) : (
               <ul className="space-y-2">
                 {response.findings.map((finding) => (
@@ -147,9 +147,9 @@ function ProjectInsightsPanelSession({
             )}
           </InsightGroup>
 
-          <InsightGroup title="Research prompts">
+          <InsightGroup title="研究问题">
             {response.researchPrompts.length === 0 ? (
-              <EmptyState>No research prompts</EmptyState>
+              <EmptyState>没有研究问题</EmptyState>
             ) : (
               <ul className="space-y-2">
                 {response.researchPrompts.map((prompt) => (
@@ -173,22 +173,19 @@ function SummaryGrid({ response }: { response: ProjectInsightsResponse }) {
 
   return (
     <dl className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
-      <SummaryItem label="Analyzed" value={formatCount(summary.analyzedFiles, "analyzed file")} />
-      <SummaryItem label="Markdown" value={formatCount(summary.markdownFiles, "markdown file")} />
-      <SummaryItem label="Nodes" value={formatCount(summary.graphNodes, "graph node")} />
-      <SummaryItem label="Edges" value={formatCount(summary.graphEdges, "graph edge")} />
-      <SummaryItem label="Findings" value={formatCount(summary.findings, "finding")} />
-      <SummaryItem
-        label="Prompts"
-        value={formatCount(summary.researchPrompts, "research prompt")}
-      />
+      <SummaryItem label="已分析" value={`${summary.analyzedFiles} 个文件`} />
+      <SummaryItem label="Markdown" value={`${summary.markdownFiles} 个文件`} />
+      <SummaryItem label="节点" value={`${summary.graphNodes} 个节点`} />
+      <SummaryItem label="边" value={`${summary.graphEdges} 条边`} />
+      <SummaryItem label="发现" value={`${summary.findings} 条发现`} />
+      <SummaryItem label="问题" value={`${summary.researchPrompts} 个问题`} />
     </dl>
   );
 }
 
 function SummaryItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-black/10 bg-white/70 px-3 py-2">
+    <div className="rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2">
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="mt-1 font-medium text-[color:var(--ink-strong)]">{value}</dd>
     </div>
@@ -217,7 +214,7 @@ function GraphEdgeItem({
   const targetPath = nodePaths.get(edge.targetId) ?? stripFileSourceId(edge.targetId);
 
   return (
-    <li className="rounded-lg border border-black/10 bg-white/75 p-3">
+    <li className="rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-3">
       <div className="flex items-start gap-2">
         <GitBranch className="mt-0.5 size-4 text-muted-foreground" aria-hidden="true" />
         <div className="min-w-0 space-y-1">
@@ -225,7 +222,7 @@ function GraphEdgeItem({
             {sourcePath} -&gt; {targetPath}
           </p>
           <p className="text-xs text-muted-foreground">
-            {edge.label} / Line {edge.sourceLineNumber}
+            {edge.label} / 第 {edge.sourceLineNumber} 行
           </p>
         </div>
       </div>
@@ -241,7 +238,7 @@ function FindingItem({
   onOpenFile: (relativePath: string) => void;
 }) {
   return (
-    <li className="rounded-lg border border-black/10 bg-white/75 p-3">
+    <li className="rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <p className="text-sm font-medium text-[color:var(--ink-strong)]">{finding.title}</p>
@@ -255,7 +252,7 @@ function FindingItem({
             onClick={() => onOpenFile(finding.relativePath as string)}
           >
             <ExternalLink className="size-4" />
-            Open source
+            打开来源
           </Button>
         ) : null}
       </div>
@@ -263,7 +260,7 @@ function FindingItem({
       {finding.relativePath ? (
         <p className="mt-2 text-xs text-muted-foreground">
           {finding.relativePath}
-          {finding.lineNumber ? ` / Line ${finding.lineNumber}` : null}
+          {finding.lineNumber ? ` / 第 ${finding.lineNumber} 行` : null}
         </p>
       ) : null}
     </li>
@@ -280,7 +277,7 @@ function ResearchPromptItem({
   const fileSources = prompt.sourceIds.map(parseFileSourceId).filter((path) => path !== null);
 
   return (
-    <li className="rounded-lg border border-black/10 bg-white/75 p-3">
+    <li className="rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <p className="text-sm font-medium text-[color:var(--ink-strong)]">{prompt.title}</p>
@@ -294,7 +291,7 @@ function ResearchPromptItem({
             onClick={() => onOpenFile(fileSources[0])}
           >
             <ExternalLink className="size-4" />
-            Open source
+            打开来源
           </Button>
         ) : null}
       </div>
@@ -305,7 +302,7 @@ function ResearchPromptItem({
 
 function EmptyState({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-dashed border-black/10 bg-white/55 px-3 py-4 text-sm text-muted-foreground">
+    <div className="rounded-lg border border-dashed border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-4 text-sm text-muted-foreground">
       {children}
     </div>
   );
@@ -319,10 +316,6 @@ function stripFileSourceId(sourceId: string) {
   return parseFileSourceId(sourceId) ?? sourceId;
 }
 
-function formatCount(count: number, singular: string) {
-  return `${count} ${count === 1 ? singular : `${singular}s`}`;
-}
-
 function isAbortError(error: unknown) {
   return error instanceof DOMException && error.name === "AbortError";
 }
@@ -332,5 +325,5 @@ function getErrorMessage(error: unknown) {
     return error.message;
   }
 
-  return "Insights failed.";
+  return "洞察加载失败";
 }

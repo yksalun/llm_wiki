@@ -120,24 +120,24 @@ function ProjectQuestionPanelSession({
   }
 
   return (
-    <section className="space-y-3 rounded-lg border border-black/10 bg-white/60 p-3">
+    <section className="space-y-3 rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)] p-3">
       <div className="flex items-center gap-2">
         <MessageSquare className="size-4 text-muted-foreground" aria-hidden="true" />
-        <h2 className="text-sm font-medium text-[color:var(--ink-strong)]">Ask project</h2>
+        <h2 className="text-sm font-medium text-[color:var(--ink-strong)]">项目问答</h2>
       </div>
 
       <form className="space-y-2" onSubmit={handleSubmit}>
         <Textarea
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
-          placeholder="Ask a question about this project"
-          aria-label="Ask project question"
-          className="min-h-20 resize-none bg-white/70"
+          placeholder="询问这个项目"
+          aria-label="询问项目问题"
+          className="min-h-20 resize-none bg-[color:var(--paper-muted)]"
           disabled={status === "loading"}
         />
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
-            {status === "loading" ? "Asking project..." : "Answers use project sources."}
+            {status === "loading" ? "正在询问项目..." : "回答会使用项目来源。"}
           </p>
           <Button type="submit" size="sm" disabled={!canAsk}>
             {status === "loading" ? (
@@ -145,27 +145,27 @@ function ProjectQuestionPanelSession({
             ) : (
               <MessageSquare className="size-4" aria-hidden="true" />
             )}
-            Ask
+            提问
           </Button>
         </div>
       </form>
 
       {status === "loading" ? (
-        <div className="flex items-center gap-2 rounded-lg border border-black/10 bg-white/70 px-3 py-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-          Asking project
+          正在询问项目
         </div>
       ) : null}
 
       {status === "error" ? (
         <Alert variant="destructive" className="border-destructive/20 bg-destructive/5">
           <MessageSquare className="size-4" />
-          <AlertTitle>Question failed</AlertTitle>
+          <AlertTitle>提问失败</AlertTitle>
           <AlertDescription className="space-y-3">
-            <p>{errorMessage ?? "Question failed."}</p>
+            <p>{errorMessage ?? "提问失败"}</p>
             <Button type="button" size="sm" variant="outline" onClick={handleRetry}>
               <RotateCcw className="size-4" />
-              Retry
+              重试
             </Button>
           </AlertDescription>
         </Alert>
@@ -173,7 +173,7 @@ function ProjectQuestionPanelSession({
 
       {status === "ready" && lastResponse ? (
         <div className="space-y-3">
-          <div className="rounded-lg border border-black/10 bg-white/75 p-3">
+          <div className="rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-3">
             <p className="whitespace-pre-wrap text-sm leading-6 text-[color:var(--ink-strong)]">
               {lastResponse.answer}
             </p>
@@ -200,13 +200,13 @@ function SourceItem({
   onOpenFile: (relativePath: string) => void;
 }) {
   return (
-    <li className="rounded-lg border border-black/10 bg-white/75 p-3">
+    <li className="rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <p className="truncate text-sm font-medium text-[color:var(--ink-strong)]">
             {source.relativePath}
           </p>
-          <p className="text-xs text-muted-foreground">Line {source.lineNumber}</p>
+          <p className="text-xs text-muted-foreground">第 {source.lineNumber} 行</p>
         </div>
         <Button
           type="button"
@@ -215,7 +215,7 @@ function SourceItem({
           onClick={() => onOpenFile(source.relativePath)}
         >
           <ExternalLink className="size-4" />
-          Open source
+          打开来源
         </Button>
       </div>
       <p className="mt-2 line-clamp-3 text-sm leading-6 text-muted-foreground">
@@ -234,5 +234,5 @@ function getErrorMessage(error: unknown) {
     return error.message;
   }
 
-  return "Question failed.";
+  return "提问失败";
 }

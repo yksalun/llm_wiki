@@ -33,7 +33,7 @@ describe("ProjectQuestionPanel", () => {
 
     updateQuestion(" a ");
 
-    expect(requiredButton("Ask").disabled).toBe(true);
+    expect(requiredButton("提问").disabled).toBe(true);
   });
 
   it("submits a project question with history and an abort signal", async () => {
@@ -42,7 +42,7 @@ describe("ProjectQuestionPanel", () => {
     renderProjectQuestionPanel({ projectId: "project/a", askFn });
     updateQuestion("Where is the schema?");
 
-    await clickButton("Ask");
+    await clickButton("提问");
 
     expect(askFn).toHaveBeenCalledWith(
       "project/a",
@@ -69,11 +69,11 @@ describe("ProjectQuestionPanel", () => {
     renderProjectQuestionPanel({ askFn });
     updateQuestion("Where is the schema?");
 
-    await clickButton("Ask");
+    await clickButton("提问");
 
     expect(container?.textContent).toContain("The schema is documented in the wiki.");
     expect(container?.textContent).toContain("wiki/schema.md");
-    expect(container?.textContent).toContain("Line 1");
+    expect(container?.textContent).toContain("第 1 行");
     expect(container?.textContent).toContain("Schema overview");
   });
 
@@ -94,9 +94,9 @@ describe("ProjectQuestionPanel", () => {
 
     renderProjectQuestionPanel({ onOpenFile, askFn });
     updateQuestion("Where is the schema?");
-    await clickButton("Ask");
+    await clickButton("提问");
 
-    await clickButton("Open source");
+    await clickButton("打开来源");
 
     expect(onOpenFile).toHaveBeenCalledWith("wiki/schema.md");
     expect(onOpenFile).toHaveBeenCalledTimes(1);
@@ -111,12 +111,12 @@ describe("ProjectQuestionPanel", () => {
     renderProjectQuestionPanel({ askFn });
     updateQuestion("Where is the schema?");
 
-    await clickButton("Ask");
+    await clickButton("提问");
 
     expect(container?.textContent).toContain("Question service unavailable");
-    expect(container?.textContent).toContain("Retry");
+    expect(container?.textContent).toContain("重试");
 
-    await clickButton("Retry");
+    await clickButton("重试");
 
     expect(askFn).toHaveBeenCalledTimes(2);
     expect(askFn).toHaveBeenLastCalledWith(
@@ -147,16 +147,16 @@ describe("ProjectQuestionPanel", () => {
 
     renderProjectQuestionPanel({ askFn });
     updateQuestion("Where is the schema?");
-    await clickButton("Ask");
+    await clickButton("提问");
 
     expect(container?.textContent).toContain("The schema is in wiki/schema.md.");
     expect(container?.textContent).toContain("wiki/schema.md");
 
     updateQuestion("What owns it?");
-    await clickButton("Ask");
+    await clickButton("提问");
 
     expect(container?.textContent).toContain("Question service unavailable");
-    expect(container?.textContent).toContain("Retry");
+    expect(container?.textContent).toContain("重试");
     expect(container?.textContent).not.toContain("The schema is in wiki/schema.md.");
     expect(container?.textContent).not.toContain("wiki/schema.md");
   });
@@ -167,7 +167,7 @@ describe("ProjectQuestionPanel", () => {
     const { rerender } = renderProjectQuestionPanel({ projectId: "project-a", askFn });
 
     updateQuestion("Where is the schema?");
-    await clickButton("Ask");
+    await clickButton("提问");
 
     const firstSignal = askFn.mock.calls[0]?.[2] as AbortSignal;
 
@@ -175,9 +175,9 @@ describe("ProjectQuestionPanel", () => {
 
     expect(firstSignal.aborted).toBe(true);
     expect(questionTextarea().value).toBe("");
-    expect(container?.textContent).not.toContain("Asking project");
-    expect(container?.textContent).not.toContain("Question failed");
-    expect(container?.textContent).not.toContain("Retry");
+    expect(container?.textContent).not.toContain("正在询问项目");
+    expect(container?.textContent).not.toContain("提问失败");
+    expect(container?.textContent).not.toContain("重试");
 
     await act(async () => {
       deferred.resolve(
@@ -218,10 +218,10 @@ describe("ProjectQuestionPanel", () => {
 
     renderProjectQuestionPanel({ askFn });
     updateQuestion("Where is the schema?");
-    await clickButton("Ask");
+    await clickButton("提问");
 
     updateQuestion("What owns it?");
-    await clickButton("Ask");
+    await clickButton("提问");
 
     expect(askFn).toHaveBeenLastCalledWith(
       "project-1",
