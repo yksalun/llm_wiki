@@ -254,7 +254,7 @@ export function FilePanel({
   );
 }
 
-function DraftGuardAlert({ prompt }: { prompt: DraftGuardPrompt }) {
+export function DraftGuardAlert({ prompt }: { prompt: DraftGuardPrompt }) {
   return (
     <Alert className="border-amber-900/15 bg-amber-700/5 text-amber-950">
       <AlertCircle className="size-4" />

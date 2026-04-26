@@ -6,6 +6,7 @@ import { AlertTriangle, Boxes, RefreshCcw } from "lucide-react";
 
 import { AppShell } from "@/components/app/app-shell";
 import {
+  DraftGuardAlert,
   FilePanel,
   type DraftGuardPrompt,
   type FilePanelNotice,
@@ -650,6 +651,8 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
             </TabsList>
           </Tabs>
 
+          {draftGuardPrompt ? <DraftGuardAlert prompt={draftGuardPrompt} /> : null}
+
           <ProjectSearch
             projectId={projectId}
             onOpenFile={(relativePath) => {
@@ -716,7 +719,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
                   lastSaveStatus={lastSaveStatus}
                   lastSavedAt={lastSavedAt}
                   conflict={conflict}
-                  draftGuardPrompt={draftGuardPrompt}
+                  draftGuardPrompt={null}
                   notice={panelNotice}
                   onDraftChange={handleDraftChange}
                   onSave={() => {
