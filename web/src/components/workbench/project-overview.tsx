@@ -16,6 +16,7 @@ import {
   isMetadataFileExtension,
   isPreviewFileExtension,
 } from "@/lib/file-view-policy";
+import { formatProjectStatusLabel } from "@/lib/display-labels";
 import type { FileTreeNode, ProjectDetail, WorkbenchSection } from "@/lib/types";
 
 interface ProjectOverviewProps {
@@ -38,54 +39,54 @@ export function ProjectOverview({
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-      <Card className="border-[color:var(--paper-border)] bg-[linear-gradient(180deg,rgba(255,252,246,0.94),rgba(246,240,232,0.88))] shadow-[0_18px_56px_rgba(61,52,40,0.08)]">
-        <CardHeader className="border-b border-black/5">
-          <CardTitle>Workbench overview</CardTitle>
+      <Card className="border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/92 shadow-[0_18px_56px_rgba(61,52,40,0.08)]">
+        <CardHeader className="border-b border-[color:var(--paper-border)]">
+          <CardTitle>工作台概览</CardTitle>
           <CardDescription>
-            Open the editorial files directly, or move into the full file browser.
+            直接打开核心编辑文件，或进入完整文件浏览器。
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 pt-4 md:grid-cols-2">
           <ActionCard
             icon={BookOpenText}
-            title="Purpose dossier"
+            title="目标档案"
             description={
               project.hasPurpose
-                ? "Open purpose.md directly in the editor."
-                : "No purpose.md file is available yet."
+                ? "直接在编辑器中打开 purpose.md。"
+                : "缺少目标文件。"
             }
-            actionLabel={project.hasPurpose ? "Open purpose.md" : "Purpose missing"}
+            actionLabel={project.hasPurpose ? "打开 purpose.md" : "缺少目标文件"}
             disabled={!project.hasPurpose}
             onClick={() => onChangeSection("Purpose")}
           />
           <ActionCard
             icon={LayoutPanelTop}
-            title="Schema map"
+            title="结构地图"
             description={
               project.hasSchema
-                ? "Open schema.md directly in the editor."
-                : "No schema.md file is available yet."
+                ? "直接在编辑器中打开 schema.md。"
+                : "缺少结构文件。"
             }
-            actionLabel={project.hasSchema ? "Open schema.md" : "Schema missing"}
+            actionLabel={project.hasSchema ? "打开 schema.md" : "缺少结构文件"}
             disabled={!project.hasSchema}
             onClick={() => onChangeSection("Schema")}
           />
           <ActionCard
             icon={FolderArchive}
-            title="Full file browser"
-            description="Browse the whole project tree from the Files section."
-            actionLabel="Open file browser"
+            title="完整文件浏览器"
+            description="从文件区浏览整个项目树。"
+            actionLabel="打开文件浏览器"
             onClick={() => onChangeSection("Files")}
           />
           <ActionCard
             icon={FileSearch}
-            title="Wiki directory"
+            title="知识库目录"
             description={
               preferredWikiMarkdownPath
-                ? "Open the first wiki reading file directly from the project tree."
-                : "No wiki markdown file is available yet."
+                ? "直接从项目树打开第一个知识库阅读文件。"
+                : "缺少知识库 Markdown 文件。"
             }
-            actionLabel="Start with wiki"
+            actionLabel="从知识库开始"
             disabled={!preferredWikiMarkdownPath}
             onClick={() => {
               if (preferredWikiMarkdownPath) {
@@ -97,21 +98,21 @@ export function ProjectOverview({
       </Card>
 
       <Card className="border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/92 shadow-[0_16px_48px_rgba(61,52,40,0.08)]">
-        <CardHeader className="border-b border-black/5">
+        <CardHeader className="border-b border-[color:var(--paper-border)]">
           <CardTitle className="text-sm uppercase tracking-[0.18em] text-[color:var(--ink-soft)]">
-            Project Snapshot
+            项目快照
           </CardTitle>
-          <CardDescription>Quick structural context for this dossier.</CardDescription>
+          <CardDescription>这个档案的快速结构上下文。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 pt-4">
-          <Metric label="Status" value={project.status} />
-          <Metric label="Sections" value={String(project.sections.length)} />
-          <Metric label="Files in tree" value={String(fileCount)} />
-          <Metric label="Directories" value={String(directoryCount)} />
-          <Metric label="Markdown files" value={String(readingStats.markdownFiles)} />
-          <Metric label="Preview files" value={String(readingStats.previewFiles)} />
-          <Metric label="Metadata files" value={String(readingStats.metadataFiles)} />
-          <Metric label="Project ID" value={project.id} mono />
+          <Metric label="状态" value={formatProjectStatusLabel(project.status)} />
+          <Metric label="工作区" value={String(project.sections.length)} />
+          <Metric label="文件数" value={String(fileCount)} />
+          <Metric label="目录数" value={String(directoryCount)} />
+          <Metric label="Markdown 文件" value={String(readingStats.markdownFiles)} />
+          <Metric label="预览文件" value={String(readingStats.previewFiles)} />
+          <Metric label="元数据文件" value={String(readingStats.metadataFiles)} />
+          <Metric label="项目 ID" value={project.id} mono />
         </CardContent>
       </Card>
     </div>
@@ -134,9 +135,9 @@ function ActionCard({
   onClick: () => void;
 }) {
   return (
-    <div className="rounded-[24px] border border-black/8 bg-white/60 p-4">
+    <div className="rounded-[24px] border border-[color:var(--paper-border)] bg-[color:var(--paper-elevated)]/70 p-4">
       <div className="flex items-start gap-3">
-        <div className="rounded-full border border-black/8 bg-[color:var(--paper-accent)]/20 p-2 text-[color:var(--ink-soft)]">
+        <div className="rounded-full border border-[color:var(--paper-border)] bg-[color:var(--paper-accent)]/20 p-2 text-[color:var(--ink-soft)]">
           <Icon className="size-4" />
         </div>
         <div className="min-w-0">

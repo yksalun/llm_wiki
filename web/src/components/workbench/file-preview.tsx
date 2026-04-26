@@ -19,8 +19,8 @@ export function FilePreview({ file }: { file: FileReadResult }) {
     return (
       <MetadataNotice
         icon={<Info className="size-4" />}
-        title="Metadata only"
-        description="This file is available as metadata because its contents are not shown in the workbench preview."
+        title="仅显示元数据"
+        description="这个文件以元数据形式提供，因为工作台预览不会显示它的内容。"
         metadata={file.metadata}
       />
     );
@@ -29,8 +29,8 @@ export function FilePreview({ file }: { file: FileReadResult }) {
   return (
     <MetadataNotice
       icon={<OctagonAlert className="size-4" />}
-      title="Unsupported preview"
-      description="This file type cannot be previewed in the workbench."
+      title="无法预览"
+      description="工作台无法预览这个文件类型。"
       metadata={file.metadata}
     />
   );
@@ -44,21 +44,21 @@ function TextPreview({ file }: { file: FileReadResult }) {
     <section className="space-y-3">
       <div className="flex items-center gap-2 text-sm font-medium text-[color:var(--ink-strong)]">
         <FileText className="size-4 text-muted-foreground" />
-        <span>Read-only preview</span>
+        <span>只读预览</span>
       </div>
 
       {content.length > 0 ? (
         <pre
           className={[
-            "overflow-x-auto whitespace-pre-wrap rounded-lg border border-black/10 bg-white/70 p-4 text-sm leading-6 text-[color:var(--ink-strong)]",
+            "overflow-x-auto whitespace-pre-wrap rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-elevated)]/70 p-4 text-sm leading-6 text-[color:var(--ink-strong)]",
             isStructuredText ? "font-mono" : "font-sans",
           ].join(" ")}
         >
           {content}
         </pre>
       ) : (
-        <div className="rounded-lg border border-dashed border-black/10 bg-white/60 p-4 text-sm text-muted-foreground">
-          This file is empty.
+        <div className="rounded-lg border border-dashed border-[color:var(--paper-border)] bg-[color:var(--paper-elevated)]/60 p-4 text-sm text-muted-foreground">
+          这个文件为空。
         </div>
       )}
     </section>

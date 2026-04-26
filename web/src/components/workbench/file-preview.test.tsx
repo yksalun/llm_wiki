@@ -19,12 +19,12 @@ function createFile(overrides: Partial<FileReadResult>): FileReadResult {
 }
 
 describe("FilePreview", () => {
-  it("renders read-only text preview content lines", () => {
+  it("renders localized read-only text preview content lines", () => {
     const html = renderToStaticMarkup(
       <FilePreview file={createFile({ content: "first line\nsecond line" })} />,
     );
 
-    expect(html).toContain("Read-only preview");
+    expect(html).toContain("只读预览");
     expect(html).toContain("first line");
     expect(html).toContain("second line");
   });
@@ -41,7 +41,7 @@ describe("FilePreview", () => {
   it("renders an empty state for empty preview content", () => {
     const html = renderToStaticMarkup(<FilePreview file={createFile({ content: "" })} />);
 
-    expect(html).toContain("This file is empty.");
+    expect(html).toContain("这个文件为空。");
   });
 
   it("uses monospace styling for structured text previews", () => {
@@ -57,7 +57,7 @@ describe("FilePreview", () => {
     const html = renderToStaticMarkup(<FilePreview file={createFile({ content: "   \n\t" })} />);
 
     expect(html).toContain("<pre");
-    expect(html).not.toContain("This file is empty.");
+    expect(html).not.toContain("这个文件为空。");
   });
 
   it("renders metadata-only details", () => {
@@ -74,7 +74,7 @@ describe("FilePreview", () => {
       />,
     );
 
-    expect(html).toContain("Metadata only");
+    expect(html).toContain("仅显示元数据");
     expect(html).toContain("File is too large for preview");
     expect(html).toContain(".bin");
   });
@@ -93,7 +93,7 @@ describe("FilePreview", () => {
       />,
     );
 
-    expect(html).toContain("Unsupported preview");
+    expect(html).toContain("无法预览");
     expect(html).toContain("Binary files are not supported");
   });
 });

@@ -80,18 +80,18 @@ describe("ProjectOverview", () => {
     vi.clearAllMocks();
   });
 
-  it("renders reading structure metrics and a wiki entry point", () => {
+  it("renders localized reading structure metrics and a wiki entry point", () => {
     const html = renderToStaticMarkup(
       <ProjectOverview project={project} tree={tree} onChangeSection={() => undefined} />,
     );
 
-    expect(html).toContain("Markdown files");
-    expect(html).toContain("Preview files");
-    expect(html).toContain("Metadata files");
-    expect(html).toContain("Start with wiki");
-    expectMetric(html, "Markdown files", "1");
-    expectMetric(html, "Preview files", "1");
-    expectMetric(html, "Metadata files", "1");
+    expect(html).toContain("Markdown 文件");
+    expect(html).toContain("预览文件");
+    expect(html).toContain("元数据文件");
+    expect(html).toContain("从知识库开始");
+    expectMetric(html, "Markdown 文件", "1");
+    expectMetric(html, "预览文件", "1");
+    expectMetric(html, "元数据文件", "1");
   });
 
   it("opens wiki/index.md when starting with wiki and index exists", () => {
@@ -154,7 +154,7 @@ describe("ProjectOverview", () => {
 
   function startWithWikiButton(): HTMLButtonElement {
     const button = Array.from(container?.querySelectorAll("button") ?? []).find(
-      (candidate) => candidate.textContent === "Start with wiki",
+      (candidate) => candidate.textContent === "从知识库开始",
     );
 
     if (!(button instanceof HTMLButtonElement)) {
