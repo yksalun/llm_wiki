@@ -47,7 +47,7 @@ function TextPreview({ file }: { file: FileReadResult }) {
         <span>Read-only preview</span>
       </div>
 
-      {content.trim() ? (
+      {content.length > 0 ? (
         <pre
           className={[
             "overflow-x-auto whitespace-pre-wrap rounded-lg border border-black/10 bg-white/70 p-4 text-sm leading-6 text-[color:var(--ink-strong)]",

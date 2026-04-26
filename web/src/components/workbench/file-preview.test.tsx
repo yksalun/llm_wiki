@@ -29,6 +29,37 @@ describe("FilePreview", () => {
     expect(html).toContain("second line");
   });
 
+  it("delegates markdown preview content to MarkdownReader", () => {
+    const html = renderToStaticMarkup(
+      <FilePreview file={createFile({ relativePath: "README.md", content: "# Title" })} />,
+    );
+
+    expect(html).toContain("<h1");
+    expect(html).toContain("Title");
+  });
+
+  it("renders an empty state for empty preview content", () => {
+    const html = renderToStaticMarkup(<FilePreview file={createFile({ content: "" })} />);
+
+    expect(html).toContain("This file is empty.");
+  });
+
+  it("uses monospace styling for structured text previews", () => {
+    const html = renderToStaticMarkup(
+      <FilePreview file={createFile({ relativePath: "config.json", content: '{ "enabled": true }' })} />,
+    );
+
+    expect(html).toContain("font-mono");
+    expect(html).toContain("&quot;enabled&quot;");
+  });
+
+  it("preserves whitespace-only text preview content", () => {
+    const html = renderToStaticMarkup(<FilePreview file={createFile({ content: "   \n\t" })} />);
+
+    expect(html).toContain("<pre");
+    expect(html).not.toContain("This file is empty.");
+  });
+
   it("renders metadata-only details", () => {
     const html = renderToStaticMarkup(
       <FilePreview
