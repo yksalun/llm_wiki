@@ -12,49 +12,49 @@
 
 ## 文件结构
 
-- Modify: `web/src/lib/types.ts`  
+- Modify: `web/src/lib/types.ts`
   新增重任务 runtime/execution 类型，`ProjectDetail.runtime`，`ProjectSearchResponse.execution?`，`ProjectInsightsResponse.execution?`。
-- Create: `web/src/lib/server/heavy-task-runtime.ts`  
+- Create: `web/src/lib/server/heavy-task-runtime.ts`
   返回 Node runtime capabilities，生成执行元数据。
-- Create: `web/src/lib/server/__tests__/heavy-task-runtime.test.ts`  
+- Create: `web/src/lib/server/__tests__/heavy-task-runtime.test.ts`
   覆盖默认 runtime、task metadata、duration 非负。
-- Create: `web/src/lib/server/project-text-scan.ts`  
+- Create: `web/src/lib/server/project-text-scan.ts`
   共享项目文本扫描 async generator。
-- Create: `web/src/lib/server/__tests__/project-text-scan.test.ts`  
+- Create: `web/src/lib/server/__tests__/project-text-scan.test.ts`
   覆盖扩展名过滤、`.llm-wiki`、超大文件、无效 UTF-8、有界读取关闭句柄。
-- Modify: `web/src/lib/server/project-registry.ts`  
+- Modify: `web/src/lib/server/project-registry.ts`
   `ResolvedProject` 增加 runtime。
-- Modify: `web/src/app/api/projects/[projectId]/route.ts`  
+- Modify: `web/src/app/api/projects/[projectId]/route.ts`
   project detail 响应返回 runtime。
-- Modify: `web/src/app/api/projects/__tests__/route.test.ts`  
+- Modify: `web/src/app/api/projects/__tests__/route.test.ts`
   断言 detail runtime。
-- Modify: `web/src/components/workbench/project-workbench.tsx`  
+- Modify: `web/src/components/workbench/project-workbench.tsx`
   Project Info 展示重任务 runtime。
-- Modify: `web/src/components/workbench/project-workbench.test.tsx`  
+- Modify: `web/src/components/workbench/project-workbench.test.tsx`
   更新 fixtures，覆盖 runtime 展示。
-- Modify: `web/src/components/workbench/project-overview.test.tsx`  
+- Modify: `web/src/components/workbench/project-overview.test.tsx`
   更新 `ProjectDetail` fixture。
-- Modify: `web/src/lib/server/project-search.ts`  
+- Modify: `web/src/lib/server/project-search.ts`
   复用扫描层并新增 `searchProjectFilesForQueries()`。
-- Modify: `web/src/lib/server/__tests__/project-search.test.ts`  
+- Modify: `web/src/lib/server/__tests__/project-search.test.ts`
   覆盖多 query 单次扫描和无效 query。
-- Modify: `web/src/lib/server/project-question-answer.ts`  
+- Modify: `web/src/lib/server/project-question-answer.ts`
   改用多 query 搜索。
-- Modify: `web/src/lib/server/__tests__/project-question-answer.test.ts`  
+- Modify: `web/src/lib/server/__tests__/project-question-answer.test.ts`
   覆盖问答只调用一次多 query 检索。
-- Modify: `web/src/lib/server/project-insights.ts`  
+- Modify: `web/src/lib/server/project-insights.ts`
   复用扫描层。
-- Modify: `web/src/lib/server/__tests__/project-insights.test.ts`  
+- Modify: `web/src/lib/server/__tests__/project-insights.test.ts`
   保持 skip target 不误报，并覆盖扫描层复用后的行为。
-- Modify: `web/src/app/api/projects/[projectId]/search/route.ts`  
+- Modify: `web/src/app/api/projects/[projectId]/search/route.ts`
   附加 search execution metadata。
-- Modify: `web/src/app/api/projects/[projectId]/search/__tests__/route.test.ts`  
+- Modify: `web/src/app/api/projects/[projectId]/search/__tests__/route.test.ts`
   断言 execution。
-- Modify: `web/src/app/api/projects/[projectId]/insights/route.ts`  
+- Modify: `web/src/app/api/projects/[projectId]/insights/route.ts`
   附加 insights execution metadata。
-- Modify: `web/src/app/api/projects/[projectId]/insights/__tests__/route.test.ts`  
+- Modify: `web/src/app/api/projects/[projectId]/insights/__tests__/route.test.ts`
   断言 execution。
-- Modify: `web/docs/web-roadmap-next-phases.md`  
+- Modify: `web/docs/web-roadmap-next-phases.md`
   阶段完成后标记 Phase 8 前置基线完成。
 
 ---
