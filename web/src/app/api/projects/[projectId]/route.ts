@@ -19,6 +19,7 @@ export async function GET(_request: Request, context: ProjectRouteContext) {
     return okJson({
       id: project.id,
       name: project.name,
+      access: project.access,
       status: project.status,
       hasPurpose: project.hasPurpose,
       hasSchema: project.hasSchema,

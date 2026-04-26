@@ -95,6 +95,11 @@ describe("/api/projects routes", () => {
     const payload = (await response.json()) as {
       id: string;
       name: string;
+      access: {
+        mode: "read-write";
+        canRead: true;
+        canWrite: true;
+      };
       rootPathHint: string | null;
       sections: string[];
     };
@@ -104,6 +109,11 @@ describe("/api/projects routes", () => {
     expect(payload).toMatchObject({
       id: projectId,
       name: "detail-project",
+      access: {
+        mode: "read-write",
+        canRead: true,
+        canWrite: true,
+      },
       rootPathHint: null,
       sections: ["Overview", "Ask", "Insights", "Files", "Purpose", "Schema", "Project Info"],
     });
