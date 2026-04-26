@@ -26,17 +26,31 @@ export function ProjectInsightsPanel({
   onOpenFile,
   fetchFn = fetchProjectInsights,
 }: ProjectInsightsPanelProps) {
+  const [retryKey, setRetryKey] = useState(0);
+
+  return (
+    <ProjectInsightsPanelSession
+      key={`${projectId}:${retryKey}`}
+      projectId={projectId}
+      onOpenFile={onOpenFile}
+      fetchFn={fetchFn}
+      onRetry={() => setRetryKey((key) => key + 1)}
+    />
+  );
+}
+
+function ProjectInsightsPanelSession({
+  projectId,
+  onOpenFile,
+  fetchFn,
+  onRetry,
+}: Required<ProjectInsightsPanelProps> & { onRetry: () => void }) {
   const [response, setResponse] = useState<ProjectInsightsResponse | null>(null);
   const [status, setStatus] = useState<InsightsStatus>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
-
-    setStatus("loading");
-    setResponse(null);
-    setErrorMessage(null);
 
     fetchFn(projectId, controller.signal)
       .then((nextResponse) => {
@@ -60,7 +74,7 @@ export function ProjectInsightsPanel({
     return () => {
       controller.abort();
     };
-  }, [fetchFn, projectId, retryKey]);
+  }, [fetchFn, projectId]);
 
   const nodePaths = useMemo(() => {
     const paths = new Map<string, string>();
@@ -96,10 +110,7 @@ export function ProjectInsightsPanel({
               type="button"
               size="sm"
               variant="outline"
-              onClick={() => {
-                setStatus("loading");
-                setRetryKey((key) => key + 1);
-              }}
+              onClick={onRetry}
             >
               <RotateCcw className="size-4" />
               Retry
