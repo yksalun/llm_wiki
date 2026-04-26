@@ -342,7 +342,7 @@ describe("searchProjectFiles", () => {
   it("searches multiple valid queries from one scan while keeping independent summaries", async () => {
     const projectRoot = await createProject("multi-query-one-scan");
     const yieldedScans: string[] = [];
-    const scanTextFiles = vi.fn((root: string): ProjectTextScanResult => ({
+    const scanTextFiles = vi.fn((): ProjectTextScanResult => ({
       files: scanInjectedFiles([
         { relativePath: "alpha.md", content: "alpha target\nbeta only\n" },
         { relativePath: "beta.md", content: "beta target\nbeta again\n" },
@@ -382,7 +382,7 @@ describe("searchProjectFiles", () => {
 
   it("does not scan for invalid multi-query entries and keeps valid results independent", async () => {
     const projectRoot = await createProject("multi-query-invalid");
-    const scanTextFiles = vi.fn((root: string): ProjectTextScanResult => ({
+    const scanTextFiles = vi.fn((): ProjectTextScanResult => ({
       files: scanInjectedFiles([{ relativePath: "valid.md", content: "target\n" }]),
       stats: { skippedFiles: 0 },
     }));
