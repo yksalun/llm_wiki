@@ -75,6 +75,38 @@ describe("ProjectSearch", () => {
     expect(onOpenFile).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps ready results when only trailing whitespace changes", async () => {
+    vi.useFakeTimers();
+    const searchFn = vi.fn().mockResolvedValue(
+      createSearchResponse({
+        results: [
+          {
+            relativePath: "wiki/index.md",
+            lineNumber: 3,
+            lineText: "Alpha line",
+            preview: "Alpha preview text",
+            matchStart: 0,
+            matchEnd: 5,
+          },
+        ],
+      }),
+    );
+
+    renderProjectSearch({ searchFn });
+    updateSearchInput("alpha");
+    await advanceSearch();
+
+    expect(container?.textContent).toContain("Alpha preview text");
+    expect(searchFn).toHaveBeenCalledTimes(1);
+
+    updateSearchInput("alpha ");
+    await advanceSearch();
+
+    expect(searchFn).toHaveBeenCalledTimes(1);
+    expect(container?.textContent).toContain("Alpha preview text");
+    expect(container?.textContent).not.toContain("Searching");
+  });
+
   it("renders an empty state when a search returns no results", async () => {
     vi.useFakeTimers();
     const searchFn = vi.fn().mockResolvedValue(createSearchResponse({ results: [] }));

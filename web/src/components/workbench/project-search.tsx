@@ -85,6 +85,11 @@ export function ProjectSearch({
     const nextTrimmedQuery = nextQuery.trim();
 
     setQuery(nextQuery);
+
+    if (nextTrimmedQuery === trimmedQuery) {
+      return;
+    }
+
     setRetryKey(0);
 
     if (nextTrimmedQuery.length === 0) {
