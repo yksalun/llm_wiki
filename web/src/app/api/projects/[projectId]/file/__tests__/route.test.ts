@@ -30,6 +30,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   delete process.env.LLM_WIKI_PROJECT_ROOTS;
+  delete process.env.LLM_WIKI_PROJECT_ACCESS_MODE;
   vi.resetModules();
 
   while (cleanupTasks.length > 0) {
@@ -87,6 +88,39 @@ describe("/api/projects/[projectId]/file route", () => {
     });
   });
 
+  it("GET returns editable markdown as read-only preview when project access is read-only", async () => {
+    process.env.LLM_WIKI_PROJECT_ACCESS_MODE = "read-only";
+    const { projectId } = await createProjectContext("read-only-preview");
+
+    const { GET } = await import("../route");
+    const response = await GET(
+      new Request(`http://localhost/api/projects/${projectId}/file?path=purpose.md`),
+      {
+        params: Promise.resolve({ projectId }),
+      },
+    );
+    const payload = (await response.json()) as {
+      relativePath: string;
+      content: string | null;
+      mode: string;
+      editable: boolean;
+      metadata: {
+        accessMode?: string;
+      };
+    };
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      relativePath: "purpose.md",
+      content: "# Purpose\n\nDemo project.\n",
+      mode: "preview",
+      editable: false,
+      metadata: {
+        accessMode: "read-only",
+      },
+    });
+  });
+
   it("PUT writes an allowed file back through the service layer", async () => {
     const { projectId } = await createProjectContext("write-purpose");
 
@@ -136,6 +170,51 @@ describe("/api/projects/[projectId]/file route", () => {
     expect(writePayload.relativePath).toBe("purpose.md");
     expect(writePayload.lastModified).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(verifyPayload.content).toBe("# Purpose\n\nUpdated via route.\n");
+  });
+
+  it("PUT returns 403 and leaves content unchanged when project access is read-only", async () => {
+    process.env.LLM_WIKI_PROJECT_ACCESS_MODE = "read-only";
+    const { fixture, projectId } = await createProjectContext("write-read-only");
+
+    const filePath = path.join(fixture.rootDir, "purpose.md");
+    const originalContent = await fs.readFile(filePath, "utf8");
+
+    const { GET, PUT } = await import("../route");
+    const readResponse = await GET(
+      new Request(`http://localhost/api/projects/${projectId}/file?path=purpose.md`),
+      {
+        params: Promise.resolve({ projectId }),
+      },
+    );
+    const readPayload = (await readResponse.json()) as {
+      lastModified: string | null;
+    };
+
+    const response = await PUT(
+      new Request(`http://localhost/api/projects/${projectId}/file`, {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          relativePath: "purpose.md",
+          content: "# Purpose\n\nShould not be written.\n",
+          lastModified: readPayload.lastModified,
+        }),
+      }),
+      {
+        params: Promise.resolve({ projectId }),
+      },
+    );
+    const payload = (await response.json()) as {
+      error: {
+        code: string;
+      };
+    };
+
+    expect(response.status).toBe(403);
+    expect(payload.error.code).toBe("PROJECT_ACCESS_READ_ONLY");
+    await expect(fs.readFile(filePath, "utf8")).resolves.toBe(originalContent);
   });
 
   it("PUT returns 400 when the request body shape is invalid", async () => {

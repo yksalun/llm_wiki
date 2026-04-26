@@ -29,6 +29,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   delete process.env.LLM_WIKI_PROJECT_ROOTS;
+  delete process.env.LLM_WIKI_PROJECT_ACCESS_MODE;
   vi.resetModules();
 
   while (cleanupTasks.length > 0) {
@@ -118,6 +119,46 @@ describe("/api/projects routes", () => {
       sections: ["Overview", "Ask", "Insights", "Files", "Purpose", "Schema", "Project Info"],
     });
     expect(payload).not.toHaveProperty("rootDir");
+  });
+
+  it("GET /api/projects/[projectId] returns env-derived read-only access", async () => {
+    const fixture = await createFixtureProject("detail-read-only-project");
+    cleanupTasks.push(fixture.cleanup);
+
+    process.env.LLM_WIKI_PROJECT_ROOTS = path.dirname(fixture.rootDir);
+    process.env.LLM_WIKI_PROJECT_ACCESS_MODE = "read-only";
+
+    const { GET: listProjects } = await import("../route");
+    const listResponse = await listProjects();
+    const listPayload = (await listResponse.json()) as {
+      projects: Array<{ id: string }>;
+    };
+
+    const projectId = listPayload.projects[0]?.id;
+
+    expect(projectId).toBeTruthy();
+
+    const { GET } = await import("../[projectId]/route");
+    const response = await GET(
+      new Request(`http://localhost/api/projects/${projectId}`),
+      {
+        params: Promise.resolve({ projectId: projectId! }),
+      },
+    );
+    const payload = (await response.json()) as {
+      access: {
+        mode: "read-only";
+        canRead: true;
+        canWrite: false;
+      };
+    };
+
+    expect(response.status).toBe(200);
+    expect(payload.access).toEqual({
+      mode: "read-only",
+      canRead: true,
+      canWrite: false,
+    });
   });
 
   it("GET /api/projects/[projectId]/tree returns the project tree", async () => {

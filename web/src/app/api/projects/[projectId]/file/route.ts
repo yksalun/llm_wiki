@@ -3,6 +3,11 @@ import { AppError } from "@/lib/server/app-error";
 import { getProjectRootsFromEnv } from "@/lib/server/env";
 import { readProjectFile } from "@/lib/server/file-reader";
 import { writeProjectFile } from "@/lib/server/file-writer";
+import {
+  applyProjectAccessToFile,
+  getProjectAccessPolicyFromEnv,
+  requireProjectWriteAccess,
+} from "@/lib/server/project-access";
 import { resolveProjectById } from "@/lib/server/project-registry";
 import { errorJson, okJson } from "@/lib/server/route-helpers";
 
@@ -21,8 +26,9 @@ export async function GET(request: Request, context: ProjectRouteContext) {
     const project = await resolveProjectById(roots, projectId);
     const relativePath = new URL(request.url).searchParams.get("path") ?? "";
     const file = await readProjectFile(project.rootDir, relativePath);
+    const policy = getProjectAccessPolicyFromEnv();
 
-    return okJson(file);
+    return okJson(applyProjectAccessToFile(file, policy));
   } catch (error) {
     return errorJson(error);
   }
@@ -34,6 +40,10 @@ export async function PUT(request: Request, context: ProjectRouteContext) {
     const { projectId } = await context.params;
     const project = await resolveProjectById(roots, projectId);
     const payload = validateFileWriteRequest(await parseJsonRequestBody(request));
+    const policy = getProjectAccessPolicyFromEnv();
+
+    requireProjectWriteAccess(policy);
+
     const result = await writeProjectFile(project.rootDir, payload);
 
     return okJson(result);

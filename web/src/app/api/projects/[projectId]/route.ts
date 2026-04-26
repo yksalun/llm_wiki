@@ -1,4 +1,5 @@
 import { getProjectRootsFromEnv } from "@/lib/server/env";
+import { getProjectAccessPolicyFromEnv } from "@/lib/server/project-access";
 import { resolveProjectById } from "@/lib/server/project-registry";
 import { errorJson, okJson } from "@/lib/server/route-helpers";
 
@@ -15,11 +16,12 @@ export async function GET(_request: Request, context: ProjectRouteContext) {
     const roots = getProjectRootsFromEnv();
     const { projectId } = await context.params;
     const project = await resolveProjectById(roots, projectId);
+    const access = getProjectAccessPolicyFromEnv();
 
     return okJson({
       id: project.id,
       name: project.name,
-      access: project.access,
+      access,
       status: project.status,
       hasPurpose: project.hasPurpose,
       hasSchema: project.hasSchema,
