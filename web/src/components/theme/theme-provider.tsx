@@ -22,11 +22,7 @@ const storageKey = "llm-wiki-theme";
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("light");
-
-  useLayoutEffect(() => {
-    setThemeState(readInitialTheme());
-  }, []);
+  const [theme, setThemeState] = useState<Theme>(() => readInitialTheme());
 
   useLayoutEffect(() => {
     applyTheme(theme);
@@ -65,6 +61,10 @@ export function useTheme() {
 }
 
 function readInitialTheme(): Theme {
+  if (typeof window === "undefined") {
+    return "light";
+  }
+
   try {
     const savedTheme = window.localStorage.getItem(storageKey);
 
