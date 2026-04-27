@@ -13,6 +13,7 @@ import { getFileName, getRelativePath, normalizePath } from "@/lib/path-utils"
 import {
   chatMessagesToLLM,
   useChatStore,
+  type Conversation,
   type DisplayMessage,
   type MessageReference,
 } from "@/stores/chat-store"
@@ -20,19 +21,18 @@ import { useWikiStore, type LlmConfig } from "@/stores/wiki-store"
 import type { WikiProject } from "@/types/wiki"
 
 export interface ProjectChatRequest {
-  question: string
-  project?: WikiProject | null
-  llmConfig?: LlmConfig
-  dataVersion?: number
-  historyMessages?: DisplayMessage[]
-  maxHistoryMessages?: number
+  projectId: string
+  projectPath: string
+  conversationId: string
+  message: string
   signal?: AbortSignal
 }
 
 export interface ProjectChatCallbacks {
-  onToken?: (token: string) => void
-  onDone?: (content: string, references: MessageReference[]) => void
-  onError?: (error: Error) => void
+  onToken: (token: string) => void
+  onReferences?: (references: MessageReference[]) => void
+  onDone: (message: DisplayMessage) => void
+  onError: (error: Error) => void
 }
 
 export interface ProjectChatContext {
@@ -57,21 +57,17 @@ export interface ProjectChatDependencies {
   getOutputLanguage: (fallbackText?: string) => string
   buildLanguageReminder: (fallbackText?: string) => string
   tokenizeQuery: (query: string) => string[]
-  getWikiState: () => {
+  getState: () => {
     project: WikiProject | null
     llmConfig: LlmConfig
     dataVersion: number
-  }
-  getChatState: () => {
-    activeConversationId: string | null
+    messages: DisplayMessage[]
+    conversations: Conversation[]
     maxHistoryMessages: number
-    getActiveMessages: () => DisplayMessage[]
-    createConversation: () => string
-    addMessage: (role: DisplayMessage["role"], content: string) => void
-    setStreaming: (streaming: boolean) => void
-    appendStreamToken: (token: string) => void
-    finalizeStream: (content: string, references?: MessageReference[]) => void
   }
+  addMessage: (message: DisplayMessage) => void
+  upsertConversation: (conversation: Conversation) => void
+  now: () => number
   createAbortController: () => AbortController
 }
 
@@ -79,8 +75,9 @@ type PageEntry = {
   title: string
   path: string
   content: string
-  priority: number
 }
+
+let messageCounter = 0
 
 export function createDefaultProjectChatDependencies(): ProjectChatDependencies {
   return {
@@ -93,15 +90,43 @@ export function createDefaultProjectChatDependencies(): ProjectChatDependencies 
     getOutputLanguage,
     buildLanguageReminder,
     tokenizeQuery,
-    getWikiState: () => {
-      const state = useWikiStore.getState()
+    getState: () => {
+      const wikiState = useWikiStore.getState()
+      const chatState = useChatStore.getState()
       return {
-        project: state.project,
-        llmConfig: state.llmConfig,
-        dataVersion: state.dataVersion,
+        project: wikiState.project,
+        llmConfig: wikiState.llmConfig,
+        dataVersion: wikiState.dataVersion,
+        messages: chatState.messages,
+        conversations: chatState.conversations,
+        maxHistoryMessages: chatState.maxHistoryMessages,
       }
     },
-    getChatState: () => useChatStore.getState(),
+    addMessage: (message) => {
+      useChatStore.setState((state) => ({
+        messages: [...state.messages, message],
+        conversations: state.conversations.map((conversation) =>
+          conversation.id === message.conversationId
+            ? { ...conversation, updatedAt: message.timestamp }
+            : conversation,
+        ),
+      }))
+    },
+    upsertConversation: (conversation) => {
+      useChatStore.setState((state) => {
+        const exists = state.conversations.some((item) => item.id === conversation.id)
+        return {
+          activeConversationId:
+            state.activeConversationId ?? conversation.id,
+          conversations: exists
+            ? state.conversations.map((item) =>
+                item.id === conversation.id ? conversation : item,
+              )
+            : [conversation, ...state.conversations],
+        }
+      })
+    },
+    now: () => Date.now(),
     createAbortController: () => new AbortController(),
   }
 }
@@ -110,20 +135,22 @@ export async function buildProjectChatContext(
   request: ProjectChatRequest,
   dependencies: ProjectChatDependencies = createDefaultProjectChatDependencies(),
 ): Promise<ProjectChatContext> {
-  const wikiState = dependencies.getWikiState()
-  const chatState = dependencies.getChatState()
-  const project = request.project ?? wikiState.project
-  const llmConfig = request.llmConfig ?? wikiState.llmConfig
-  const dataVersion = request.dataVersion ?? wikiState.dataVersion
-  const maxHistoryMessages =
-    request.maxHistoryMessages ?? chatState.maxHistoryMessages
+  const state = dependencies.getState()
+  const projectPath = normalizePath(request.projectPath)
+  const projectName =
+    state.project?.id === request.projectId ? state.project.name : getFileName(projectPath)
+  const project: WikiProject = {
+    id: request.projectId,
+    name: projectName || "Project",
+    path: projectPath,
+  }
 
   const systemMessages: ChatMessage[] = []
   let references: MessageReference[] = []
   let languageReminder: string | undefined
 
-  if (project && dependencies.isGreeting(request.question)) {
-    const outLang = dependencies.getOutputLanguage(request.question)
+  if (dependencies.isGreeting(request.message)) {
+    const outLang = dependencies.getOutputLanguage(request.message)
     systemMessages.push({
       role: "system",
       content: [
@@ -134,30 +161,30 @@ export async function buildProjectChatContext(
         `Respond in ${outLang}.`,
       ].join("\n"),
     })
-  } else if (project) {
+  } else {
     const context = await buildRetrievalContext({
-      question: request.question,
+      message: request.message,
       project,
-      llmConfig,
-      dataVersion,
+      llmConfig: state.llmConfig,
+      dataVersion: state.dataVersion,
       dependencies,
     })
     systemMessages.push(context.systemMessage)
     references = context.references
-    languageReminder = dependencies.buildLanguageReminder(request.question)
+    languageReminder = dependencies.buildLanguageReminder(request.message)
   }
 
   const historyMessages = buildHistoryMessages({
     request,
-    dependencies,
-    maxHistoryMessages,
+    messages: state.messages,
+    maxHistoryMessages: state.maxHistoryMessages,
   })
 
   const currentUserMessage: ChatMessage = {
     role: "user",
     content: languageReminder
-      ? `[${languageReminder}]\n\n${request.question}`
-      : request.question,
+      ? `[${languageReminder}]\n\n${request.message}`
+      : request.message,
   }
 
   return {
@@ -168,50 +195,90 @@ export async function buildProjectChatContext(
 
 export async function sendProjectChatMessage(
   request: ProjectChatRequest,
-  callbacks: ProjectChatCallbacks = {},
+  callbacks: ProjectChatCallbacks,
   dependencies: ProjectChatDependencies = createDefaultProjectChatDependencies(),
-): Promise<ProjectChatContext> {
-  const context = await buildProjectChatContext(request, dependencies)
-  const wikiState = dependencies.getWikiState()
-  const llmConfig = request.llmConfig ?? wikiState.llmConfig
-  const chatState = dependencies.getChatState()
-
-  if (!chatState.activeConversationId) {
-    chatState.createConversation()
+): Promise<ProjectChatContext | null> {
+  const message = request.message.trim()
+  if (!message) {
+    callbacks.onError(new Error("消息不能为空。"))
+    return null
   }
 
-  chatState.addMessage("user", request.question)
-  chatState.setStreaming(true)
+  const initialState = dependencies.getState()
+  const now = dependencies.now()
+  const existingConversation = initialState.conversations.find(
+    (conversation) => conversation.id === request.conversationId,
+  )
+  dependencies.upsertConversation(
+    existingConversation
+      ? { ...existingConversation, updatedAt: now }
+      : {
+          id: request.conversationId,
+          title: message.slice(0, 50),
+          createdAt: now,
+          updatedAt: now,
+        },
+  )
+
+  let context: ProjectChatContext
+  try {
+    context = await buildProjectChatContext(
+      { ...request, message },
+      dependencies,
+    )
+  } catch (err) {
+    callbacks.onError(toError(err))
+    return null
+  }
+
+  const userMessage = createDisplayMessage({
+    role: "user",
+    content: message,
+    conversationId: request.conversationId,
+    now: dependencies.now,
+  })
+  dependencies.addMessage(userMessage)
 
   const controller = dependencies.createAbortController()
   const signal = request.signal ?? controller.signal
   let accumulated = ""
+  let terminalCallbackCalled = false
 
-  const handleError = (error: Error) => {
-    chatState.finalizeStream(`Error: ${error.message}`, undefined)
-    callbacks.onError?.(error)
+  const callError = (error: Error) => {
+    if (terminalCallbackCalled) return
+    terminalCallbackCalled = true
+    callbacks.onError(error)
   }
 
   try {
     await dependencies.streamChat(
-      llmConfig,
+      initialState.llmConfig,
       context.messages,
       {
         onToken: (token) => {
           accumulated += token
-          chatState.appendStreamToken(token)
-          callbacks.onToken?.(token)
+          callbacks.onToken(token)
         },
         onDone: () => {
-          chatState.finalizeStream(accumulated, context.references)
-          callbacks.onDone?.(accumulated, context.references)
+          if (terminalCallbackCalled) return
+          terminalCallbackCalled = true
+          const assistantMessage = createDisplayMessage({
+            role: "assistant",
+            content: accumulated,
+            conversationId: request.conversationId,
+            references: context.references,
+            now: dependencies.now,
+          })
+          dependencies.addMessage(assistantMessage)
+          callbacks.onReferences?.(context.references)
+          callbacks.onDone(assistantMessage)
         },
-        onError: handleError,
+        onError: callError,
       },
       signal,
     )
   } catch (err) {
-    handleError(err instanceof Error ? err : new Error(String(err)))
+    callError(toError(err))
   }
 
   return context
@@ -219,24 +286,23 @@ export async function sendProjectChatMessage(
 
 function buildHistoryMessages({
   request,
-  dependencies,
+  messages,
   maxHistoryMessages,
 }: {
   request: ProjectChatRequest
-  dependencies: ProjectChatDependencies
+  messages: DisplayMessage[]
   maxHistoryMessages: number
 }): ChatMessage[] {
-  const sourceMessages =
-    request.historyMessages ?? dependencies.getChatState().getActiveMessages()
-
-  const conversational = sourceMessages.filter(
-    (m) => m.role === "user" || m.role === "assistant",
+  const conversational = messages.filter(
+    (message) =>
+      message.conversationId === request.conversationId &&
+      (message.role === "user" || message.role === "assistant"),
   )
 
   if (
     conversational.length > 0 &&
     conversational[conversational.length - 1].role === "user" &&
-    conversational[conversational.length - 1].content === request.question
+    conversational[conversational.length - 1].content === request.message
   ) {
     conversational.pop()
   }
@@ -245,13 +311,13 @@ function buildHistoryMessages({
 }
 
 async function buildRetrievalContext({
-  question,
+  message,
   project,
   llmConfig,
   dataVersion,
   dependencies,
 }: {
-  question: string
+  message: string
   project: WikiProject
   llmConfig: LlmConfig
   dataVersion: number
@@ -268,9 +334,9 @@ async function buildRetrievalContext({
     dependencies.readFile(`${projectPath}/purpose.md`).catch(() => ""),
   ])
 
-  const searchResults = await dependencies.searchWiki(projectPath, question)
+  const searchResults = await dependencies.searchWiki(projectPath, message)
   const topSearchResults = searchResults.slice(0, 10)
-  const index = trimIndexToBudget(rawIndex, question, indexBudget, dependencies)
+  const index = trimIndexToBudget(rawIndex, message, indexBudget, dependencies)
   const graphExpansions = await buildGraphExpansions({
     projectPath,
     dataVersion,
@@ -293,11 +359,11 @@ async function buildRetrievalContext({
       projectPath,
       title: "Overview",
       filePath: `${projectPath}/wiki/overview.md`,
-      priority: 3,
       pageBudget,
       maxPageSize,
       dependencies,
-      getUsedChars: () => relevantPages.reduce((sum, page) => sum + page.content.length, 0),
+      getUsedChars: () =>
+        relevantPages.reduce((sum, page) => sum + page.content.length, 0),
     })
   }
 
@@ -314,7 +380,7 @@ async function buildRetrievalContext({
   const pageList = relevantPages
     .map((page, index) => `[${index + 1}] ${page.title} (${page.path})`)
     .join("\n")
-  const outLang = dependencies.getOutputLanguage(question)
+  const outLang = dependencies.getOutputLanguage(message)
 
   return {
     systemMessage: {
@@ -359,7 +425,7 @@ async function buildRetrievalContext({
 
 function trimIndexToBudget(
   rawIndex: string,
-  question: string,
+  message: string,
   indexBudget: number,
   dependencies: ProjectChatDependencies,
 ): string {
@@ -367,7 +433,7 @@ function trimIndexToBudget(
     return rawIndex
   }
 
-  const tokens = dependencies.tokenizeQuery(question)
+  const tokens = dependencies.tokenizeQuery(message)
   const lines = rawIndex.split("\n")
   const keptLines: string[] = []
   let keptSize = 0
@@ -444,13 +510,12 @@ async function collectRelevantPages({
   let usedChars = 0
   const getUsedChars = () => usedChars
 
-  const addPage = async (title: string, filePath: string, priority: number) => {
+  const addPage = async (title: string, filePath: string) => {
     const added = await tryAddPage({
       pages,
       projectPath,
       title,
       filePath,
-      priority,
       pageBudget,
       maxPageSize,
       dependencies,
@@ -462,15 +527,15 @@ async function collectRelevantPages({
   }
 
   for (const result of topSearchResults.filter((result) => result.titleMatch)) {
-    await addPage(result.title, result.path, 0)
+    await addPage(result.title, result.path)
   }
 
   for (const result of topSearchResults.filter((result) => !result.titleMatch)) {
-    await addPage(result.title, result.path, 1)
+    await addPage(result.title, result.path)
   }
 
   for (const expansion of graphExpansions) {
-    await addPage(expansion.title, expansion.path, 2)
+    await addPage(expansion.title, expansion.path)
   }
 
   return pages
@@ -481,7 +546,6 @@ async function tryAddPage({
   projectPath,
   title,
   filePath,
-  priority,
   pageBudget,
   maxPageSize,
   dependencies,
@@ -491,7 +555,6 @@ async function tryAddPage({
   projectPath: string
   title: string
   filePath: string
-  priority: number
   pageBudget: number
   maxPageSize: number
   dependencies: ProjectChatDependencies
@@ -511,9 +574,38 @@ async function tryAddPage({
       return false
     }
 
-    pages.push({ title, path: relativePath, content: truncated, priority })
+    pages.push({ title, path: relativePath, content: truncated })
     return true
   } catch {
     return false
   }
+}
+
+function createDisplayMessage({
+  role,
+  content,
+  conversationId,
+  references,
+  now,
+}: {
+  role: DisplayMessage["role"]
+  content: string
+  conversationId: string
+  references?: MessageReference[]
+  now: () => number
+}): DisplayMessage {
+  messageCounter += 1
+  const timestamp = now()
+  return {
+    id: `msg_${timestamp}_${messageCounter}`,
+    role,
+    content,
+    timestamp,
+    conversationId,
+    references,
+  }
+}
+
+function toError(err: unknown): Error {
+  return err instanceof Error ? err : new Error(String(err))
 }
