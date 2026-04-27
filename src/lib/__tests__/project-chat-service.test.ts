@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
 import type { ChatMessage } from "@/lib/llm-client"
 import type { LlmConfig } from "@/stores/wiki-store"
-import type { Conversation, DisplayMessage } from "@/stores/chat-store"
+import { useChatStore, type Conversation, type DisplayMessage } from "@/stores/chat-store"
 import {
   buildProjectChatContext,
+  createDefaultProjectChatDependencies,
   sendProjectChatMessage,
   type ProjectChatCallbacks,
   type ProjectChatDependencies,
@@ -313,6 +314,27 @@ describe("sendProjectChatMessage", () => {
     expect(deps.streamChat).not.toHaveBeenCalled()
   })
 
+  it("calls onError exactly once for stream errors and does not call onDone", async () => {
+    const streamError = new Error("stream failed")
+    const deps = createDependencies({
+      isGreeting: vi.fn(() => true),
+      streamChat: vi.fn(async (_config, _messages, callbacks) => {
+        callbacks.onError(streamError)
+      }),
+    })
+    const callbacks = createCallbacks()
+
+    await sendProjectChatMessage(
+      { ...request, message: "hello" },
+      callbacks,
+      deps,
+    )
+
+    expect(callbacks.onError).toHaveBeenCalledTimes(1)
+    expect(callbacks.onError).toHaveBeenCalledWith(streamError)
+    expect(callbacks.onDone).not.toHaveBeenCalled()
+  })
+
   it("preserves an existing conversation title while updating updatedAt", async () => {
     const existing: Conversation = {
       id: "conv-1",
@@ -350,5 +372,42 @@ describe("sendProjectChatMessage", () => {
       createdAt: 100,
       updatedAt: 300,
     })
+  })
+})
+
+describe("createDefaultProjectChatDependencies", () => {
+  it("upsertConversation does not mutate activeConversationId", () => {
+    const previous = useChatStore.getState()
+    try {
+      useChatStore.setState({
+        activeConversationId: null,
+        conversations: [],
+        messages: [],
+      })
+
+      createDefaultProjectChatDependencies().upsertConversation({
+        id: "conv-new",
+        title: "New conversation",
+        createdAt: 10,
+        updatedAt: 20,
+      })
+
+      const state = useChatStore.getState()
+      expect(state.activeConversationId).toBeNull()
+      expect(state.conversations).toEqual([
+        {
+          id: "conv-new",
+          title: "New conversation",
+          createdAt: 10,
+          updatedAt: 20,
+        },
+      ])
+    } finally {
+      useChatStore.setState({
+        activeConversationId: previous.activeConversationId,
+        conversations: previous.conversations,
+        messages: previous.messages,
+      })
+    }
   })
 })

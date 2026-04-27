@@ -116,8 +116,6 @@ export function createDefaultProjectChatDependencies(): ProjectChatDependencies 
       useChatStore.setState((state) => {
         const exists = state.conversations.some((item) => item.id === conversation.id)
         return {
-          activeConversationId:
-            state.activeConversationId ?? conversation.id,
           conversations: exists
             ? state.conversations.map((item) =>
                 item.id === conversation.id ? conversation : item,
