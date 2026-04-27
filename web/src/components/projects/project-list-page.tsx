@@ -181,8 +181,8 @@ function WarningsAlert({ warnings }: { warnings: string[] }) {
           formatWarningMessage(warnings[0])
         ) : (
           <ul className="space-y-1 pl-4">
-            {warnings.map((warning) => (
-              <li key={warning} className="list-disc">
+            {warnings.map((warning, index) => (
+              <li key={`${warning}:${index}`} className="list-disc">
                 {formatWarningMessage(warning)}
               </li>
             ))}
