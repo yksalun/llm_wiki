@@ -243,7 +243,7 @@ function ErrorState({ message }: { message: string }) {
       <CardHeader className="border-b border-[color:var(--paper-border)]">
         <CardTitle>无法打开登记册</CardTitle>
         <CardDescription>
-          无法从 `/api/projects` 组装项目入口列表。
+          无法组装项目入口列表。
         </CardDescription>
       </CardHeader>
       <CardContent className="pt-4">

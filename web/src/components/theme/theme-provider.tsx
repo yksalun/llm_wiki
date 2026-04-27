@@ -6,7 +6,7 @@ import {
   useContext,
   useLayoutEffect,
   useMemo,
-  useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 
@@ -19,28 +19,23 @@ interface ThemeContextValue {
 }
 
 const storageKey = "llm-wiki-theme";
+const themeChangeEvent = "llm-wiki-theme-change";
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => readInitialTheme());
+  const theme = useSyncExternalStore(subscribeTheme, readInitialTheme, readServerTheme);
 
   useLayoutEffect(() => {
     applyTheme(theme);
-
-    try {
-      window.localStorage.setItem(storageKey, theme);
-    } catch {
-      return;
-    }
   }, [theme]);
 
   const setTheme = useCallback((nextTheme: Theme) => {
-    setThemeState(nextTheme);
+    saveTheme(nextTheme);
   }, []);
 
   const toggleTheme = useCallback(() => {
-    setThemeState((currentTheme) => (currentTheme === "dark" ? "light" : "dark"));
-  }, []);
+    saveTheme(theme === "dark" ? "light" : "dark");
+  }, [theme]);
 
   const value = useMemo(
     () => ({ theme, setTheme, toggleTheme }),
@@ -78,7 +73,36 @@ function readInitialTheme(): Theme {
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+function readServerTheme(): Theme {
+  return "light";
+}
+
 function applyTheme(theme: Theme) {
   document.documentElement.classList.toggle("dark", theme === "dark");
   document.documentElement.dataset.theme = theme;
+}
+
+function saveTheme(theme: Theme) {
+  try {
+    window.localStorage.setItem(storageKey, theme);
+  } catch {
+    return;
+  }
+
+  applyTheme(theme);
+  window.dispatchEvent(new Event(themeChangeEvent));
+}
+
+function subscribeTheme(listener: () => void) {
+  if (typeof window === "undefined") {
+    return () => undefined;
+  }
+
+  window.addEventListener("storage", listener);
+  window.addEventListener(themeChangeEvent, listener);
+
+  return () => {
+    window.removeEventListener("storage", listener);
+    window.removeEventListener(themeChangeEvent, listener);
+  };
 }

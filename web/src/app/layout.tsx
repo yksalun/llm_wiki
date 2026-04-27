@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LLM Wiki 工作台",
-  description: "用于浏览、编辑和理解 LLM Wiki 项目的 Web 工作台。",
+  title: "大模型知识库工作台",
+  description: "用于浏览、编辑和理解大模型知识库项目的网页工作台。",
 };
 
 export default function RootLayout({

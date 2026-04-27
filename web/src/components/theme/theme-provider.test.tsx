@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot, hydrateRoot, type Root } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "./theme-provider";
@@ -53,6 +54,39 @@ describe("ThemeProvider", () => {
 
     renderTheme();
 
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(requiredButton("浅色")).not.toBeNull();
+  });
+
+  it("hydrates without mismatch when saved dark theme differs from server markup", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const serverMarkup = renderToString(
+      <ThemeProvider>
+        <ThemeToggle />
+      </ThemeProvider>,
+    );
+
+    window.localStorage.setItem("llm-wiki-theme", "dark");
+    const hydrationContainer = document.createElement("div");
+    hydrationContainer.innerHTML = serverMarkup;
+    document.body.appendChild(hydrationContainer);
+    container = hydrationContainer;
+
+    await act(async () => {
+      root = hydrateRoot(
+        hydrationContainer,
+        <ThemeProvider>
+          <ThemeToggle />
+        </ThemeProvider>,
+      );
+      await Promise.resolve();
+    });
+
+    expect(
+      consoleError.mock.calls.some((call) =>
+        call.some((entry) => String(entry).includes("Hydration failed")),
+      ),
+    ).toBe(false);
     expect(document.documentElement.classList.contains("dark")).toBe(true);
     expect(requiredButton("浅色")).not.toBeNull();
   });
