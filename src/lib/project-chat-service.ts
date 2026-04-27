@@ -218,17 +218,6 @@ export async function sendProjectChatMessage(
         },
   )
 
-  let context: ProjectChatContext
-  try {
-    context = await buildProjectChatContext(
-      { ...request, message },
-      dependencies,
-    )
-  } catch (err) {
-    callbacks.onError(toError(err))
-    return null
-  }
-
   const userMessage = createDisplayMessage({
     role: "user",
     content: message,
@@ -239,14 +228,43 @@ export async function sendProjectChatMessage(
 
   const controller = dependencies.createAbortController()
   const signal = request.signal ?? controller.signal
-  let accumulated = ""
   let terminalCallbackCalled = false
 
-  const callError = (error: Error) => {
+  const callErrorOnce = (error: Error) => {
     if (terminalCallbackCalled) return
     terminalCallbackCalled = true
+    if (!isAbortError(error)) {
+      addAssistantErrorMessage({
+        error,
+        conversationId: request.conversationId,
+        dependencies,
+      })
+    }
     callbacks.onError(error)
   }
+
+  if (signal.aborted) {
+    callErrorOnce(createAbortError(signal))
+    return null
+  }
+
+  let context: ProjectChatContext
+  try {
+    context = await buildProjectChatContext(
+      { ...request, message },
+      dependencies,
+    )
+  } catch (err) {
+    callErrorOnce(toError(err))
+    return null
+  }
+
+  if (signal.aborted) {
+    callErrorOnce(createAbortError(signal))
+    return context
+  }
+
+  let accumulated = ""
 
   try {
     await dependencies.streamChat(
@@ -271,12 +289,12 @@ export async function sendProjectChatMessage(
           callbacks.onReferences?.(context.references)
           callbacks.onDone(assistantMessage)
         },
-        onError: callError,
+        onError: callErrorOnce,
       },
       signal,
     )
   } catch (err) {
-    callError(toError(err))
+    callErrorOnce(toError(err))
   }
 
   return context
@@ -602,6 +620,38 @@ function createDisplayMessage({
     conversationId,
     references,
   }
+}
+
+function addAssistantErrorMessage({
+  error,
+  conversationId,
+  dependencies,
+}: {
+  error: Error
+  conversationId: string
+  dependencies: ProjectChatDependencies
+}): void {
+  dependencies.addMessage(
+    createDisplayMessage({
+      role: "assistant",
+      content: `Error: ${error.message}`,
+      conversationId,
+      now: dependencies.now,
+    }),
+  )
+}
+
+function createAbortError(signal: AbortSignal): Error {
+  if (signal.reason instanceof Error) {
+    return signal.reason
+  }
+  const error = new Error("The operation was aborted.")
+  error.name = "AbortError"
+  return error
+}
+
+function isAbortError(error: Error): boolean {
+  return error.name === "AbortError"
 }
 
 function toError(err: unknown): Error {

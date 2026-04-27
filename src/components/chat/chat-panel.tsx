@@ -121,7 +121,6 @@ export function ChatPanel() {
   const mode = useChatStore((s) => s.mode)
   const setStreaming = useChatStore((s) => s.setStreaming)
   const appendStreamToken = useChatStore((s) => s.appendStreamToken)
-  const finalizeStream = useChatStore((s) => s.finalizeStream)
   const createConversation = useChatStore((s) => s.createConversation)
   const removeLastAssistantMessage = useChatStore((s) => s.removeLastAssistantMessage)
 
@@ -182,14 +181,15 @@ export function ChatPanel() {
             useChatStore.setState({ streamingContent: "" })
             abortRef.current = null
           },
-          onError: (error) => {
-            finalizeStream(`Error: ${error.message}`, undefined)
+          onError: () => {
+            setStreaming(false)
+            useChatStore.setState({ streamingContent: "" })
             abortRef.current = null
           },
         },
       )
     },
-    [project, setStreaming, appendStreamToken, finalizeStream, createConversation],
+    [project, setStreaming, appendStreamToken, createConversation],
   )
 
   const handleStop = useCallback(() => {

@@ -298,9 +298,13 @@ describe("sendProjectChatMessage", () => {
     })
   })
 
-  it("calls onError when context building fails and does not add messages", async () => {
+  it("adds user and assistant error messages to the request conversation when context building fails", async () => {
     const error = new Error("graph unavailable")
+    const addedMessages: DisplayMessage[] = []
     const deps = createDependencies({
+      addMessage: vi.fn((msg: DisplayMessage) => {
+        addedMessages.push(msg)
+      }),
       searchWiki: vi.fn(async () => {
         throw error
       }),
@@ -310,14 +314,30 @@ describe("sendProjectChatMessage", () => {
     await sendProjectChatMessage(request, callbacks, deps)
 
     expect(callbacks.onError).toHaveBeenCalledWith(error)
-    expect(deps.addMessage).not.toHaveBeenCalled()
+    expect(callbacks.onDone).not.toHaveBeenCalled()
     expect(deps.streamChat).not.toHaveBeenCalled()
+    expect(addedMessages).toEqual([
+      expect.objectContaining({
+        role: "user",
+        content: request.message,
+        conversationId: "conv-1",
+      }),
+      expect.objectContaining({
+        role: "assistant",
+        content: "Error: graph unavailable",
+        conversationId: "conv-1",
+      }),
+    ])
   })
 
-  it("calls onError exactly once for stream errors and does not call onDone", async () => {
+  it("adds assistant error to the request conversation for stream errors", async () => {
     const streamError = new Error("stream failed")
+    const addedMessages: DisplayMessage[] = []
     const deps = createDependencies({
       isGreeting: vi.fn(() => true),
+      addMessage: vi.fn((msg: DisplayMessage) => {
+        addedMessages.push(msg)
+      }),
       streamChat: vi.fn(async (_config, _messages, callbacks) => {
         callbacks.onError(streamError)
       }),
@@ -333,6 +353,59 @@ describe("sendProjectChatMessage", () => {
     expect(callbacks.onError).toHaveBeenCalledTimes(1)
     expect(callbacks.onError).toHaveBeenCalledWith(streamError)
     expect(callbacks.onDone).not.toHaveBeenCalled()
+    expect(addedMessages).toEqual([
+      expect.objectContaining({
+        role: "user",
+        content: "hello",
+        conversationId: "conv-1",
+      }),
+      expect.objectContaining({
+        role: "assistant",
+        content: "Error: stream failed",
+        conversationId: "conv-1",
+      }),
+    ])
+  })
+
+  it("does not add a blank assistant message when aborted before streaming", async () => {
+    const addedMessages: DisplayMessage[] = []
+    const controller = new AbortController()
+    const deps = createDependencies({
+      addMessage: vi.fn((msg: DisplayMessage) => {
+        addedMessages.push(msg)
+      }),
+      searchWiki: vi.fn(async () => {
+        controller.abort()
+        return []
+      }),
+      streamChat: vi.fn(async (_config, _messages, callbacks) => {
+        callbacks.onDone()
+      }),
+    })
+    const callbacks = createCallbacks()
+
+    await sendProjectChatMessage(
+      { ...request, message: "hello", signal: controller.signal },
+      callbacks,
+      deps,
+    )
+
+    expect(deps.streamChat).not.toHaveBeenCalled()
+    expect(callbacks.onError).toHaveBeenCalledTimes(1)
+    expect(callbacks.onDone).not.toHaveBeenCalled()
+    expect(addedMessages).toEqual([
+      expect.objectContaining({
+        role: "user",
+        content: "hello",
+        conversationId: "conv-1",
+      }),
+    ])
+    expect(addedMessages).not.toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        content: "",
+      }),
+    )
   })
 
   it("preserves an existing conversation title while updating updatedAt", async () => {
