@@ -87,6 +87,16 @@ function createCallbacks(
   }
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 describe("buildProjectChatContext", () => {
   it("skips retrieval for greetings and builds a lightweight system prompt", async () => {
     const deps = createDependencies({
@@ -408,6 +418,51 @@ describe("sendProjectChatMessage", () => {
     )
   })
 
+  it("terminates promptly when aborted while context building is still pending", async () => {
+    const pendingRead = createDeferred<string>()
+    const addedMessages: DisplayMessage[] = []
+    const controller = new AbortController()
+    const deps = createDependencies({
+      readFile: vi.fn(() => pendingRead.promise),
+      addMessage: vi.fn((msg: DisplayMessage) => {
+        addedMessages.push(msg)
+      }),
+      streamChat: vi.fn(async (_config, _messages, callbacks) => {
+        callbacks.onDone()
+      }),
+    })
+    const callbacks = createCallbacks()
+
+    const sendPromise = sendProjectChatMessage(
+      { ...request, signal: controller.signal },
+      callbacks,
+      deps,
+    )
+
+    expect(deps.readFile).toHaveBeenCalled()
+
+    controller.abort()
+
+    expect(callbacks.onError).toHaveBeenCalledTimes(1)
+    expect(callbacks.onError).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "AbortError" }),
+    )
+    expect(callbacks.onDone).not.toHaveBeenCalled()
+
+    pendingRead.resolve("")
+    await sendPromise
+
+    expect(deps.streamChat).not.toHaveBeenCalled()
+    expect(callbacks.onError).toHaveBeenCalledTimes(1)
+    expect(addedMessages).toEqual([
+      expect.objectContaining({
+        role: "user",
+        content: request.message,
+        conversationId: "conv-1",
+      }),
+    ])
+  })
+
   it("does not add a blank assistant message when aborted during streaming before any token", async () => {
     const addedMessages: DisplayMessage[] = []
     const controller = new AbortController()
@@ -433,6 +488,41 @@ describe("sendProjectChatMessage", () => {
     expect(callbacks.onError).toHaveBeenCalledTimes(1)
     expect(callbacks.onError).toHaveBeenCalledWith(
       expect.objectContaining({ name: "AbortError" }),
+    )
+    expect(callbacks.onDone).not.toHaveBeenCalled()
+    expect(addedMessages).toEqual([
+      expect.objectContaining({
+        role: "user",
+        content: "hello",
+        conversationId: "conv-1",
+      }),
+    ])
+  })
+
+  it("treats a plain Error abort reason as an abort instead of an assistant error", async () => {
+    const addedMessages: DisplayMessage[] = []
+    const controller = new AbortController()
+    const deps = createDependencies({
+      isGreeting: vi.fn(() => true),
+      addMessage: vi.fn((msg: DisplayMessage) => {
+        addedMessages.push(msg)
+      }),
+      streamChat: vi.fn(async (_config, _messages, callbacks) => {
+        controller.abort(new Error("cancelled"))
+        callbacks.onDone()
+      }),
+    })
+    const callbacks = createCallbacks()
+
+    await sendProjectChatMessage(
+      { ...request, message: "hello", signal: controller.signal },
+      callbacks,
+      deps,
+    )
+
+    expect(callbacks.onError).toHaveBeenCalledTimes(1)
+    expect(callbacks.onError).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "AbortError", message: "cancelled" }),
     )
     expect(callbacks.onDone).not.toHaveBeenCalled()
     expect(addedMessages).toEqual([

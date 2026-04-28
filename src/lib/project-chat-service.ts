@@ -245,11 +245,18 @@ export async function sendProjectChatMessage(
   const controller = dependencies.createAbortController()
   const signal = request.signal ?? controller.signal
   let terminalCallbackCalled = false
+  let removeAbortListener: (() => void) | undefined
+
+  const cleanupAbortListener = () => {
+    removeAbortListener?.()
+    removeAbortListener = undefined
+  }
 
   const callErrorOnce = (error: Error) => {
     if (terminalCallbackCalled) return
     terminalCallbackCalled = true
-    if (!isAbortError(error)) {
+    cleanupAbortListener()
+    if (!isAbortError(error, signal)) {
       addAssistantErrorMessage({
         error,
         conversationId: request.conversationId,
@@ -264,6 +271,14 @@ export async function sendProjectChatMessage(
     return null
   }
 
+  const handleAbort = () => {
+    callErrorOnce(createAbortError(signal))
+  }
+  signal.addEventListener("abort", handleAbort, { once: true })
+  removeAbortListener = () => {
+    signal.removeEventListener("abort", handleAbort)
+  }
+
   let context: ProjectChatContext
   try {
     context = await buildProjectChatContext(
@@ -275,9 +290,13 @@ export async function sendProjectChatMessage(
     return null
   }
 
+  if (terminalCallbackCalled) {
+    return null
+  }
+
   if (signal.aborted) {
     callErrorOnce(createAbortError(signal))
-    return context
+    return null
   }
 
   let accumulated = ""
@@ -288,6 +307,7 @@ export async function sendProjectChatMessage(
       context.messages,
       {
         onToken: (token) => {
+          if (terminalCallbackCalled) return
           accumulated += token
           callbacks.onToken(token)
         },
@@ -298,6 +318,7 @@ export async function sendProjectChatMessage(
             return
           }
           terminalCallbackCalled = true
+          cleanupAbortListener()
           const assistantMessage = createDisplayMessage({
             role: "assistant",
             content: accumulated,
@@ -315,6 +336,8 @@ export async function sendProjectChatMessage(
     )
   } catch (err) {
     callErrorOnce(toError(err))
+  } finally {
+    cleanupAbortListener()
   }
 
   return context
@@ -662,16 +685,27 @@ function addAssistantErrorMessage({
 }
 
 function createAbortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
+  if (isAbortReason(signal.reason)) {
     return signal.reason
   }
-  const error = new Error("The operation was aborted.")
+  const message =
+    signal.reason instanceof Error
+      ? signal.reason.message || "The operation was aborted."
+      : typeof signal.reason === "string" && signal.reason
+        ? signal.reason
+        : "The operation was aborted."
+  const error = new Error(message)
   error.name = "AbortError"
+  ;(error as Error & { cause?: unknown }).cause = signal.reason
   return error
 }
 
-function isAbortError(error: Error): boolean {
-  return error.name === "AbortError"
+function isAbortReason(reason: unknown): reason is Error {
+  return reason instanceof Error && reason.name === "AbortError"
+}
+
+function isAbortError(error: Error, signal?: AbortSignal): boolean {
+  return error.name === "AbortError" || signal?.aborted === true
 }
 
 function toError(err: unknown): Error {
