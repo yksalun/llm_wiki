@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   DesktopBridgeConversation,
   DesktopBridgeMessage,
-  DesktopBridgeReference,
 } from "@/lib/types";
 
 import { ProjectQuestionPanel } from "./project-question-panel";

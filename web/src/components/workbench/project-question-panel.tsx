@@ -47,17 +47,60 @@ function ProjectQuestionPanelSession({ projectId, onOpenFile }: ProjectQuestionP
   const canSend = trimmedInput.length > 0 && activeConversationId !== null && status === "ready";
 
   useEffect(() => {
-    const controller = replaceAbortController();
-    const requestId = nextRequestId();
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    requestIdRef.current += 1;
+    const requestId = requestIdRef.current;
 
-    setStatus("loading");
-    setErrorMessage(null);
-    setStreamingText("");
-    setStreamingReferences([]);
-    setMessages([]);
-    setInput("");
+    function isCurrentInitialRequest() {
+      return !controller.signal.aborted && requestId === requestIdRef.current;
+    }
 
-    void loadInitialConversation(controller, requestId);
+    async function loadInitialConversation() {
+      try {
+        const loadedConversations = await listQuestionConversations(projectId, controller.signal);
+        let activeConversation = loadedConversations[0] ?? null;
+        let nextConversations = loadedConversations;
+
+        if (!activeConversation) {
+          activeConversation = await createQuestionConversation(projectId, controller.signal);
+          nextConversations = [activeConversation];
+        }
+
+        const loadedMessages = await listQuestionMessages(
+          projectId,
+          activeConversation.id,
+          controller.signal,
+        );
+
+        if (!isCurrentInitialRequest()) {
+          return;
+        }
+
+        setConversations(nextConversations);
+        setActiveConversationId(activeConversation.id);
+        setMessages(loadedMessages);
+        setStatus("ready");
+      } catch (error: unknown) {
+        if (isAbortError(error) || controller.signal.aborted) {
+          return;
+        }
+
+        if (!isCurrentInitialRequest()) {
+          return;
+        }
+
+        setErrorMessage(getErrorMessage(error));
+        setStatus("error");
+      } finally {
+        if (abortControllerRef.current === controller) {
+          abortControllerRef.current = null;
+        }
+      }
+    }
+
+    void loadInitialConversation();
 
     return () => {
       requestIdRef.current += 1;
@@ -66,49 +109,6 @@ function ProjectQuestionPanelSession({ projectId, onOpenFile }: ProjectQuestionP
       abortControllerRef.current = null;
     };
   }, [projectId]);
-
-  async function loadInitialConversation(controller: AbortController, requestId: number) {
-    try {
-      const loadedConversations = await listQuestionConversations(projectId, controller.signal);
-      let activeConversation = loadedConversations[0] ?? null;
-      let nextConversations = loadedConversations;
-
-      if (!activeConversation) {
-        activeConversation = await createQuestionConversation(projectId, controller.signal);
-        nextConversations = [activeConversation];
-      }
-
-      const loadedMessages = await listQuestionMessages(
-        projectId,
-        activeConversation.id,
-        controller.signal,
-      );
-
-      if (!isCurrentRequest(controller, requestId)) {
-        return;
-      }
-
-      setConversations(nextConversations);
-      setActiveConversationId(activeConversation.id);
-      setMessages(loadedMessages);
-      setStatus("ready");
-    } catch (error: unknown) {
-      if (isAbortError(error) || controller.signal.aborted) {
-        return;
-      }
-
-      if (!isCurrentRequest(controller, requestId)) {
-        return;
-      }
-
-      setErrorMessage(getErrorMessage(error));
-      setStatus("error");
-    } finally {
-      if (abortControllerRef.current === controller) {
-        abortControllerRef.current = null;
-      }
-    }
-  }
 
   async function handleNewConversation() {
     if (isStreaming) {
@@ -207,10 +207,10 @@ function ProjectQuestionPanelSession({ projectId, onOpenFile }: ProjectQuestionP
     const requestId = nextRequestId();
     const submittedMessage = trimmedInput;
     const optimisticMessage: DesktopBridgeMessage = {
-      id: `local-${Date.now()}`,
+      id: `local-${requestId}`,
       role: "user",
       content: submittedMessage,
-      timestamp: Date.now(),
+      timestamp: 0,
       conversationId: activeConversationId,
     };
 
@@ -375,7 +375,7 @@ function ProjectQuestionPanelSession({ projectId, onOpenFile }: ProjectQuestionP
               id: "streaming",
               role: "assistant",
               content: streamingText,
-              timestamp: Date.now(),
+              timestamp: 0,
               conversationId: activeConversationId ?? "",
               references: streamingReferences,
             }}
