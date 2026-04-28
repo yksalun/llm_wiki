@@ -7,8 +7,6 @@ import type {
   FileWriteResult,
   ProjectDetail,
   ProjectInsightsResponse,
-  ProjectQuestionRequest,
-  ProjectQuestionResponse,
   ProjectSearchResponse,
   ProjectsListResponse,
 } from "@/lib/types";
@@ -94,24 +92,6 @@ export async function fetchProjectInsights(projectId: string, signal?: AbortSign
   return requestJson<ProjectInsightsResponse>(
     `/api/projects/${encodeURIComponent(projectId)}/insights`,
     { method: "GET", cache: "no-store", signal },
-  );
-}
-
-export async function askProjectQuestion(
-  projectId: string,
-  payload: ProjectQuestionRequest,
-  signal?: AbortSignal,
-): Promise<ProjectQuestionResponse> {
-  return requestJson<ProjectQuestionResponse>(
-    `/api/projects/${encodeURIComponent(projectId)}/question`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-      signal,
-    },
   );
 }
 
