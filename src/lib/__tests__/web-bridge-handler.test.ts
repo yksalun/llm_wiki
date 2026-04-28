@@ -136,6 +136,13 @@ async function emitJson(payload: BridgeJsonRequest) {
   await Promise.resolve()
 }
 
+async function emitCancel(payload: { requestId: string }) {
+  const cancelHandler = handlersForTest.get("web-bridge:stream-cancel")
+  expect(cancelHandler).toBeDefined()
+  cancelHandler?.({ payload })
+  await Promise.resolve()
+}
+
 let handlersForTest: Map<string, (event: { payload: unknown }) => void>
 
 beforeEach(() => {
@@ -156,11 +163,13 @@ describe("startWebBridgeHandler", () => {
   it("cleans up an already registered listener when a later listener fails and can retry", async () => {
     const firstUnlisten = vi.fn()
     const secondUnlisten = vi.fn()
+    const thirdUnlisten = vi.fn()
     mocks.listen
       .mockResolvedValueOnce(firstUnlisten)
       .mockRejectedValueOnce(new Error("listen failed"))
       .mockResolvedValueOnce(firstUnlisten)
       .mockResolvedValueOnce(secondUnlisten)
+      .mockResolvedValueOnce(thirdUnlisten)
 
     const { startWebBridgeHandler } = await importTestModules()
 
@@ -168,18 +177,20 @@ describe("startWebBridgeHandler", () => {
     expect(firstUnlisten).toHaveBeenCalledTimes(1)
 
     await expect(startWebBridgeHandler()).resolves.toBeUndefined()
-    expect(mocks.listen).toHaveBeenCalledTimes(4)
+    expect(mocks.listen).toHaveBeenCalledTimes(5)
   })
 
   it("cleans up listeners registered before stop during a pending registration", async () => {
     const firstUnlisten = vi.fn()
     const secondUnlisten = vi.fn()
+    const thirdUnlisten = vi.fn()
     const secondListen = createDeferred<() => void>()
     mocks.listen
       .mockResolvedValueOnce(firstUnlisten)
       .mockReturnValueOnce(secondListen.promise)
       .mockResolvedValueOnce(firstUnlisten)
       .mockResolvedValueOnce(secondUnlisten)
+      .mockResolvedValueOnce(thirdUnlisten)
 
     const { startWebBridgeHandler, stopWebBridgeHandler } = await importTestModules()
 
@@ -195,7 +206,7 @@ describe("startWebBridgeHandler", () => {
     expect(secondUnlisten).toHaveBeenCalledTimes(1)
 
     await expect(startWebBridgeHandler()).resolves.toBeUndefined()
-    expect(mocks.listen).toHaveBeenCalledTimes(4)
+    expect(mocks.listen).toHaveBeenCalledTimes(6)
   })
 })
 
@@ -347,6 +358,30 @@ describe("web bridge chat requests", () => {
       "web_bridge_emit_references",
       "web_bridge_emit_error",
     ])
+  })
+
+  it("aborts the matching service signal when the HTTP stream is canceled", async () => {
+    let capturedRequest!: ChatRequest
+    const servicePending = createDeferred()
+    mocks.sendProjectChatMessage.mockImplementation((request: ChatRequest) => {
+      capturedRequest = request
+      return servicePending.promise
+    })
+
+    const { startWebBridgeHandler, useWikiStore, useChatStore } = await importTestModules()
+    resetStores(useWikiStore, useChatStore)
+    useWikiStore.setState({ project })
+    await startWebBridgeHandler()
+    await emitChat(baseRequest)
+
+    expect(capturedRequest.signal?.aborted).toBe(false)
+
+    await emitCancel({ requestId: baseRequest.requestId })
+
+    expect(capturedRequest.signal?.aborted).toBe(true)
+
+    servicePending.resolve()
+    await servicePending.promise
   })
 })
 

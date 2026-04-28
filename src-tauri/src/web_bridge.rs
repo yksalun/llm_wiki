@@ -444,8 +444,11 @@ fn handle_stream_bridge_request(
     for header in cors_headers("text/event-stream", origin) {
         response.add_header(header);
     }
-    let _ = request.respond(response);
-    remove_stream_request(&request_id);
+    let respond_result = request.respond(response);
+    cancel_stream_request_if_active(app, &request_id);
+    if let Err(error) = respond_result {
+        eprintln!("[Web Bridge] Stream response failed for request {request_id}: {error}");
+    }
 }
 
 fn read_body(request: &mut tiny_http::Request) -> Result<Value, String> {
@@ -506,10 +509,11 @@ fn register_json_request(
     Ok(())
 }
 
-fn remove_stream_request(request_id: &str) {
-    if let Ok(mut requests) = stream_requests().lock() {
-        requests.remove(request_id);
-    }
+fn remove_stream_request(request_id: &str) -> bool {
+    stream_requests()
+        .lock()
+        .map(|mut requests| requests.remove(request_id).is_some())
+        .unwrap_or(false)
 }
 
 fn remove_json_request(request_id: &str) {
@@ -592,6 +596,24 @@ fn sse_headers() -> Vec<Header> {
         Header::from_bytes("Cache-Control", "no-cache").unwrap(),
         Header::from_bytes("Connection", "keep-alive").unwrap(),
     ]
+}
+
+fn cancel_stream_request_if_active(app: &AppHandle, request_id: &str) {
+    emit_cancel_if_removed(request_id, |payload| app.emit("web-bridge:stream-cancel", payload))
+}
+
+fn emit_cancel_if_removed<F, E>(request_id: &str, emit: F)
+where
+    F: FnOnce(Value) -> Result<(), E>,
+    E: std::fmt::Display,
+{
+    if !remove_stream_request(request_id) {
+        return;
+    }
+
+    if let Err(error) = emit(json!({ "requestId": request_id })) {
+        eprintln!("[Web Bridge] Failed to emit stream cancel for request {request_id}: {error}");
+    }
 }
 
 #[cfg(test)]
@@ -725,6 +747,56 @@ mod tests {
         let err = web_bridge_emit_token(request_id, "later".to_string())
             .expect_err("failed stream request should be removed");
         assert!(err.contains("Unknown stream request id"));
+    }
+
+    #[test]
+    fn cancel_stream_request_removes_active_request_and_emits_payload() {
+        let request_id = "cancel-active".to_string();
+        let (sender, _receiver) = mpsc::channel();
+        register_stream_request(request_id.clone(), sender).unwrap();
+        let mut emitted = Vec::new();
+
+        emit_cancel_if_removed(&request_id, |payload| {
+            emitted.push(payload);
+            Ok::<(), String>(())
+        });
+
+        assert_eq!(emitted, vec![json!({ "requestId": "cancel-active" })]);
+        let err = web_bridge_emit_token(request_id, "late".to_string())
+            .expect_err("canceled stream request should be removed");
+        assert!(err.contains("Unknown stream request id"));
+    }
+
+    #[test]
+    fn cancel_stream_request_does_not_emit_after_terminal_done_removed_request() {
+        let request_id = "cancel-after-done".to_string();
+        let (sender, receiver) = mpsc::channel();
+        register_stream_request(request_id.clone(), sender).unwrap();
+
+        web_bridge_emit_done(
+            request_id.clone(),
+            BridgeMessage {
+                id: "m1".to_string(),
+                role: "assistant".to_string(),
+                content: "done".to_string(),
+                timestamp: 1777334400000,
+                conversation_id: "c1".to_string(),
+                references: Vec::new(),
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            receiver.recv().unwrap(),
+            BridgeStreamEvent::Done { .. }
+        ));
+
+        let mut emitted = Vec::new();
+        emit_cancel_if_removed(&request_id, |payload| {
+            emitted.push(payload);
+            Ok::<(), String>(())
+        });
+
+        assert!(emitted.is_empty());
     }
 
     #[test]

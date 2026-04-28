@@ -26,6 +26,7 @@ export async function POST(request: Request, context: ConversationRouteContext) 
           projectPath: project.rootDir,
           message,
         }),
+        signal: request.signal,
       },
     );
 

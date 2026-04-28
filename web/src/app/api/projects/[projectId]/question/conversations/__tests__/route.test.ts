@@ -90,6 +90,12 @@ describe("/api/projects/[projectId]/question/conversations routes", () => {
   });
 
   it("POST stream forwards the trimmed message and returns an SSE response", async () => {
+    const controller = new AbortController();
+    const request = new Request("http://localhost/api", {
+      method: "POST",
+      body: JSON.stringify({ message: "  Hello bridge  " }),
+      signal: controller.signal,
+    });
     bridgeMocks.fetchDesktopBridgeStream.mockResolvedValue(
       new Response("data: ok\n\n", {
         headers: { "content-type": "text/event-stream" },
@@ -98,10 +104,7 @@ describe("/api/projects/[projectId]/question/conversations routes", () => {
 
     const { POST } = await import("../[conversationId]/messages/stream/route");
     const response = await POST(
-      new Request("http://localhost/api", {
-        method: "POST",
-        body: JSON.stringify({ message: "  Hello bridge  " }),
-      }),
+      request,
       {
         params: Promise.resolve({ projectId: "project_1", conversationId: "conv_1" }),
       },
@@ -120,6 +123,7 @@ describe("/api/projects/[projectId]/question/conversations routes", () => {
           projectPath: "F:/project",
           message: "Hello bridge",
         }),
+        signal: request.signal,
       },
     );
   });

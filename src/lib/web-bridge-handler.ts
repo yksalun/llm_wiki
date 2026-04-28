@@ -27,6 +27,10 @@ interface BridgeJsonRequest {
   body?: unknown
 }
 
+interface BridgeStreamCancel {
+  requestId: string
+}
+
 interface BridgeMessage {
   id: string
   role: string
@@ -51,6 +55,7 @@ let pendingUnlistenFns: UnlistenFn[] = []
 let registrationPromise: Promise<void> | null = null
 let registrationGeneration = 0
 const activeConversationIds = new Set<string>()
+const activeChatControllers = new Map<string, AbortController>()
 
 export async function startWebBridgeHandler(): Promise<void> {
   if (registrationPromise || unlistenFns.length > 0) {
@@ -73,6 +78,13 @@ export async function startWebBridgeHandler(): Promise<void> {
         trackPendingUnlisten(
           await listen<BridgeJsonRequest>("web-bridge:json-request", (event) => {
             void handleJsonRequest(event.payload)
+          }),
+        ),
+      )
+      registered.push(
+        trackPendingUnlisten(
+          await listen<BridgeStreamCancel>("web-bridge:stream-cancel", (event) => {
+            handleStreamCancel(event.payload)
           }),
         ),
       )
@@ -107,6 +119,7 @@ export function stopWebBridgeHandler(): void {
   unlistenFns = []
   pendingUnlistenFns = []
   registrationPromise = null
+  abortActiveChatControllers()
 }
 
 async function handleChatRequest(request: BridgeChatRequest): Promise<void> {
@@ -140,6 +153,7 @@ async function handleChatRequest(request: BridgeChatRequest): Promise<void> {
 
   activeConversationIds.add(request.conversationId)
   const controller = new AbortController()
+  activeChatControllers.set(request.requestId, controller)
   const emitter = createBridgeEmitter(request.requestId)
   const unsubscribeProject = subscribeProjectGuard(request, controller, emitter)
 
@@ -172,9 +186,26 @@ async function handleChatRequest(request: BridgeChatRequest): Promise<void> {
     emitter.error(PROJECT_CHAT_ERROR, message)
   } finally {
     unsubscribeProject()
+    activeChatControllers.delete(request.requestId)
     activeConversationIds.delete(request.conversationId)
     await emitter.wait()
   }
+}
+
+function handleStreamCancel(cancel: BridgeStreamCancel): void {
+  const controller = activeChatControllers.get(cancel.requestId)
+  if (!controller || controller.signal.aborted) return
+
+  controller.abort(new Error("Web bridge stream canceled."))
+}
+
+function abortActiveChatControllers(): void {
+  for (const controller of activeChatControllers.values()) {
+    if (!controller.signal.aborted) {
+      controller.abort(new Error("Web bridge handler stopped."))
+    }
+  }
+  activeChatControllers.clear()
 }
 
 async function handleJsonRequest(request: BridgeJsonRequest): Promise<void> {
