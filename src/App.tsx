@@ -9,6 +9,7 @@ import { getLastProject, getRecentProjects, saveLastProject, loadLlmConfig, load
 import { loadReviewItems, loadChatHistory } from "@/lib/persist"
 import { setupAutoSave } from "@/lib/auto-save"
 import { startClipWatcher } from "@/lib/clip-watcher"
+import { startWebBridgeHandler } from "@/lib/web-bridge-handler"
 import { AppLayout } from "@/components/layout/app-layout"
 import { WelcomeScreen } from "@/components/project/welcome-screen"
 import { CreateProjectDialog } from "@/components/project/create-project-dialog"
@@ -27,6 +28,9 @@ function App() {
   useEffect(() => {
     setupAutoSave()
     startClipWatcher()
+    startWebBridgeHandler().catch((err) =>
+      console.error("Failed to start web bridge handler:", err)
+    )
   }, [])
 
   // Dev-only helper for visually testing the update-banner UX.
