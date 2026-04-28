@@ -1,15 +1,41 @@
 // @vitest-environment jsdom
 
-import { act, type ComponentProps } from "react";
+import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ProjectQuestionResponse } from "@/lib/types";
+import type {
+  DesktopBridgeConversation,
+  DesktopBridgeMessage,
+  DesktopBridgeReference,
+} from "@/lib/types";
 
 import { ProjectQuestionPanel } from "./project-question-panel";
 
+vi.mock("@/lib/client/desktop-question-api", () => ({
+  createQuestionConversation: vi.fn(),
+  listQuestionConversations: vi.fn(),
+  listQuestionMessages: vi.fn(),
+  streamQuestionMessage: vi.fn(),
+}));
+
+import {
+  createQuestionConversation,
+  listQuestionConversations,
+  listQuestionMessages,
+  streamQuestionMessage,
+  type StreamQuestionMessageHandlers,
+} from "@/lib/client/desktop-question-api";
+
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
   .IS_REACT_ACT_ENVIRONMENT = true;
+
+const apiMocks = vi.mocked({
+  createQuestionConversation,
+  listQuestionConversations,
+  listQuestionMessages,
+  streamQuestionMessage,
+});
 
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
@@ -28,246 +54,203 @@ afterEach(() => {
 });
 
 describe("ProjectQuestionPanel", () => {
-  it("disables Ask for questions shorter than two trimmed characters", () => {
-    renderProjectQuestionPanel();
+  it("加载桌面端会话和消息历史", async () => {
+    const conversation = createConversation({ id: "conv-history", title: "历史会话" });
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([
+      createMessage({
+        id: "msg-user",
+        role: "user",
+        content: "schema 在哪里？",
+        conversationId: conversation.id,
+      }),
+      createMessage({
+        id: "msg-assistant",
+        role: "assistant",
+        content: "schema 在 wiki/schema.md。",
+        conversationId: conversation.id,
+        references: [{ title: "schema.md", path: "wiki/schema.md" }],
+      }),
+    ]);
 
-    updateQuestion(" a ");
+    renderProjectQuestionPanel({ projectId: "project/a" });
+    await waitForText("schema 在 wiki/schema.md。");
 
-    expect(requiredButton("提问").disabled).toBe(true);
-  });
-
-  it("submits a project question with history and an abort signal", async () => {
-    const askFn = vi.fn().mockResolvedValue(createQuestionResponse());
-
-    renderProjectQuestionPanel({ projectId: "project/a", askFn });
-    updateQuestion("Where is the schema?");
-
-    await clickButton("提问");
-
-    expect(askFn).toHaveBeenCalledWith(
+    expect(apiMocks.listQuestionConversations).toHaveBeenCalledWith(
       "project/a",
-      { question: "Where is the schema?", history: [] },
       expect.any(AbortSignal),
     );
-  });
-
-  it("renders the answer and source details after success", async () => {
-    const askFn = vi.fn().mockResolvedValue(
-      createQuestionResponse({
-        answer: "The schema is documented in the wiki.",
-        sources: [
-          {
-            id: 1,
-            relativePath: "wiki/schema.md",
-            lineNumber: 1,
-            preview: "Schema overview",
-          },
-        ],
-      }),
+    expect(apiMocks.createQuestionConversation).not.toHaveBeenCalled();
+    expect(apiMocks.listQuestionMessages).toHaveBeenCalledWith(
+      "project/a",
+      "conv-history",
+      expect.any(AbortSignal),
     );
-
-    renderProjectQuestionPanel({ askFn });
-    updateQuestion("Where is the schema?");
-
-    await clickButton("提问");
-
-    expect(container?.textContent).toContain("The schema is documented in the wiki.");
+    expect(container?.textContent).toContain("历史会话");
+    expect(container?.textContent).toContain("schema 在哪里？");
     expect(container?.textContent).toContain("wiki/schema.md");
-    expect(container?.textContent).toContain("第 1 行");
-    expect(container?.textContent).toContain("Schema overview");
   });
 
-  it("opens a source by relative path", async () => {
-    const onOpenFile = vi.fn();
-    const askFn = vi.fn().mockResolvedValue(
-      createQuestionResponse({
-        sources: [
-          {
-            id: 1,
-            relativePath: "wiki/schema.md",
-            lineNumber: 1,
-            preview: "Schema overview",
-          },
-        ],
-      }),
+  it("没有会话时创建新会话，并可通过新会话按钮切换", async () => {
+    const initialConversation = createConversation({ id: "conv-created", title: "新建会话" });
+    const nextConversation = createConversation({ id: "conv-next", title: "第二会话" });
+    apiMocks.listQuestionConversations.mockResolvedValue([]);
+    apiMocks.createQuestionConversation
+      .mockResolvedValueOnce(initialConversation)
+      .mockResolvedValueOnce(nextConversation);
+    apiMocks.listQuestionMessages
+      .mockResolvedValueOnce([
+        createMessage({
+          content: "初始历史",
+          conversationId: initialConversation.id,
+        }),
+      ])
+      .mockResolvedValueOnce([
+        createMessage({
+          content: "第二段历史",
+          conversationId: nextConversation.id,
+        }),
+      ]);
+
+    renderProjectQuestionPanel();
+    await waitForText("初始历史");
+
+    await clickButton("新会话");
+    await waitForText("第二段历史");
+
+    expect(apiMocks.createQuestionConversation).toHaveBeenCalledTimes(2);
+    expect(apiMocks.listQuestionMessages).toHaveBeenLastCalledWith(
+      "project-1",
+      "conv-next",
+      expect.any(AbortSignal),
     );
+    expect(container?.textContent).not.toContain("初始历史");
+  });
 
-    renderProjectQuestionPanel({ onOpenFile, askFn });
-    updateQuestion("Where is the schema?");
-    await clickButton("提问");
+  it("发送消息时展示流式回答和引用，并点击引用打开文件", async () => {
+    const onOpenFile = vi.fn();
+    const conversation = createConversation({ id: "conv-stream" });
+    const reference = { title: "schema.md", path: "wiki/schema.md" };
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([]);
+    apiMocks.streamQuestionMessage.mockImplementation(async (_projectId, _conversationId, _message, handlers) => {
+      handlers.onToken("schema ");
+      handlers.onToken("在这里。");
+      handlers.onReferences([reference]);
+      await Promise.resolve();
+      handlers.onDone(
+        createMessage({
+          id: "assistant-final",
+          role: "assistant",
+          content: "schema 在这里。",
+          conversationId: conversation.id,
+          references: [reference],
+        }),
+      );
+    });
 
-    await clickButton("打开来源");
+    renderProjectQuestionPanel({ onOpenFile });
+    await waitForReady();
+    updateQuestion("schema 在哪里？");
+
+    await clickButton("发送");
+    await waitForText("schema 在这里。");
+
+    expect(apiMocks.streamQuestionMessage).toHaveBeenCalledWith(
+      "project-1",
+      "conv-stream",
+      "schema 在哪里？",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(container?.textContent).toContain("schema 在哪里？");
+    expect(container?.textContent).toContain("schema.md");
+    expect(container?.textContent).toContain("wiki/schema.md");
+
+    await clickButtonContaining("schema.md");
 
     expect(onOpenFile).toHaveBeenCalledWith("wiki/schema.md");
     expect(onOpenFile).toHaveBeenCalledTimes(1);
   });
 
-  it("renders an error and retries the last question", async () => {
-    const askFn = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("Question service unavailable"))
-      .mockResolvedValueOnce(createQuestionResponse({ answer: "Retry answer" }));
+  it("项目切换时 abort 流请求，并防止旧请求污染当前项目", async () => {
+    const firstConversation = createConversation({ id: "conv-a" });
+    const secondConversation = createConversation({ id: "conv-b" });
+    let firstHandlers: StreamQuestionMessageHandlers | undefined;
+    const firstStream = createDeferred<void>();
 
-    renderProjectQuestionPanel({ askFn });
-    updateQuestion("Where is the schema?");
-
-    await clickButton("提问");
-
-    expect(container?.textContent).toContain("Question service unavailable");
-    expect(container?.textContent).toContain("重试");
-
-    await clickButton("重试");
-
-    expect(askFn).toHaveBeenCalledTimes(2);
-    expect(askFn).toHaveBeenLastCalledWith(
-      "project-1",
-      { question: "Where is the schema?", history: [] },
-      expect.any(AbortSignal),
-    );
-    expect(container?.textContent).toContain("Retry answer");
-  });
-
-  it("clears the prior answer and sources when the next question fails", async () => {
-    const askFn = vi
-      .fn()
-      .mockResolvedValueOnce(
-        createQuestionResponse({
-          answer: "The schema is in wiki/schema.md.",
-          sources: [
-            {
-              id: 1,
-              relativePath: "wiki/schema.md",
-              lineNumber: 1,
-              preview: "Schema overview",
-            },
-          ],
+    apiMocks.listQuestionConversations
+      .mockResolvedValueOnce([firstConversation])
+      .mockResolvedValueOnce([secondConversation]);
+    apiMocks.listQuestionMessages
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        createMessage({
+          id: "project-b-history",
+          content: "项目 B 历史",
+          conversationId: secondConversation.id,
         }),
-      )
-      .mockRejectedValueOnce(new Error("Question service unavailable"));
-
-    renderProjectQuestionPanel({ askFn });
-    updateQuestion("Where is the schema?");
-    await clickButton("提问");
-
-    expect(container?.textContent).toContain("The schema is in wiki/schema.md.");
-    expect(container?.textContent).toContain("wiki/schema.md");
-
-    updateQuestion("What owns it?");
-    await clickButton("提问");
-
-    expect(container?.textContent).toContain("Question service unavailable");
-    expect(container?.textContent).toContain("重试");
-    expect(container?.textContent).not.toContain("The schema is in wiki/schema.md.");
-    expect(container?.textContent).not.toContain("wiki/schema.md");
-  });
-
-  it("aborts and resets state when the project changes", async () => {
-    const deferred = createDeferred<ProjectQuestionResponse>();
-    const askFn = vi.fn().mockReturnValueOnce(deferred.promise);
-    const { rerender } = renderProjectQuestionPanel({ projectId: "project-a", askFn });
-
-    updateQuestion("Where is the schema?");
-    await clickButton("提问");
-
-    const firstSignal = askFn.mock.calls[0]?.[2] as AbortSignal;
-
-    rerender({ projectId: "project-b", askFn });
-
-    expect(firstSignal.aborted).toBe(true);
-    expect(questionTextarea().value).toBe("");
-    expect(container?.textContent).not.toContain("正在询问项目");
-    expect(container?.textContent).not.toContain("提问失败");
-    expect(container?.textContent).not.toContain("重试");
-
-    await act(async () => {
-      deferred.resolve(
-        createQuestionResponse({
-          answer: "Project A answer",
-          sources: [
-            {
-              id: 1,
-              relativePath: "project-a/schema.md",
-              lineNumber: 1,
-              preview: "Project A source",
-            },
-          ],
-        }),
-      );
-      await Promise.resolve();
+      ]);
+    apiMocks.streamQuestionMessage.mockImplementation((_projectId, _conversationId, _message, handlers) => {
+      firstHandlers = handlers;
+      return firstStream.promise;
     });
 
-    expect(container?.textContent).not.toContain("Project A answer");
-    expect(container?.textContent).not.toContain("project-a/schema.md");
-  });
+    const { rerender } = renderProjectQuestionPanel({ projectId: "project-a" });
+    await waitForReady();
+    updateQuestion("项目 A 问题");
+    await clickButton("发送");
 
-  it("includes prior user and assistant messages in a second submission", async () => {
-    const askFn = vi
-      .fn()
-      .mockResolvedValueOnce(
-        createQuestionResponse({
-          question: "Where is the schema?",
-          answer: "The schema is in wiki/schema.md.",
-        }),
-      )
-      .mockResolvedValueOnce(
-        createQuestionResponse({
-          question: "What owns it?",
-          answer: "The architecture page owns it.",
+    const staleHandlers = requireStreamHandlers(firstHandlers);
+
+    expect(staleHandlers.signal?.aborted).toBe(false);
+
+    rerender({ projectId: "project-b" });
+    await waitForText("项目 B 历史");
+
+    expect(staleHandlers.signal?.aborted).toBe(true);
+
+    act(() => {
+      staleHandlers.onToken("项目 A 旧回答");
+      staleHandlers.onDone(
+        createMessage({
+          role: "assistant",
+          content: "项目 A 完整旧回答",
+          conversationId: firstConversation.id,
         }),
       );
+    });
 
-    renderProjectQuestionPanel({ askFn });
-    updateQuestion("Where is the schema?");
-    await clickButton("提问");
-
-    updateQuestion("What owns it?");
-    await clickButton("提问");
-
-    expect(askFn).toHaveBeenLastCalledWith(
-      "project-1",
-      {
-        question: "What owns it?",
-        history: [
-          { role: "user", content: "Where is the schema?" },
-          { role: "assistant", content: "The schema is in wiki/schema.md." },
-        ],
-      },
-      expect.any(AbortSignal),
-    );
+    expect(container?.textContent).toContain("项目 B 历史");
+    expect(container?.textContent).not.toContain("项目 A 旧回答");
+    expect(container?.textContent).not.toContain("项目 A 完整旧回答");
   });
 });
 
 function renderProjectQuestionPanel({
   projectId = "project-1",
   onOpenFile = vi.fn(),
-  askFn = vi.fn(),
 }: {
   projectId?: string;
   onOpenFile?: (relativePath: string) => void;
-  askFn?: ComponentProps<typeof ProjectQuestionPanel>["askFn"];
 } = {}) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
 
   act(() => {
-    root?.render(
-      <ProjectQuestionPanel projectId={projectId} onOpenFile={onOpenFile} askFn={askFn} />,
-    );
+    root?.render(<ProjectQuestionPanel projectId={projectId} onOpenFile={onOpenFile} />);
   });
 
   return {
     rerender(nextProps: {
       projectId?: string;
       onOpenFile?: (relativePath: string) => void;
-      askFn?: ComponentProps<typeof ProjectQuestionPanel>["askFn"];
     }) {
       act(() => {
         root?.render(
           <ProjectQuestionPanel
             projectId={nextProps.projectId ?? projectId}
             onOpenFile={nextProps.onOpenFile ?? onOpenFile}
-            askFn={nextProps.askFn ?? askFn}
           />,
         );
       });
@@ -287,7 +270,9 @@ function updateQuestion(value: string) {
 }
 
 function questionTextarea() {
-  const textarea = container?.querySelector("textarea");
+  const textarea = container?.querySelector<HTMLTextAreaElement>(
+    'textarea[aria-label="项目问答输入"]',
+  );
 
   if (!textarea) {
     throw new Error("Expected question textarea.");
@@ -303,28 +288,19 @@ async function clickButton(name: string) {
   });
 }
 
-function createQuestionResponse(
-  overrides: Partial<ProjectQuestionResponse> = {},
-): ProjectQuestionResponse {
-  return {
-    question: "Where is the schema?",
-    answer: "The schema is in wiki/schema.md.",
-    sources: [
-      {
-        id: 1,
-        relativePath: "wiki/schema.md",
-        lineNumber: 1,
-        preview: "Schema overview",
-      },
-    ],
-    retrieval: {
-      queries: ["schema"],
-      totalMatches: 1,
-      truncated: false,
-    },
-    model: "test-model",
-    ...overrides,
-  };
+async function clickButtonContaining(text: string) {
+  await act(async () => {
+    const button = Array.from(container?.querySelectorAll("button") ?? []).find((candidate) =>
+      candidate.textContent?.includes(text),
+    );
+
+    if (!button) {
+      throw new Error(`Expected button containing ${text}.`);
+    }
+
+    button.click();
+    await Promise.resolve();
+  });
 }
 
 function requiredButton(name: string) {
@@ -339,6 +315,61 @@ function requiredButton(name: string) {
   return button;
 }
 
+async function waitForReady() {
+  await waitFor(() => {
+    expect(questionTextarea().disabled).toBe(false);
+  });
+}
+
+async function waitForText(text: string) {
+  await waitFor(() => {
+    expect(container?.textContent).toContain(text);
+  });
+}
+
+async function waitFor(assertion: () => void) {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+
+  throw lastError;
+}
+
+function createConversation(
+  overrides: Partial<DesktopBridgeConversation> = {},
+): DesktopBridgeConversation {
+  return {
+    id: "conv-1",
+    title: "默认会话",
+    createdAt: 1,
+    updatedAt: 1,
+    ...overrides,
+  };
+}
+
+function createMessage(overrides: Partial<DesktopBridgeMessage> = {}): DesktopBridgeMessage {
+  return {
+    id: "msg-1",
+    role: "assistant",
+    content: "默认消息",
+    timestamp: 1,
+    conversationId: "conv-1",
+    ...overrides,
+  };
+}
+
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -348,4 +379,14 @@ function createDeferred<T>() {
   });
 
   return { promise, resolve, reject };
+}
+
+function requireStreamHandlers(
+  handlers: StreamQuestionMessageHandlers | undefined,
+): StreamQuestionMessageHandlers {
+  if (!handlers) {
+    throw new Error("Expected stream handlers.");
+  }
+
+  return handlers;
 }
