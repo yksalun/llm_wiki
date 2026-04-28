@@ -2,7 +2,7 @@
 
 这是 `llm_wiki` 仓库里的独立 Web 子项目，目标是把现有项目目录桥接成一个可部署的 Web 工作台。
 
-这一版是 `v1`，重点只做最短闭环：
+当前版本已经从最短闭环扩展为可日常使用的项目工作台，重点能力包括：
 
 - 扫描白名单项目根目录
 - 打开已有项目
@@ -11,17 +11,18 @@
 - 编辑并保存 `purpose.md`
 - 编辑并保存 `schema.md`
 - 编辑并保存 `wiki/**/*.md`
+- 项目内搜索
+- 项目洞察
+- 通过桌面端 Bridge 展示项目级问答
 - 把项目快照和同步记录写入 PostgreSQL
 
-这一版明确**不做**：
+当前仍明确**不做**：
 
 - ingest
-- search
-- graph
 - review
 - deep research
 - 多用户权限体系
-- Rust bridge
+- 通用 Rust 重任务运行时
 - 把项目正文整体迁入数据库
 
 ## 技术栈
@@ -161,7 +162,7 @@ npm run start
 
 - 首页扫描白名单根目录
 - 首页展示项目列表和扫描 warning
-- 项目页展示 `Overview / Files / Purpose / Schema / Project Info`
+- 项目页展示概览、搜索、问答、洞察、文件、目标、结构和项目信息
 - 文件树浏览
 - Markdown 预览与编辑
 - 手动保存
@@ -175,7 +176,7 @@ npm run start
 - 自动保存
 - 保存冲突的高级处理
 - 富文本编辑器
-- 搜索、图谱、Review、Deep Research
+- Review、Deep Research
 - 多用户登录与权限
 
 ## 一眼看懂的数据边界
