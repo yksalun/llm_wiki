@@ -95,7 +95,7 @@ impl Read for SseReceiverReader {
         }
 
         while self.pending.is_empty() && !self.finished {
-            match self.receiver.recv() {
+            match self.receiver.recv_timeout(Duration::from_secs(15)) {
                 Ok(event) => {
                     self.finished = matches!(
                         event,
@@ -103,7 +103,10 @@ impl Read for SseReceiverReader {
                     );
                     self.pending = format_sse_event(&event).into_bytes();
                 }
-                Err(_) => {
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    self.pending = b": keep-alive\n\n".to_vec();
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
                     self.finished = true;
                 }
             }
@@ -184,7 +187,8 @@ pub fn start_web_bridge(app: AppHandle) {
 
         println!("[Web Bridge] Listening on http://127.0.0.1:{PORT}");
         for request in server.incoming_requests() {
-            handle_request(request, &app);
+            let app = app.clone();
+            thread::spawn(move || handle_request(request, &app));
         }
     });
 }
@@ -207,9 +211,10 @@ fn send_stream_event(
     }
     .ok_or_else(|| format!("Unknown stream request id: {request_id}"))?;
 
-    sender
-        .send(event)
-        .map_err(|_| format!("Stream request receiver dropped: {request_id}"))
+    sender.send(event).map_err(|_| {
+        remove_stream_request(&request_id);
+        format!("Stream request receiver dropped: {request_id}")
+    })
 }
 
 fn stream_requests() -> &'static Mutex<HashMap<String, mpsc::Sender<BridgeStreamEvent>>> {
@@ -227,6 +232,7 @@ fn next_request_id() -> String {
 fn handle_request(mut request: tiny_http::Request, app: &AppHandle) {
     let method = request.method().clone();
     let raw_url = request.url().to_string();
+    let origin = request_origin(&request);
     let path = raw_url
         .split('?')
         .next()
@@ -240,7 +246,7 @@ fn handle_request(mut request: tiny_http::Request, app: &AppHandle) {
     };
 
     if method == Method::Options {
-        respond(request, 204, "", "application/json");
+        respond(request, 204, "", "application/json", origin.as_deref());
         return;
     }
 
@@ -249,17 +255,34 @@ fn handle_request(mut request: tiny_http::Request, app: &AppHandle) {
             request,
             200,
             json!({ "ok": true, "service": "llm-wiki-web-bridge", "version": "0.1.0" }),
+            origin.as_deref(),
         );
         return;
     }
 
     match (method, segments.as_slice()) {
         (Method::Get, ["projects", project_id, "conversations"]) => {
-            handle_json_bridge_request(request, app, "list_conversations", project_id, None, None);
+            handle_json_bridge_request(
+                request,
+                app,
+                "list_conversations",
+                project_id,
+                None,
+                None,
+                origin.as_deref(),
+            );
         }
         (Method::Post, ["projects", project_id, "conversations"]) => {
             let body = Some(read_body(&mut request));
-            handle_json_bridge_request(request, app, "create_conversation", project_id, None, body);
+            handle_json_bridge_request(
+                request,
+                app,
+                "create_conversation",
+                project_id,
+                None,
+                body,
+                origin.as_deref(),
+            );
         }
         (Method::Get, ["projects", project_id, "conversations", conversation_id, "messages"]) => {
             handle_json_bridge_request(
@@ -269,6 +292,7 @@ fn handle_request(mut request: tiny_http::Request, app: &AppHandle) {
                 project_id,
                 Some(conversation_id),
                 None,
+                origin.as_deref(),
             );
         }
         (
@@ -282,10 +306,21 @@ fn handle_request(mut request: tiny_http::Request, app: &AppHandle) {
                 "stream",
             ],
         ) => {
-            handle_stream_bridge_request(request, app, project_id, conversation_id);
+            handle_stream_bridge_request(
+                request,
+                app,
+                project_id,
+                conversation_id,
+                origin.as_deref(),
+            );
         }
         _ => {
-            respond_json(request, 404, json!({ "ok": false, "error": "Not found" }));
+            respond_json(
+                request,
+                404,
+                json!({ "ok": false, "error": "Not found" }),
+                origin.as_deref(),
+            );
         }
     }
 }
@@ -297,11 +332,12 @@ fn handle_json_bridge_request(
     project_id: &str,
     conversation_id: Option<&str>,
     body: Option<Result<Value, String>>,
+    origin: Option<&str>,
 ) {
     let body = match body {
         Some(Ok(body)) => Some(body),
         Some(Err(error)) => {
-            respond_json(request, 400, json!({ "ok": false, "error": error }));
+            respond_json(request, 400, json!({ "ok": false, "error": error }), origin);
             return;
         }
         None => None,
@@ -310,7 +346,7 @@ fn handle_json_bridge_request(
     let request_id = next_request_id();
     let (sender, receiver) = mpsc::channel();
     if let Err(error) = register_json_request(request_id.clone(), sender) {
-        respond_json(request, 500, json!({ "ok": false, "error": error }));
+        respond_json(request, 500, json!({ "ok": false, "error": error }), origin);
         return;
     }
 
@@ -328,15 +364,21 @@ fn handle_json_bridge_request(
             request,
             500,
             json!({ "ok": false, "error": format!("Failed to emit web bridge JSON request: {error}") }),
+            origin,
         );
         return;
     }
 
     match receiver.recv_timeout(Duration::from_secs(JSON_REQUEST_TIMEOUT_SECS)) {
-        Ok(response) => respond_json(request, response.status, response.body),
+        Ok(response) => respond_json(request, response.status, response.body, origin),
         Err(mpsc::RecvTimeoutError::Timeout) => {
             remove_json_request(&request_id);
-            respond_json(request, 504, json!({ "ok": false, "error": "Desktop response timed out" }));
+            respond_json(
+                request,
+                504,
+                json!({ "ok": false, "error": "Desktop response timed out" }),
+                origin,
+            );
         }
         Err(mpsc::RecvTimeoutError::Disconnected) => {
             remove_json_request(&request_id);
@@ -344,6 +386,7 @@ fn handle_json_bridge_request(
                 request,
                 500,
                 json!({ "ok": false, "error": "Desktop response channel disconnected" }),
+                origin,
             );
         }
     }
@@ -354,11 +397,12 @@ fn handle_stream_bridge_request(
     app: &AppHandle,
     project_id: &str,
     conversation_id: &str,
+    origin: Option<&str>,
 ) {
     let body = match read_body(&mut request).and_then(parse_stream_body) {
         Ok(body) => body,
         Err(error) => {
-            respond_json(request, 400, json!({ "ok": false, "error": error }));
+            respond_json(request, 400, json!({ "ok": false, "error": error }), origin);
             return;
         }
     };
@@ -366,7 +410,7 @@ fn handle_stream_bridge_request(
     let request_id = next_request_id();
     let (sender, receiver) = mpsc::channel();
     if let Err(error) = register_stream_request(request_id.clone(), sender) {
-        respond_json(request, 500, json!({ "ok": false, "error": error }));
+        respond_json(request, 500, json!({ "ok": false, "error": error }), origin);
         return;
     }
 
@@ -385,6 +429,7 @@ fn handle_stream_bridge_request(
             request,
             500,
             json!({ "ok": false, "error": format!("Failed to emit web bridge chat request: {error}") }),
+            origin,
         );
         return;
     }
@@ -396,10 +441,11 @@ fn handle_stream_bridge_request(
         None,
         None,
     );
-    for header in cors_headers("text/event-stream") {
+    for header in cors_headers("text/event-stream", origin) {
         response.add_header(header);
     }
     let _ = request.respond(response);
+    remove_stream_request(&request_id);
 }
 
 fn read_body(request: &mut tiny_http::Request) -> Result<Value, String> {
@@ -472,26 +518,73 @@ fn remove_json_request(request_id: &str) {
     }
 }
 
-fn respond_json(request: tiny_http::Request, status: u16, body: Value) {
-    respond(request, status, &body.to_string(), "application/json");
+fn request_origin(request: &tiny_http::Request) -> Option<String> {
+    request
+        .headers()
+        .iter()
+        .find(|header| header.field.equiv("Origin"))
+        .map(|header| header.value.as_str().to_string())
 }
 
-fn respond(request: tiny_http::Request, status: u16, body: &str, content_type: &str) {
+fn respond_json(request: tiny_http::Request, status: u16, body: Value, origin: Option<&str>) {
+    respond(request, status, &body.to_string(), "application/json", origin);
+}
+
+fn respond(
+    request: tiny_http::Request,
+    status: u16,
+    body: &str,
+    content_type: &str,
+    origin: Option<&str>,
+) {
     let mut response = Response::from_string(body.to_string()).with_status_code(status);
-    for header in cors_headers(content_type) {
+    for header in cors_headers(content_type, origin) {
         response.add_header(header);
     }
     let _ = request.respond(response);
 }
 
-fn cors_headers(content_type: &str) -> Vec<Header> {
-    vec![
-        // This service binds only to 127.0.0.1; permissive CORS keeps web dev ports flexible.
-        Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap(),
+fn cors_headers(content_type: &str, origin: Option<&str>) -> Vec<Header> {
+    let mut headers = vec![
         Header::from_bytes("Access-Control-Allow-Methods", "GET, POST, OPTIONS").unwrap(),
         Header::from_bytes("Access-Control-Allow-Headers", "Content-Type").unwrap(),
         Header::from_bytes("Content-Type", content_type).unwrap(),
-    ]
+    ];
+
+    if let Some(origin) = origin.filter(|origin| is_allowed_origin(origin)) {
+        headers.push(Header::from_bytes("Access-Control-Allow-Origin", origin).unwrap());
+    }
+
+    headers
+}
+
+fn is_allowed_origin(origin: &str) -> bool {
+    let Some(host_and_port) = origin
+        .strip_prefix("http://")
+        .or_else(|| origin.strip_prefix("https://"))
+    else {
+        return false;
+    };
+
+    if host_and_port.contains('/') {
+        return false;
+    }
+
+    for prefix in ["localhost:", "127.0.0.1:", "[::1]:"] {
+        if let Some(port) = host_and_port.strip_prefix(prefix) {
+            return is_valid_port(port);
+        }
+    }
+
+    false
+}
+
+fn is_valid_port(port: &str) -> bool {
+    !port.is_empty()
+        && port
+            .parse::<u16>()
+            .map(|value| value > 0)
+            .unwrap_or(false)
 }
 
 fn sse_headers() -> Vec<Header> {
@@ -616,6 +709,52 @@ mod tests {
             BridgeStreamEvent::Done { .. }
         ));
         assert!(web_bridge_emit_token(request_id, "late".to_string()).is_err());
+    }
+
+    #[test]
+    fn token_send_failure_removes_stream_request_from_registry() {
+        let request_id = "token-send-failure-cleanup".to_string();
+        let (sender, receiver) = mpsc::channel();
+        register_stream_request(request_id.clone(), sender).unwrap();
+        drop(receiver);
+
+        let err = web_bridge_emit_token(request_id.clone(), "late".to_string())
+            .expect_err("dropped stream receiver should fail");
+
+        assert!(err.contains("Stream request receiver dropped"));
+        let err = web_bridge_emit_token(request_id, "later".to_string())
+            .expect_err("failed stream request should be removed");
+        assert!(err.contains("Unknown stream request id"));
+    }
+
+    #[test]
+    fn is_allowed_origin_accepts_local_http_and_https_origins_with_ports() {
+        for origin in [
+            "http://localhost:5173",
+            "https://localhost:5173",
+            "http://127.0.0.1:3000",
+            "https://127.0.0.1:3000",
+            "http://[::1]:1420",
+            "https://[::1]:1420",
+        ] {
+            assert!(is_allowed_origin(origin), "{origin} should be allowed");
+        }
+    }
+
+    #[test]
+    fn is_allowed_origin_rejects_external_or_malformed_origins() {
+        for origin in [
+            "http://example.com:5173",
+            "https://localhost.evil.com:5173",
+            "http://127.0.0.2:3000",
+            "http://[::2]:1420",
+            "http://localhost",
+            "file://localhost:5173",
+            "http://localhost:abc",
+            "http://localhost:5173/path",
+        ] {
+            assert!(!is_allowed_origin(origin), "{origin} should be rejected");
+        }
     }
 
     #[test]
