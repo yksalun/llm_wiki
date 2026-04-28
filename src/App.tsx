@@ -249,6 +249,12 @@ function App() {
   }, [])
 
   async function handleProjectOpened(proj: WikiProject) {
+    // Clear visible project state immediately so bridge guards can abort
+    // active streams before reset/import work has a chance to block.
+    setProject(null)
+    setFileTree([])
+    setSelectedFile(null)
+
     // Clear all per-project state BEFORE loading new project data
     // to prevent cross-project contamination. MUST be awaited so the
     // ingest queue / graph cache are actually cleared before the new
@@ -352,13 +358,16 @@ function App() {
   }
 
   async function handleSwitchProject() {
+    // Clear visible project state immediately so bridge guards can abort
+    // active streams before reset/import work has a chance to block.
+    setProject(null)
+    setFileTree([])
+    setSelectedFile(null)
+
     // Clear all per-project state BEFORE flipping back to the welcome screen
     // so old data cannot leak in via any async render pass.
     const { resetProjectState } = await import("@/lib/reset-project-state")
     await resetProjectState()
-    setProject(null)
-    setFileTree([])
-    setSelectedFile(null)
   }
 
   if (loading) {
