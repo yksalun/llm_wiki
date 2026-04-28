@@ -408,6 +408,82 @@ describe("sendProjectChatMessage", () => {
     )
   })
 
+  it("does not add a blank assistant message when aborted during streaming before any token", async () => {
+    const addedMessages: DisplayMessage[] = []
+    const controller = new AbortController()
+    const deps = createDependencies({
+      isGreeting: vi.fn(() => true),
+      addMessage: vi.fn((msg: DisplayMessage) => {
+        addedMessages.push(msg)
+      }),
+      streamChat: vi.fn(async (_config, _messages, callbacks) => {
+        controller.abort()
+        callbacks.onDone()
+      }),
+    })
+    const callbacks = createCallbacks()
+
+    await sendProjectChatMessage(
+      { ...request, message: "hello", signal: controller.signal },
+      callbacks,
+      deps,
+    )
+
+    expect(deps.streamChat).toHaveBeenCalled()
+    expect(callbacks.onError).toHaveBeenCalledTimes(1)
+    expect(callbacks.onError).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "AbortError" }),
+    )
+    expect(callbacks.onDone).not.toHaveBeenCalled()
+    expect(addedMessages).toEqual([
+      expect.objectContaining({
+        role: "user",
+        content: "hello",
+        conversationId: "conv-1",
+      }),
+    ])
+  })
+
+  it("renames an untouched placeholder conversation to the first user message", async () => {
+    const existing: Conversation = {
+      id: "conv-1",
+      title: "New Conversation",
+      createdAt: 100,
+      updatedAt: 200,
+    }
+    const upsertConversation = vi.fn()
+    const deps = createDependencies({
+      isGreeting: vi.fn(() => true),
+      now: vi.fn(() => 300),
+      getState: vi.fn(() => ({
+        project,
+        llmConfig,
+        dataVersion: 7,
+        messages: [],
+        conversations: [existing],
+        maxHistoryMessages: 10,
+      })),
+      upsertConversation,
+      streamChat: vi.fn(async (_config, _messages, callbacks) => {
+        callbacks.onDone()
+      }),
+    })
+    const firstMessage = "Explain the transformer attention mechanism in plain language"
+
+    await sendProjectChatMessage(
+      { ...request, message: firstMessage },
+      createCallbacks(),
+      deps,
+    )
+
+    expect(upsertConversation).toHaveBeenCalledWith({
+      id: "conv-1",
+      title: firstMessage.slice(0, 50),
+      createdAt: 100,
+      updatedAt: 300,
+    })
+  })
+
   it("preserves an existing conversation title while updating updatedAt", async () => {
     const existing: Conversation = {
       id: "conv-1",
@@ -442,6 +518,45 @@ describe("sendProjectChatMessage", () => {
     expect(upsertConversation).toHaveBeenCalledWith({
       id: "conv-1",
       title: "Keep this title",
+      createdAt: 100,
+      updatedAt: 300,
+    })
+  })
+
+  it("preserves a placeholder title when the conversation already has user messages", async () => {
+    const existing: Conversation = {
+      id: "conv-1",
+      title: "New Conversation",
+      createdAt: 100,
+      updatedAt: 200,
+    }
+    const upsertConversation = vi.fn()
+    const deps = createDependencies({
+      isGreeting: vi.fn(() => true),
+      now: vi.fn(() => 300),
+      getState: vi.fn(() => ({
+        project,
+        llmConfig,
+        dataVersion: 7,
+        messages: [message("user", "Earlier user message", "conv-1")],
+        conversations: [existing],
+        maxHistoryMessages: 10,
+      })),
+      upsertConversation,
+      streamChat: vi.fn(async (_config, _messages, callbacks) => {
+        callbacks.onDone()
+      }),
+    })
+
+    await sendProjectChatMessage(
+      { ...request, message: "hello" },
+      createCallbacks(),
+      deps,
+    )
+
+    expect(upsertConversation).toHaveBeenCalledWith({
+      id: "conv-1",
+      title: "New Conversation",
       createdAt: 100,
       updatedAt: 300,
     })

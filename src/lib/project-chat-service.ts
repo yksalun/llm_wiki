@@ -207,9 +207,25 @@ export async function sendProjectChatMessage(
   const existingConversation = initialState.conversations.find(
     (conversation) => conversation.id === request.conversationId,
   )
+  const hasPriorUserMessage = initialState.messages.some(
+    (stateMessage) =>
+      stateMessage.conversationId === request.conversationId &&
+      stateMessage.role === "user",
+  )
+  const shouldRenamePlaceholder =
+    existingConversation &&
+    !hasPriorUserMessage &&
+    (existingConversation.title.trim() === "" ||
+      existingConversation.title === "New Conversation")
   dependencies.upsertConversation(
     existingConversation
-      ? { ...existingConversation, updatedAt: now }
+      ? {
+          ...existingConversation,
+          title: shouldRenamePlaceholder
+            ? message.slice(0, 50)
+            : existingConversation.title,
+          updatedAt: now,
+        }
       : {
           id: request.conversationId,
           title: message.slice(0, 50),
@@ -277,6 +293,10 @@ export async function sendProjectChatMessage(
         },
         onDone: () => {
           if (terminalCallbackCalled) return
+          if (signal.aborted && accumulated.length === 0) {
+            callErrorOnce(createAbortError(signal))
+            return
+          }
           terminalCallbackCalled = true
           const assistantMessage = createDisplayMessage({
             role: "assistant",
