@@ -44,10 +44,12 @@ interface BridgeReference {
 const PROJECT_NOT_OPEN = "PROJECT_NOT_OPEN"
 const PROJECT_MISMATCH = "PROJECT_MISMATCH"
 const PROJECT_CHAT_ERROR = "PROJECT_CHAT_ERROR"
+const CONVERSATION_BUSY = "CONVERSATION_BUSY"
 
 let unlistenFns: UnlistenFn[] = []
 let registrationPromise: Promise<void> | null = null
 let registrationGeneration = 0
+const activeConversationIds = new Set<string>()
 
 export async function startWebBridgeHandler(): Promise<void> {
   if (registrationPromise || unlistenFns.length > 0) {
@@ -55,15 +57,19 @@ export async function startWebBridgeHandler(): Promise<void> {
   }
 
   const generation = ++registrationGeneration
-  registrationPromise = Promise.all([
-    listen<BridgeChatRequest>("web-bridge:chat-request", (event) => {
-      void handleChatRequest(event.payload)
-    }),
-    listen<BridgeJsonRequest>("web-bridge:json-request", (event) => {
-      void handleJsonRequest(event.payload)
-    }),
-  ])
-    .then((registered) => {
+  registrationPromise = (async () => {
+    const registered: UnlistenFn[] = []
+    try {
+      registered.push(
+        await listen<BridgeChatRequest>("web-bridge:chat-request", (event) => {
+          void handleChatRequest(event.payload)
+        }),
+      )
+      registered.push(
+        await listen<BridgeJsonRequest>("web-bridge:json-request", (event) => {
+          void handleJsonRequest(event.payload)
+        }),
+      )
       if (generation !== registrationGeneration) {
         for (const unlisten of registered) {
           unlisten()
@@ -71,13 +77,16 @@ export async function startWebBridgeHandler(): Promise<void> {
         return
       }
       unlistenFns = registered
-    })
-    .catch((error) => {
+    } catch (error) {
+      for (const unlisten of registered) {
+        unlisten()
+      }
       if (generation === registrationGeneration) {
         registrationPromise = null
       }
       throw error
-    })
+    }
+  })()
 
   return registrationPromise
 }
@@ -107,37 +116,56 @@ async function handleChatRequest(request: BridgeChatRequest): Promise<void> {
     return
   }
 
-  await sendProjectChatMessage(
-    {
-      projectId: request.projectId,
-      projectPath: request.projectPath,
-      conversationId: request.conversationId,
-      message: request.message,
-    },
-    {
-      onToken: (token) => {
-        void invoke("web_bridge_emit_token", {
-          requestId: request.requestId,
-          text: token,
-        }).catch((error) => console.error("Failed to emit web bridge token:", error))
+  const chatState = useChatStore.getState()
+  if (
+    activeConversationIds.has(request.conversationId) ||
+    (chatState.isStreaming && chatState.activeConversationId === request.conversationId)
+  ) {
+    await emitBridgeError(
+      request.requestId,
+      CONVERSATION_BUSY,
+      "该会话正在生成回复，请等待当前请求完成后再发送。",
+    )
+    return
+  }
+
+  activeConversationIds.add(request.conversationId)
+  const controller = new AbortController()
+  const emitter = createBridgeEmitter(request.requestId)
+  const unsubscribeProject = subscribeProjectGuard(request, controller, emitter)
+
+  try {
+    await sendProjectChatMessage(
+      {
+        projectId: request.projectId,
+        projectPath: request.projectPath,
+        conversationId: request.conversationId,
+        message: request.message,
+        signal: controller.signal,
       },
-      onReferences: (references) => {
-        void emitBridgeReferences(request.requestId, references)
+      {
+        onToken: (token) => {
+          emitter.token(token)
+        },
+        onReferences: (references) => {
+          emitter.references(references)
+        },
+        onDone: (message) => {
+          emitter.done(message)
+        },
+        onError: (error) => {
+          emitter.error(PROJECT_CHAT_ERROR, error.message)
+        },
       },
-      onDone: (message) => {
-        void invoke("web_bridge_emit_done", {
-          requestId: request.requestId,
-          message: toBridgeMessage(message),
-        }).catch((error) => console.error("Failed to emit web bridge done:", error))
-      },
-      onError: (error) => {
-        void emitBridgeError(request.requestId, PROJECT_CHAT_ERROR, error.message)
-      },
-    },
-  ).catch((error) => {
+    )
+  } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    void emitBridgeError(request.requestId, PROJECT_CHAT_ERROR, message)
-  })
+    emitter.error(PROJECT_CHAT_ERROR, message)
+  } finally {
+    unsubscribeProject()
+    activeConversationIds.delete(request.conversationId)
+    await emitter.wait()
+  }
 }
 
 async function handleJsonRequest(request: BridgeJsonRequest): Promise<void> {
@@ -259,14 +287,114 @@ function toBridgeReferences(references: MessageReference[]): BridgeReference[] {
   }))
 }
 
-async function emitBridgeReferences(
-  requestId: string,
-  references: MessageReference[],
-): Promise<void> {
-  await invoke("web_bridge_emit_references", {
-    requestId,
-    references: toBridgeReferences(references),
-  }).catch((error) => console.error("Failed to emit web bridge references:", error))
+function subscribeProjectGuard(
+  request: BridgeChatRequest,
+  controller: AbortController,
+  emitter: BridgeEmitter,
+): () => void {
+  return useWikiStore.subscribe((state) => {
+    const project = state.project
+    if (!project) {
+      abortAfterTerminalError(
+        controller,
+        emitter,
+        PROJECT_NOT_OPEN,
+        "当前桌面端项目已关闭，已中止网页端请求。",
+      )
+      return
+    }
+
+    if (
+      project.id !== request.projectId ||
+      normalizePath(project.path) !== normalizePath(request.projectPath)
+    ) {
+      abortAfterTerminalError(
+        controller,
+        emitter,
+        PROJECT_MISMATCH,
+        "当前打开项目已切换，已中止网页端请求。",
+      )
+    }
+  })
+}
+
+function abortAfterTerminalError(
+  controller: AbortController,
+  emitter: BridgeEmitter,
+  code: string,
+  message: string,
+): void {
+  const queued = emitter.error(code, message)
+  if (!queued) return
+  void queued.finally(() => {
+    if (!controller.signal.aborted) {
+      controller.abort(new Error(message))
+    }
+  })
+}
+
+interface BridgeEmitter {
+  token: (token: string) => void
+  references: (references: MessageReference[]) => void
+  done: (message: DisplayMessage) => void
+  error: (code: string, message: string) => Promise<void> | null
+  wait: () => Promise<void>
+}
+
+function createBridgeEmitter(requestId: string): BridgeEmitter {
+  let queue = Promise.resolve()
+  let terminalQueued = false
+
+  const enqueue = (
+    description: string,
+    task: () => Promise<void>,
+    terminal = false,
+  ): Promise<void> | null => {
+    if (terminalQueued) return null
+    if (terminal) {
+      terminalQueued = true
+    }
+    queue = queue
+      .then(task)
+      .catch((error) => console.error(`Failed to emit web bridge ${description}:`, error))
+    return queue
+  }
+
+  return {
+    token: (token) => {
+      enqueue("token", async () => {
+        await invoke("web_bridge_emit_token", {
+          requestId,
+          text: token,
+        })
+      })
+    },
+    references: (references) => {
+      enqueue("references", async () => {
+        await invoke("web_bridge_emit_references", {
+          requestId,
+          references: toBridgeReferences(references),
+        })
+      })
+    },
+    done: (message) => {
+      enqueue("done", async () => {
+        await invoke("web_bridge_emit_done", {
+          requestId,
+          message: toBridgeMessage(message),
+        })
+      }, true)
+    },
+    error: (code, message) =>
+      enqueue("error", async () => {
+        await invoke("web_bridge_emit_error", {
+          requestId,
+          code,
+          message,
+        })
+      }, true),
+    wait: () => queue,
+  }
 }
 
 async function emitBridgeError(
