@@ -27,6 +27,15 @@ type BridgeChatRequest = {
   message: string
 }
 
+type BridgeJsonRequest = {
+  requestId: string
+  kind: string
+  projectId: string
+  projectPath?: string
+  conversationId?: string | null
+  body?: unknown
+}
+
 type ChatCallbacks = Parameters<typeof sendProjectChatMessage>[1]
 type ChatRequest = Parameters<typeof sendProjectChatMessage>[0]
 
@@ -120,6 +129,13 @@ async function emitChat(payload: BridgeChatRequest) {
   await Promise.resolve()
 }
 
+async function emitJson(payload: BridgeJsonRequest) {
+  const jsonHandler = handlersForTest.get("web-bridge:json-request")
+  expect(jsonHandler).toBeDefined()
+  jsonHandler?.({ payload })
+  await Promise.resolve()
+}
+
 let handlersForTest: Map<string, (event: { payload: unknown }) => void>
 
 beforeEach(() => {
@@ -150,6 +166,33 @@ describe("startWebBridgeHandler", () => {
 
     await expect(startWebBridgeHandler()).rejects.toThrow("listen failed")
     expect(firstUnlisten).toHaveBeenCalledTimes(1)
+
+    await expect(startWebBridgeHandler()).resolves.toBeUndefined()
+    expect(mocks.listen).toHaveBeenCalledTimes(4)
+  })
+
+  it("cleans up listeners registered before stop during a pending registration", async () => {
+    const firstUnlisten = vi.fn()
+    const secondUnlisten = vi.fn()
+    const secondListen = createDeferred<() => void>()
+    mocks.listen
+      .mockResolvedValueOnce(firstUnlisten)
+      .mockReturnValueOnce(secondListen.promise)
+      .mockResolvedValueOnce(firstUnlisten)
+      .mockResolvedValueOnce(secondUnlisten)
+
+    const { startWebBridgeHandler, stopWebBridgeHandler } = await importTestModules()
+
+    const startPromise = startWebBridgeHandler()
+    await flushPromises()
+    expect(mocks.listen).toHaveBeenCalledTimes(2)
+
+    stopWebBridgeHandler()
+    expect(firstUnlisten).toHaveBeenCalledTimes(1)
+
+    secondListen.resolve(secondUnlisten)
+    await expect(startPromise).resolves.toBeUndefined()
+    expect(secondUnlisten).toHaveBeenCalledTimes(1)
 
     await expect(startWebBridgeHandler()).resolves.toBeUndefined()
     expect(mocks.listen).toHaveBeenCalledTimes(4)
@@ -258,5 +301,97 @@ describe("web bridge chat requests", () => {
       "web_bridge_emit_references",
       "web_bridge_emit_done",
     ])
+  })
+
+  it("aborts immediately on project switch while references invoke is pending", async () => {
+    let capturedRequest!: ChatRequest
+    const servicePending = createDeferred()
+    const referencesDeferred = createDeferred()
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "web_bridge_emit_references") {
+        return referencesDeferred.promise
+      }
+      return Promise.resolve()
+    })
+    mocks.sendProjectChatMessage.mockImplementation((request: ChatRequest, callbacks: ChatCallbacks) => {
+      capturedRequest = request
+      callbacks.onReferences?.([{ title: "Overview", path: "wiki/overview.md" }])
+      return servicePending.promise
+    })
+
+    const { startWebBridgeHandler, useWikiStore, useChatStore } = await importTestModules()
+    resetStores(useWikiStore, useChatStore)
+    useWikiStore.setState({ project })
+    await startWebBridgeHandler()
+    await emitChat(baseRequest)
+    await flushPromises()
+
+    expect(mocks.invoke.mock.calls.map(([command]) => command)).toEqual([
+      "web_bridge_emit_references",
+    ])
+
+    useWikiStore.setState({
+      project: { ...project, id: "project-2", path: "C:/demo/other" },
+    })
+
+    expect(capturedRequest.signal?.aborted).toBe(true)
+
+    referencesDeferred.resolve()
+    await referencesDeferred.promise
+    servicePending.resolve()
+    await servicePending.promise
+    await flushPromises()
+
+    const commands = mocks.invoke.mock.calls.map(([command]) => command)
+    expect(commands).toEqual([
+      "web_bridge_emit_references",
+      "web_bridge_emit_error",
+    ])
+  })
+})
+
+describe("web bridge JSON requests", () => {
+  it("rejects create_conversation with a mismatched projectPath without modifying conversations", async () => {
+    const { startWebBridgeHandler, useWikiStore, useChatStore } = await importTestModules()
+    resetStores(useWikiStore, useChatStore)
+    useWikiStore.setState({ project })
+    useChatStore.setState({
+      conversations: [
+        {
+          id: "existing",
+          title: "Existing",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    })
+    await startWebBridgeHandler()
+
+    await emitJson({
+      requestId: "json-1",
+      kind: "create_conversation",
+      projectId: project.id,
+      projectPath: "C:/demo/other",
+      body: { title: "Should not exist" },
+    })
+    await flushPromises()
+
+    expect(useChatStore.getState().conversations).toEqual([
+      {
+        id: "existing",
+        title: "Existing",
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ])
+    expect(mocks.invoke).toHaveBeenCalledWith("web_bridge_respond_json", {
+      requestId: "json-1",
+      status: 409,
+      body: {
+        ok: false,
+        code: "PROJECT_MISMATCH",
+        error: expect.any(String),
+      },
+    })
   })
 })

@@ -47,6 +47,7 @@ const PROJECT_CHAT_ERROR = "PROJECT_CHAT_ERROR"
 const CONVERSATION_BUSY = "CONVERSATION_BUSY"
 
 let unlistenFns: UnlistenFn[] = []
+let pendingUnlistenFns: UnlistenFn[] = []
 let registrationPromise: Promise<void> | null = null
 let registrationGeneration = 0
 const activeConversationIds = new Set<string>()
@@ -57,46 +58,54 @@ export async function startWebBridgeHandler(): Promise<void> {
   }
 
   const generation = ++registrationGeneration
-  registrationPromise = (async () => {
+  let currentRegistration: Promise<void> | undefined
+  currentRegistration = (async () => {
     const registered: UnlistenFn[] = []
     try {
       registered.push(
-        await listen<BridgeChatRequest>("web-bridge:chat-request", (event) => {
-          void handleChatRequest(event.payload)
-        }),
+        trackPendingUnlisten(
+          await listen<BridgeChatRequest>("web-bridge:chat-request", (event) => {
+            void handleChatRequest(event.payload)
+          }),
+        ),
       )
       registered.push(
-        await listen<BridgeJsonRequest>("web-bridge:json-request", (event) => {
-          void handleJsonRequest(event.payload)
-        }),
+        trackPendingUnlisten(
+          await listen<BridgeJsonRequest>("web-bridge:json-request", (event) => {
+            void handleJsonRequest(event.payload)
+          }),
+        ),
       )
       if (generation !== registrationGeneration) {
-        for (const unlisten of registered) {
-          unlisten()
+        cleanupUnlisteners(registered)
+        removePendingUnlisteners(registered)
+        if (registrationPromise === currentRegistration) {
+          registrationPromise = null
         }
         return
       }
       unlistenFns = registered
+      removePendingUnlisteners(registered)
     } catch (error) {
-      for (const unlisten of registered) {
-        unlisten()
-      }
-      if (generation === registrationGeneration) {
+      cleanupUnlisteners(registered)
+      removePendingUnlisteners(registered)
+      if (generation === registrationGeneration && registrationPromise === currentRegistration) {
         registrationPromise = null
       }
       throw error
     }
   })()
 
-  return registrationPromise
+  registrationPromise = currentRegistration
+  return currentRegistration
 }
 
 export function stopWebBridgeHandler(): void {
   registrationGeneration += 1
-  for (const unlisten of unlistenFns) {
-    unlisten()
-  }
+  cleanupUnlisteners(unlistenFns)
+  cleanupUnlisteners(pendingUnlistenFns)
   unlistenFns = []
+  pendingUnlistenFns = []
   registrationPromise = null
 }
 
@@ -175,6 +184,17 @@ async function handleJsonRequest(request: BridgeJsonRequest): Promise<void> {
       ok: false,
       code: validation.code,
       error: validation.error,
+    })
+    return
+  }
+  if (
+    request.projectPath?.trim() &&
+    normalizePath(validation.projectPath) !== normalizePath(request.projectPath)
+  ) {
+    await respondJson(request.requestId, 409, {
+      ok: false,
+      code: PROJECT_MISMATCH,
+      error: "\u5f53\u524d\u6253\u5f00\u9879\u76ee\u4e0e\u8bf7\u6c42\u9879\u76ee\u8def\u5f84\u4e0d\u4e00\u81f4\u3002",
     })
     return
   }
@@ -326,11 +346,30 @@ function abortAfterTerminalError(
 ): void {
   const queued = emitter.error(code, message)
   if (!queued) return
-  void queued.finally(() => {
-    if (!controller.signal.aborted) {
-      controller.abort(new Error(message))
-    }
-  })
+  if (!controller.signal.aborted) {
+    controller.abort(new Error(message))
+  }
+}
+
+function trackPendingUnlisten(unlisten: UnlistenFn): UnlistenFn {
+  let called = false
+  const tracked = () => {
+    if (called) return
+    called = true
+    unlisten()
+  }
+  pendingUnlistenFns.push(tracked)
+  return tracked
+}
+
+function cleanupUnlisteners(listeners: UnlistenFn[]): void {
+  for (const unlisten of listeners) {
+    unlisten()
+  }
+}
+
+function removePendingUnlisteners(listeners: UnlistenFn[]): void {
+  pendingUnlistenFns = pendingUnlistenFns.filter((unlisten) => !listeners.includes(unlisten))
 }
 
 interface BridgeEmitter {
