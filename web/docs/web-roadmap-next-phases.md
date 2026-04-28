@@ -54,7 +54,7 @@
 - 编辑可靠性还需要继续补强
 - 阅读体验和预览能力还比较基础
 - 还没有项目内搜索
-- 还没有问答、图谱、Review、Deep Research
+- 问答已接入桌面端 Bridge，但图谱、Review、Deep Research 还没有进入 Web 主流程
 - 还没有多用户与权限体系
 
 一句话说，`v1` 已经把“打开项目并安全编辑核心文件”做通了，但还没有把“长期高频使用体验”和“更强的项目理解能力”做出来。
@@ -386,6 +386,8 @@ flowchart TD
 
 > 状态：已完成。阶段 5 已按 [spec](../../docs/superpowers/specs/2026-04-26-phase-5-project-qa-design.md) 和 [implementation plan](../../docs/superpowers/plans/2026-04-26-phase-5-project-qa.md) 落地，覆盖项目级 Ask 入口、检索增强问答 API、OpenAI Responses provider 适配、带引用来源的回答、source 打开联动和关键测试。
 
+> 架构调整：Web 项目问答已迁移为桌面端 Bridge 模式。Web 端只做代理和展示，问答逻辑、模型配置、流式输出和历史记录由桌面端共享问答 service 负责。上面的 OpenAI Responses provider 适配是阶段 5 的历史落地背景，不再代表当前 Web 端独立生成回答的最终架构。
+
 这一阶段的目标不是“接个模型就完了”，而是让系统开始具备项目级问答能力。
 
 重点会是：
@@ -422,6 +424,8 @@ flowchart TD
 ### 10.4 阶段 8：Rust bridge / 重能力下沉
 
 > 状态：已完成前置基线。阶段 8 已按 [spec](../../docs/superpowers/specs/2026-04-26-phase-8-heavy-task-runtime-baseline-design.md) 和 [implementation plan](../../docs/superpowers/plans/2026-04-26-phase-8-heavy-task-runtime-baseline.md) 落地为“重任务能力基线与适配层”，覆盖共享项目文本扫描边界、多 query 单次扫描、问答检索复用、Insights 扫描复用、结构化 runtime capabilities、Search / Insights 执行元数据、Project Info 诊断展示和关键测试。当前未引入 Rust crate、native bridge、FFI、WASM、后台任务或持久化索引；active engine 仍为 `node`，Rust bridge 仍是瓶颈驱动的后置选项。
+
+> 补充说明：当前已新增面向 Web 问答的桌面端本地 HTTP Bridge，用于把 Web Ask 请求代理到桌面端共享问答 service；这不等于把所有重任务下沉到 Rust runtime，也不改变阶段 8 对 Rust bridge 的判断。
 
 Rust bridge 不应该作为“为了高级而高级”的技术动作进入路线图。
 

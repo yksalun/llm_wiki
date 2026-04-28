@@ -16,7 +16,6 @@
 这一版明确**不做**：
 
 - ingest
-- chat
 - search
 - graph
 - review
@@ -65,16 +64,17 @@ LLM_WIKI_PROJECT_ROOTS=/srv/llm-wiki-projects,/data/wiki-labs
 DATABASE_URL=postgres://app:password@127.0.0.1:5432/llm_wiki_web
 ```
 
-项目级问答还需要配置：
+### 桌面端问答 Bridge
+
+使用项目级问答前，需要先启动桌面端应用，并在桌面端打开同一个项目。Web 服务端会通过桌面端本地 Bridge 获取会话、历史记录和流式回答。
+
+默认 Bridge 地址是 `http://127.0.0.1:19828`。如果需要覆盖，可以在 Web 服务端环境变量里配置：
 
 ```bash
-LLM_WIKI_OPENAI_API_KEY=sk-...
-LLM_WIKI_OPENAI_MODEL=your-model
-# 可选；默认 https://api.openai.com/v1/responses
-LLM_WIKI_OPENAI_BASE_URL=https://api.openai.com/v1/responses
+LLM_WIKI_DESKTOP_BRIDGE_URL=http://127.0.0.1:19828
 ```
 
-也可以用 `OPENAI_API_KEY` 作为 API key fallback。未配置时，Ask section 会显示 provider 未配置错误。
+Web 端不再使用自己的 `LLM_WIKI_OPENAI_*` 配置生成问答回答，也不再通过 `OPENAI_API_KEY` fallback 生成项目级问答回答。模型配置、会话历史、问答逻辑和流式输出都以桌面端共享问答 service 为准。
 
 说明：
 
@@ -82,6 +82,8 @@ LLM_WIKI_OPENAI_BASE_URL=https://api.openai.com/v1/responses
   这是白名单根目录列表，多个目录用英文逗号分隔。
 - `DATABASE_URL`
   这是 PostgreSQL 连接串。
+- `LLM_WIKI_DESKTOP_BRIDGE_URL`
+  这是桌面端本地问答 Bridge 地址；未配置时默认使用 `http://127.0.0.1:19828`。
 
 建议把 Web 应用和项目目录部署在同一台服务器上，这样服务端可以直接访问这些目录。
 
@@ -166,13 +168,14 @@ npm run start
 - 非可编辑文件的元信息展示
 - 路径安全校验
 - 项目快照与同步记录入库
+- 项目级问答入口、会话历史和流式回答展示；问答能力由桌面端本地 Bridge 代理
 
 ### 还没做
 
 - 自动保存
 - 保存冲突的高级处理
 - 富文本编辑器
-- 搜索、问答、图谱、Review、Deep Research
+- 搜索、图谱、Review、Deep Research
 - 多用户登录与权限
 
 ## 一眼看懂的数据边界
