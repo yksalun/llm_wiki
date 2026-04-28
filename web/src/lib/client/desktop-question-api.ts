@@ -12,6 +12,10 @@ interface ConversationsPayload {
   conversations: DesktopBridgeConversation[];
 }
 
+interface CreateConversationPayload {
+  conversation: DesktopBridgeConversation;
+}
+
 interface MessagesPayload {
   messages: DesktopBridgeMessage[];
 }
@@ -44,7 +48,7 @@ export async function listQuestionConversations(projectId: string, signal?: Abor
 }
 
 export async function createQuestionConversation(projectId: string, signal?: AbortSignal) {
-  return requestJson<DesktopBridgeConversation>(
+  const payload = await requestJson<CreateConversationPayload>(
     `/api/projects/${encodeURIComponent(projectId)}/question/conversations`,
     {
       method: "POST",
@@ -52,6 +56,8 @@ export async function createQuestionConversation(projectId: string, signal?: Abo
       signal,
     },
   );
+
+  return payload.conversation;
 }
 
 export async function listQuestionMessages(
