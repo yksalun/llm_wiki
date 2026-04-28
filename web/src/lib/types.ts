@@ -113,6 +113,33 @@ export interface ProjectQuestionResponse {
   model: string;
 }
 
+export interface DesktopBridgeReference {
+  title: string;
+  path: string;
+}
+
+export interface DesktopBridgeConversation {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface DesktopBridgeMessage {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp: number;
+  conversationId: string;
+  references?: DesktopBridgeReference[];
+}
+
+export type DesktopBridgeStreamEvent =
+  | { type: "token"; content: string }
+  | { type: "references"; references: DesktopBridgeReference[] }
+  | { type: "done"; message: DesktopBridgeMessage }
+  | { type: "error"; message: string; code?: string };
+
 export interface ProjectInsightNode {
   id: string;
   label: string;
