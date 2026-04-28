@@ -38,11 +38,17 @@ pub struct BridgeMessage {
     pub id: String,
     pub role: String,
     pub content: String,
-    pub timestamp: String,
+    pub timestamp: i64,
     #[serde(rename = "conversationId")]
     pub conversation_id: String,
     #[serde(default)]
     pub references: Vec<BridgeReference>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct IncomingStreamBody {
+    project_path: String,
+    message: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -349,18 +355,13 @@ fn handle_stream_bridge_request(
     project_id: &str,
     conversation_id: &str,
 ) {
-    let body = match read_body(&mut request) {
+    let body = match read_body(&mut request).and_then(parse_stream_body) {
         Ok(body) => body,
         Err(error) => {
             respond_json(request, 400, json!({ "ok": false, "error": error }));
             return;
         }
     };
-    let project_path = body
-        .get("projectPath")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    let message = body.get("message").cloned().unwrap_or(Value::Null);
 
     let request_id = next_request_id();
     let (sender, receiver) = mpsc::channel();
@@ -374,8 +375,8 @@ fn handle_stream_bridge_request(
         "kind": "chat",
         "projectId": project_id,
         "conversationId": conversation_id,
-        "projectPath": project_path,
-        "message": message,
+        "projectPath": body.project_path,
+        "message": body.message,
     });
 
     if let Err(error) = app.emit("web-bridge:chat-request", payload) {
@@ -410,6 +411,31 @@ fn read_body(request: &mut tiny_http::Request) -> Result<Value, String> {
         return Ok(Value::Null);
     }
     serde_json::from_str(&body).map_err(|error| format!("Invalid JSON body: {error}"))
+}
+
+fn parse_stream_body(body: Value) -> Result<IncomingStreamBody, String> {
+    let object = body
+        .as_object()
+        .ok_or_else(|| "JSON body must be an object".to_string())?;
+
+    let project_path = object
+        .get("projectPath")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "projectPath must be a non-empty string".to_string())?
+        .to_string();
+
+    let message = object
+        .get("message")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "message must be a non-empty string".to_string())?
+        .to_string();
+
+    Ok(IncomingStreamBody {
+        project_path,
+        message,
+    })
 }
 
 fn register_stream_request(
@@ -495,7 +521,7 @@ mod tests {
                 id: "m1".to_string(),
                 role: "assistant".to_string(),
                 content: "done".to_string(),
-                timestamp: "2026-04-28T00:00:00Z".to_string(),
+                timestamp: 1777334400000,
                 conversation_id: "c1".to_string(),
                 references: vec![BridgeReference {
                     title: "Doc".to_string(),
@@ -508,6 +534,7 @@ mod tests {
         assert!(sse.contains("\"type\":\"done\""));
         assert!(sse.contains("\"conversationId\":\"c1\""));
         assert!(sse.contains("\"path\":\"F:\\\\wiki\\\\doc.md\""));
+        assert!(sse.contains("\"timestamp\":1777334400000"));
     }
 
     #[test]
@@ -524,7 +551,7 @@ mod tests {
                     id: "m1".to_string(),
                     role: "assistant".to_string(),
                     content: "done".to_string(),
-                    timestamp: "2026-04-28T00:00:00Z".to_string(),
+                    timestamp: 1777334400000,
                     conversation_id: "c1".to_string(),
                     references: Vec::new(),
                 },
@@ -577,7 +604,7 @@ mod tests {
                 id: "m1".to_string(),
                 role: "assistant".to_string(),
                 content: "done".to_string(),
-                timestamp: "2026-04-28T00:00:00Z".to_string(),
+                timestamp: 1777334400000,
                 conversation_id: "c1".to_string(),
                 references: Vec::new(),
             },
@@ -589,6 +616,59 @@ mod tests {
             BridgeStreamEvent::Done { .. }
         ));
         assert!(web_bridge_emit_token(request_id, "late".to_string()).is_err());
+    }
+
+    #[test]
+    fn parse_stream_body_accepts_non_empty_project_path_and_message_strings() {
+        let body = parse_stream_body(json!({
+            "projectPath": "F:\\wiki",
+            "message": "hello"
+        }))
+        .expect("valid stream body should parse");
+
+        assert_eq!(
+            body,
+            IncomingStreamBody {
+                project_path: "F:\\wiki".to_string(),
+                message: "hello".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn parse_stream_body_rejects_non_object_body() {
+        let err = parse_stream_body(Value::Null).expect_err("null body should fail");
+
+        assert!(err.contains("JSON body must be an object"));
+    }
+
+    #[test]
+    fn parse_stream_body_rejects_missing_empty_or_non_string_project_path() {
+        for body in [
+            json!({ "message": "hello" }),
+            json!({ "projectPath": "", "message": "hello" }),
+            json!({ "projectPath": "   ", "message": "hello" }),
+            json!({ "projectPath": 123, "message": "hello" }),
+        ] {
+            let err = parse_stream_body(body).expect_err("invalid projectPath should fail");
+
+            assert!(err.contains("projectPath must be a non-empty string"));
+        }
+    }
+
+    #[test]
+    fn parse_stream_body_rejects_missing_empty_or_non_string_message() {
+        for body in [
+            json!({ "projectPath": "F:\\wiki" }),
+            json!({ "projectPath": "F:\\wiki", "message": "" }),
+            json!({ "projectPath": "F:\\wiki", "message": "   " }),
+            json!({ "projectPath": "F:\\wiki", "message": null }),
+            json!({ "projectPath": "F:\\wiki", "message": 123 }),
+        ] {
+            let err = parse_stream_body(body).expect_err("invalid message should fail");
+
+            assert!(err.contains("message must be a non-empty string"));
+        }
     }
 
     #[test]
