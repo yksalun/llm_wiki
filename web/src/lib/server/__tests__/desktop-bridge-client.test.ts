@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { DesktopBridgeStreamEvent } from "../../types";
 import { AppError } from "../app-error";
 import {
   DEFAULT_DESKTOP_BRIDGE_URL,
@@ -8,6 +9,16 @@ import {
   fetchDesktopBridgeStream,
   getDesktopBridgeBaseUrl,
 } from "../desktop-bridge-client";
+
+const tokenEvent = { type: "token", text: "hello" } satisfies DesktopBridgeStreamEvent;
+const errorEvent = {
+  type: "error",
+  code: "BRIDGE_ERROR",
+  message: "failed",
+} satisfies DesktopBridgeStreamEvent;
+
+void tokenEvent;
+void errorEvent;
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -24,6 +35,14 @@ describe("getDesktopBridgeBaseUrl", () => {
         LLM_WIKI_DESKTOP_BRIDGE_URL: "  http://127.0.0.1:20000///  ",
       }),
     ).toBe("http://127.0.0.1:20000");
+  });
+
+  it("falls back to the default bridge URL when the trimmed override is only slashes", () => {
+    expect(
+      getDesktopBridgeBaseUrl({
+        LLM_WIKI_DESKTOP_BRIDGE_URL: " /// ",
+      }),
+    ).toBe(DEFAULT_DESKTOP_BRIDGE_URL);
   });
 });
 
@@ -102,5 +121,16 @@ describe("fetchDesktopBridgeStream", () => {
     const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
     expect(headers.get("Accept")).toBe("text/event-stream");
     expect(headers.get("Content-Type")).toBe("application/json");
+  });
+
+  it("does not consume the stream response body before returning it", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("data: ready\n\n")));
+
+    const response = await fetchDesktopBridgeStream("/ask/stream", {
+      method: "POST",
+      body: JSON.stringify({ question: "Q" }),
+    });
+
+    await expect(response.text()).resolves.toBe("data: ready\n\n");
   });
 });

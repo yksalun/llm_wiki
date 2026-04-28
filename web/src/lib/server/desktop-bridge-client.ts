@@ -15,7 +15,8 @@ export class DesktopBridgeUnavailableError extends AppError {
 
 export function getDesktopBridgeBaseUrl(env: DesktopBridgeEnv = process.env): string {
   const override = env.LLM_WIKI_DESKTOP_BRIDGE_URL?.trim();
-  return override ? override.replace(/\/+$/, "") : DEFAULT_DESKTOP_BRIDGE_URL;
+  const normalizedOverride = override?.replace(/\/+$/, "");
+  return normalizedOverride || DEFAULT_DESKTOP_BRIDGE_URL;
 }
 
 export async function fetchDesktopBridgeJson<T = unknown>(

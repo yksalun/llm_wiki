@@ -135,10 +135,10 @@ export interface DesktopBridgeMessage {
 }
 
 export type DesktopBridgeStreamEvent =
-  | { type: "token"; content: string }
+  | { type: "token"; text: string }
   | { type: "references"; references: DesktopBridgeReference[] }
   | { type: "done"; message: DesktopBridgeMessage }
-  | { type: "error"; message: string; code?: string };
+  | { type: "error"; code: string; message: string };
 
 export interface ProjectInsightNode {
   id: string;
