@@ -174,6 +174,27 @@ export interface ProjectInsightsResponse {
   execution?: HeavyTaskExecutionMetadata;
 }
 
+export interface LawDatabaseSyncSummary {
+  read: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+}
+
+export interface LawDatabaseSyncFailure {
+  myId: string | null;
+  title: string | null;
+  message: string;
+}
+
+export interface LawDatabaseSyncResponse {
+  ok: true;
+  summary: LawDatabaseSyncSummary;
+  changedFiles: string[];
+  failures: LawDatabaseSyncFailure[];
+}
+
 export interface FileTreeNode {
   name: string;
   relativePath: string;

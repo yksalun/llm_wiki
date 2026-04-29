@@ -5,6 +5,7 @@ import type {
   FileTreeNode,
   FileWriteRequest,
   FileWriteResult,
+  LawDatabaseSyncResponse,
   ProjectDetail,
   ProjectInsightsResponse,
   ProjectSearchResponse,
@@ -108,6 +109,22 @@ export async function saveProjectFile(
     body: JSON.stringify(payload),
     signal,
   });
+}
+
+export async function syncLawDatabaseSources(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<LawDatabaseSyncResponse> {
+  return requestJson<LawDatabaseSyncResponse>(
+    `/api/projects/${encodeURIComponent(projectId)}/sources/law-db/sync`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      signal,
+    },
+  );
 }
 
 export async function requestJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
