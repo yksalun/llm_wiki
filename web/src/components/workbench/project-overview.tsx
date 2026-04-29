@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { LawDatabaseSyncCard } from "@/components/workbench/law-database-sync-card";
 import {
   formatAccessModeLabel,
   formatHeavyTaskBridgeStatusLabel,
@@ -32,6 +33,7 @@ export function ProjectOverview({ project, tree }: ProjectOverviewProps) {
         <CardDescription>已解析项目路由和文件树组成摘要。</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4 pt-4 md:grid-cols-2 xl:grid-cols-3">
+        <LawDatabaseSyncCard projectId={project.id} />
         <InfoBlock label="项目名称" value={project.name} />
         <InfoBlock label="项目编号" value={project.id} mono />
         <InfoBlock label="状态" value={formatProjectStatusLabel(project.status)} />

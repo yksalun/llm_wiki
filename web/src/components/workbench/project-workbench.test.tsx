@@ -119,6 +119,7 @@ vi.mock("@/lib/client/api", () => ({
     }),
   ),
   saveProjectFile: vi.fn(),
+  syncLawDatabaseSources: vi.fn(),
 }));
 
 let container: HTMLDivElement | null = null;
