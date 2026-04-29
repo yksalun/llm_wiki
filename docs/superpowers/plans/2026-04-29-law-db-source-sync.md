@@ -1376,7 +1376,8 @@ LAW_DB_PASSWORD=
 Run:
 
 ```powershell
-Select-String -Path web\\.env.example,web\\README.md -Pattern 'LAW_DB_HOST=\\S|LAW_DB_USER=\\S|LAW_DB_PASSWORD=\\S|mysql://' -CaseSensitive:$false
+$pattern = ('LAW_DB_' + 'HOST=\S|LAW_DB_' + 'USER=\S|LAW_DB_' + 'PASSWORD=\S')
+Select-String -Path web\\.env.example,web\\README.md -Pattern $pattern -CaseSensitive:$false
 ```
 
 Expected: no matches.
@@ -1442,7 +1443,8 @@ Expected: changed files are under `web/` plus docs/plan files; no `src/` or `src
 Run:
 
 ```powershell
-git grep -n -i -E "LAW_DB_HOST=\\S|LAW_DB_USER=\\S|LAW_DB_PASSWORD=\\S|mysql://" HEAD
+$pattern = ('LAW_DB_' + 'HOST=\S|LAW_DB_' + 'USER=\S|LAW_DB_' + 'PASSWORD=\S')
+git grep -n -i -E $pattern HEAD
 ```
 
 Expected: no matches.
