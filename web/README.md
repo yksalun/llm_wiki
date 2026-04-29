@@ -77,6 +77,28 @@ LLM_WIKI_DESKTOP_BRIDGE_URL=http://127.0.0.1:19828
 
 Web 端不再使用自己的 `LLM_WIKI_OPENAI_*` 配置生成问答回答，也不再通过 `OPENAI_API_KEY` fallback 生成项目级问答回答。模型配置、会话历史、问答逻辑和流式输出都以桌面端共享问答 service 为准。
 
+### 法规数据库资料源同步
+
+Web 端可以手动从外部 MySQL `law` 表同步法规资料源到当前项目目录。同步只生成本地 Markdown source 文件：
+
+```text
+raw/sources/database/law/*.md
+```
+
+第一版不会自动触发桌面端 ingest，也不会生成 `wiki/*` 页面。同步后需要在桌面端资料源流程中继续摄入这些 Markdown 文件。
+
+需要配置：
+
+```bash
+LAW_DB_HOST=
+LAW_DB_PORT=3306
+LAW_DB_DATABASE=aifood
+LAW_DB_USER=
+LAW_DB_PASSWORD=
+```
+
+不要把真实密码提交到仓库。错误提示也不会返回密码或完整连接串。
+
 说明：
 
 - `LLM_WIKI_PROJECT_ROOTS`

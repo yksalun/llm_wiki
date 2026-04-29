@@ -1376,7 +1376,7 @@ LAW_DB_PASSWORD=
 Run:
 
 ```powershell
-Select-String -Path web\\.env.example,web\\README.md,docs\\superpowers\\plans\\2026-04-29-law-db-source-sync.md -Pattern '41\\.226|XzGa|330411|1593|Pwd=|Uid=|server=' -CaseSensitive:$false
+Select-String -Path web\\.env.example,web\\README.md -Pattern 'LAW_DB_HOST=\\S|LAW_DB_USER=\\S|LAW_DB_PASSWORD=\\S|mysql://' -CaseSensitive:$false
 ```
 
 Expected: no matches.
@@ -1442,7 +1442,7 @@ Expected: changed files are under `web/` plus docs/plan files; no `src/` or `src
 Run:
 
 ```powershell
-git grep -n -i -E "41\\.226|XzGa|330411|1593|Pwd=|Uid=|server=" HEAD
+git grep -n -i -E "LAW_DB_HOST=\\S|LAW_DB_USER=\\S|LAW_DB_PASSWORD=\\S|mysql://" HEAD
 ```
 
 Expected: no matches.
