@@ -140,7 +140,7 @@ describe("/api/projects routes", () => {
         ],
       },
       rootPathHint: null,
-      sections: ["Overview", "Ask", "Insights", "Files", "Purpose", "Schema", "Project Info"],
+      sections: ["Overview", "Ask", "Insights", "Files"],
     });
     expect(payload).not.toHaveProperty("rootDir");
   });
