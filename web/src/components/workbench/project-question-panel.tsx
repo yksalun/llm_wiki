@@ -10,7 +10,6 @@ import {
   useExternalStoreRuntime,
   type AppendMessage,
   type MessageState,
-  type TextMessagePartProps,
   type ThreadMessageLike,
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
@@ -54,6 +53,22 @@ function ProjectQuestionPanelSession({ projectId, onOpenFile }: ProjectQuestionP
   const requestIdRef = useRef(0);
   const isStreaming = status === "streaming";
   const canSendMessage = status === "ready" && activeConversationId !== null;
+
+  function replaceAbortController() {
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    return controller;
+  }
+
+  function nextRequestId() {
+    requestIdRef.current += 1;
+    return requestIdRef.current;
+  }
+
+  function isCurrentRequest(controller: AbortController, requestId: number) {
+    return !controller.signal.aborted && requestId === requestIdRef.current;
+  }
 
   useEffect(() => {
     abortControllerRef.current?.abort();
@@ -215,7 +230,7 @@ function ProjectQuestionPanelSession({ projectId, onOpenFile }: ProjectQuestionP
         id: `local-${requestId}`,
         role: "user",
         content: submittedMessage,
-        timestamp: Date.now(),
+        timestamp: 0,
         conversationId: activeConversationId,
       };
 
@@ -302,22 +317,6 @@ function ProjectQuestionPanelSession({ projectId, onOpenFile }: ProjectQuestionP
     setStatus("ready");
   }, [isStreaming]);
 
-  function replaceAbortController() {
-    abortControllerRef.current?.abort();
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-    return controller;
-  }
-
-  function nextRequestId() {
-    requestIdRef.current += 1;
-    return requestIdRef.current;
-  }
-
-  function isCurrentRequest(controller: AbortController, requestId: number) {
-    return !controller.signal.aborted && requestId === requestIdRef.current;
-  }
-
   const activeConversation = conversations.find(
     (conversation) => conversation.id === activeConversationId,
   );
@@ -330,7 +329,7 @@ function ProjectQuestionPanelSession({ projectId, onOpenFile }: ProjectQuestionP
               id: "streaming",
               role: "assistant" as const,
               content: streamingText,
-              timestamp: Date.now(),
+              timestamp: 0,
               conversationId: activeConversationId ?? "",
               references: streamingReferences,
             },
@@ -549,7 +548,7 @@ function ChatMessage({
   );
 }
 
-function MarkdownTextPart(_props: TextMessagePartProps) {
+function MarkdownTextPart() {
   return (
     <MarkdownTextPrimitive
       className="space-y-2 text-sm leading-6 text-[color:var(--ink-strong)]"
@@ -579,7 +578,7 @@ function toThreadMessageLike(message: DesktopBridgeMessage): ThreadMessageLike {
     id: message.id,
     role: message.role,
     content: message.content,
-    createdAt: new Date(message.timestamp || Date.now()),
+    createdAt: new Date(message.timestamp),
     status:
       message.role === "assistant"
         ? running

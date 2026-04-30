@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -33,32 +33,19 @@ export function FileTree({
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(
     () => new Set(),
   );
-
-  useEffect(() => {
+  const visibleExpandedPaths = useMemo(() => {
     if (!selectedPath) {
-      return;
+      return expandedPaths;
     }
 
     const ancestorDirectories = findAncestorDirectories(tree, selectedPath);
 
     if (ancestorDirectories.length === 0) {
-      return;
+      return expandedPaths;
     }
 
-    setExpandedPaths((current) => {
-      const next = new Set(current);
-      let changed = false;
-
-      for (const directoryPath of ancestorDirectories) {
-        if (!next.has(directoryPath)) {
-          next.add(directoryPath);
-          changed = true;
-        }
-      }
-
-      return changed ? next : current;
-    });
-  }, [selectedPath, tree]);
+    return new Set([...expandedPaths, ...ancestorDirectories]);
+  }, [expandedPaths, selectedPath, tree]);
 
   const toggleDirectory = (relativePath: string) => {
     setExpandedPaths((current) => {
@@ -99,7 +86,7 @@ export function FileTree({
                 selectedPath={selectedPath}
                 loadingPath={loadingPath}
                 disabled={disabled}
-                expandedPaths={expandedPaths}
+                expandedPaths={visibleExpandedPaths}
                 onToggleDirectory={toggleDirectory}
                 onOpenFile={onOpenFile}
               />
