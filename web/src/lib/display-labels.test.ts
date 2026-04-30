@@ -15,7 +15,7 @@ describe("display labels", () => {
   it("formats workbench section labels in Chinese", () => {
     expect(formatWorkbenchSectionLabel("Overview")).toBe("概览");
     expect(formatWorkbenchSectionLabel("Ask")).toBe("问答");
-    expect(formatWorkbenchSectionLabel("Insights")).toBe("洞察");
+    expect(formatWorkbenchSectionLabel("Insights")).toBe("分析");
     expect(formatWorkbenchSectionLabel("Files")).toBe("文件");
     expect(formatWorkbenchSectionLabel("Purpose")).toBe("目标");
     expect(formatWorkbenchSectionLabel("Schema")).toBe("结构");
@@ -46,7 +46,7 @@ describe("display labels", () => {
 
   it("formats heavy task name labels in Chinese", () => {
     expect(formatHeavyTaskNameLabel("project-search")).toBe("项目搜索");
-    expect(formatHeavyTaskNameLabel("project-insights")).toBe("项目洞察");
+    expect(formatHeavyTaskNameLabel("project-insights")).toBe("项目分析");
   });
 
   it("formats insight severity labels in Chinese", () => {

@@ -435,7 +435,7 @@ describe("resolveProjectById", () => {
       hasRawSourcesDirectory: true,
       rootDir: fixture.rootDir,
       rootPathHint: fixture.rootDir,
-      sections: ["Overview", "Ask", "Insights", "Files", "Purpose", "Schema", "Project Info"],
+      sections: ["Overview", "Ask", "Insights", "Files"],
       runtime: runtimeCapabilities,
     });
   });

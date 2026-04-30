@@ -45,9 +45,6 @@ const PROJECT_SECTIONS: ProjectDetail["sections"] = [
   "Ask",
   "Insights",
   "Files",
-  "Purpose",
-  "Schema",
-  "Project Info",
 ];
 
 const defaultRepo: ProjectRegistryRepo = {

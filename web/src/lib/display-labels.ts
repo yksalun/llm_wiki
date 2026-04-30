@@ -12,7 +12,7 @@ import type {
 const workbenchSectionLabels = {
   Overview: "概览",
   Ask: "问答",
-  Insights: "洞察",
+  Insights: "分析",
   Files: "文件",
   Purpose: "目标",
   Schema: "结构",
@@ -46,7 +46,7 @@ const heavyTaskBridgeStatusLabels = {
 
 const heavyTaskNameLabels = {
   "project-search": "项目搜索",
-  "project-insights": "项目洞察",
+  "project-insights": "项目分析",
 } satisfies Record<HeavyTaskName, string>;
 
 const insightSeverityLabels = {
