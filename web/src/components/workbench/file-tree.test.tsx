@@ -63,9 +63,14 @@ describe("FileTree", () => {
 
     renderFileTree({ onOpenFile });
 
+    const wikiButton = requiredButton("wiki");
+    expect(wikiButton.getAttribute("aria-expanded")).toBe("false");
+
     act(() => {
-      requiredButton("wiki").click();
+      wikiButton.click();
     });
+    expect(wikiButton.getAttribute("aria-expanded")).toBe("true");
+
     act(() => {
       requiredButton("index.md").click();
     });

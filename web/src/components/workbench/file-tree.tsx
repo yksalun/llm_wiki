@@ -145,6 +145,7 @@ function TreeNode({
       <div>
         <button
           type="button"
+          aria-expanded={expanded}
           onClick={() => onToggleDirectory(node.relativePath)}
           disabled={disabled}
           className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-sm font-medium text-[color:var(--ink-strong)] transition-colors hover:bg-[color:var(--paper-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--paper-panel)] disabled:pointer-events-none disabled:opacity-70"
