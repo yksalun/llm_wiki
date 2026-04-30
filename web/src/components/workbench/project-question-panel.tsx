@@ -53,6 +53,7 @@ function ProjectQuestionPanelSession({ projectId, onOpenFile }: ProjectQuestionP
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
   const isStreaming = status === "streaming";
+  const canSendMessage = status === "ready" && activeConversationId !== null;
 
   useEffect(() => {
     abortControllerRef.current?.abort();
@@ -355,6 +356,16 @@ function ProjectQuestionPanelSession({ projectId, onOpenFile }: ProjectQuestionP
       handleStop();
     },
   });
+  const previousComposerConversationIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (previousComposerConversationIdRef.current === activeConversationId) {
+      return;
+    }
+
+    previousComposerConversationIdRef.current = activeConversationId;
+    void runtime.thread.composer.reset();
+  }, [activeConversationId, runtime]);
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
@@ -468,14 +479,25 @@ function ProjectQuestionPanelSession({ projectId, onOpenFile }: ProjectQuestionP
                       停止
                     </ComposerPrimitive.Cancel>
                   ) : null}
-                  <ComposerPrimitive.Send className="inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50">
-                    {isStreaming ? (
-                      <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-                    ) : (
+                  {canSendMessage ? (
+                    <ComposerPrimitive.Send className="inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50">
                       <MessageSquare className="size-4" aria-hidden="true" />
-                    )}
-                    发送
-                  </ComposerPrimitive.Send>
+                      发送
+                    </ComposerPrimitive.Send>
+                  ) : (
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground opacity-50"
+                      disabled
+                    >
+                      {isStreaming ? (
+                        <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <MessageSquare className="size-4" aria-hidden="true" />
+                      )}
+                      发送
+                    </button>
+                  )}
                 </div>
               </div>
             </ComposerPrimitive.Root>

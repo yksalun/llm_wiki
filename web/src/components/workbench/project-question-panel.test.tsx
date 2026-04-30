@@ -192,6 +192,56 @@ describe("ProjectQuestionPanel", () => {
     expect(onOpenFile).toHaveBeenCalledTimes(1);
   });
 
+  it("切换会话时清空 composer 草稿，避免发送到新会话", async () => {
+    const firstConversation = createConversation({ id: "conv-first", title: "第一会话" });
+    const secondConversation = createConversation({ id: "conv-second", title: "第二会话" });
+    apiMocks.listQuestionConversations.mockResolvedValue([firstConversation, secondConversation]);
+    apiMocks.listQuestionMessages
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        createMessage({
+          id: "second-history",
+          content: "第二会话历史",
+          conversationId: secondConversation.id,
+        }),
+      ]);
+
+    renderProjectQuestionPanel();
+    await waitForReady();
+    updateQuestion("不应该发送的旧草稿");
+
+    expect(questionTextarea().value).toBe("不应该发送的旧草稿");
+
+    await clickButton("第二会话");
+    await waitForText("第二会话历史");
+
+    expect(questionTextarea().value).toBe("");
+
+    await clickButton("发送");
+
+    expect(apiMocks.streamQuestionMessage).not.toHaveBeenCalled();
+  });
+
+  it("加载状态下不会通过发送按钮清空未发送草稿", async () => {
+    const initialConversation = createConversation({ id: "conv-initial", title: "当前会话" });
+    const nextConversation = createConversation({ id: "conv-loading", title: "加载中会话" });
+    const pendingMessages = createDeferred<DesktopBridgeMessage[]>();
+    apiMocks.listQuestionConversations.mockResolvedValue([initialConversation]);
+    apiMocks.createQuestionConversation.mockResolvedValue(nextConversation);
+    apiMocks.listQuestionMessages.mockResolvedValueOnce([]).mockReturnValueOnce(pendingMessages.promise);
+
+    renderProjectQuestionPanel();
+    await waitForReady();
+    updateQuestion("加载时保留的草稿");
+
+    await clickButton("新会话");
+    await waitForText("正在加载项目问答");
+    await clickButton("发送");
+
+    expect(questionTextarea().value).toBe("加载时保留的草稿");
+    expect(apiMocks.streamQuestionMessage).not.toHaveBeenCalled();
+  });
+
   it("项目切换时 abort 流请求，并防止旧请求污染当前项目", async () => {
     const firstConversation = createConversation({ id: "conv-a" });
     const secondConversation = createConversation({ id: "conv-b" });
