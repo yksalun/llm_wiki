@@ -294,6 +294,19 @@ describe("ProjectQuestionPanel", () => {
     expect(container?.textContent).not.toContain("项目 A 旧回答");
     expect(container?.textContent).not.toContain("项目 A 完整旧回答");
   });
+
+  it("marks the active conversation item", async () => {
+    const firstConversation = createConversation({ id: "conv-first", title: "conversation-first" });
+    const secondConversation = createConversation({ id: "conv-second", title: "conversation-second" });
+    apiMocks.listQuestionConversations.mockResolvedValue([firstConversation, secondConversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([]);
+
+    renderProjectQuestionPanel();
+    await waitForReady();
+
+    expect(requiredButton("conversation-first").getAttribute("aria-current")).toBe("true");
+    expect(requiredButton("conversation-second").getAttribute("aria-current")).toBeNull();
+  });
 });
 
 function renderProjectQuestionPanel({

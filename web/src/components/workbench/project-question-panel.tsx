@@ -16,6 +16,7 @@ import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   createQuestionConversation,
   listQuestionConversations,
@@ -397,8 +398,14 @@ function ProjectQuestionPanelSession({ projectId, onOpenFile }: ProjectQuestionP
                     key={conversation.id}
                     type="button"
                     size="sm"
-                    variant={conversation.id === activeConversationId ? "secondary" : "ghost"}
-                    className="h-auto w-full justify-start whitespace-normal px-2 py-2 text-left"
+                    aria-current={conversation.id === activeConversationId ? "true" : undefined}
+                    variant="ghost"
+                    className={cn(
+                      "h-auto w-full justify-start whitespace-normal border px-2 py-2 text-left",
+                      conversation.id === activeConversationId
+                        ? "border-[color:var(--ring)] bg-[color:var(--paper-panel)] font-semibold text-[color:var(--ink-strong)] shadow-sm"
+                        : "border-transparent text-muted-foreground",
+                    )}
                     onClick={() => {
                       void handleSelectConversation(conversation.id);
                     }}
