@@ -42,9 +42,6 @@ import {
 } from "@/lib/client/api";
 import {
   formatAccessModeLabel,
-  formatHeavyTaskBridgeStatusLabel,
-  formatHeavyTaskEngineLabel,
-  formatHeavyTaskNameLabel,
   formatProjectStatusLabel,
   formatWorkbenchSectionLabel,
 } from "@/lib/display-labels";
@@ -65,9 +62,6 @@ type LoadState =
   | { status: "ready"; detail: ProjectDetail; tree: FileTreeNode[] };
 
 type SaveOutcome = "saved" | "failed" | "conflict" | "aborted" | "skipped";
-
-const purposePath = "purpose.md";
-const schemaPath = "schema.md";
 
 export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
   const {
@@ -209,14 +203,6 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
     };
   }, [cancelFileLoad, cancelProjectLoad, cancelSave, performReloadProject, reset]);
 
-  const treePaths = useMemo(() => {
-    if (loadState.status !== "ready") {
-      return new Set<string>();
-    }
-
-    return collectTreePaths(loadState.tree);
-  }, [loadState]);
-
   const performOpenRelativePath = useCallback(
     async (relativePath: string, nextSection: WorkbenchSection = "Files") => {
       cancelFileLoad();
@@ -282,25 +268,6 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
     [blocksDraftReplacement, performOpenRelativePath],
   );
 
-  const showMissingSectionFile = useCallback(
-    ({
-      section: nextSection,
-      title: noticeTitle,
-      message,
-    }: Extract<PendingWorkbenchIntent, { type: "show-missing-section-file" }>) => {
-      cancelFileLoad();
-      setActiveRequestPath(null);
-      clearFile();
-      setPanelNotice({
-        tone: "error",
-        title: noticeTitle,
-        message,
-      });
-      setSection(nextSection);
-    },
-    [cancelFileLoad, clearFile, setSection],
-  );
-
   const handleSectionChange = useCallback(
     async (nextSection: WorkbenchSection) => {
       if (nextSection === "Files") {
@@ -311,68 +278,12 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
         return;
       }
 
-      if (nextSection === "Purpose") {
-        if (treePaths.has(purposePath)) {
-          await requestOpenRelativePath(purposePath, "Purpose");
-          return;
-        }
-
-        if (blocksDraftReplacement) {
-          setPendingIntent({
-            type: "show-missing-section-file",
-            path: purposePath,
-            section: "Purpose",
-            title: "目标文件不可用",
-            message: "purpose.md 在这个项目中不可用。",
-          });
-          return;
-        }
-
-        setPendingIntent(null);
-        showMissingSectionFile({
-          type: "show-missing-section-file",
-          path: purposePath,
-          section: "Purpose",
-          title: "目标文件不可用",
-          message: "purpose.md 在这个项目中不可用。",
-        });
-        return;
-      }
-
-      if (nextSection === "Schema") {
-        if (treePaths.has(schemaPath)) {
-          await requestOpenRelativePath(schemaPath, "Schema");
-          return;
-        }
-
-        if (blocksDraftReplacement) {
-          setPendingIntent({
-            type: "show-missing-section-file",
-            path: schemaPath,
-            section: "Schema",
-            title: "结构文件不可用",
-            message: "schema.md 在这个项目中不可用。",
-          });
-          return;
-        }
-
-        setPendingIntent(null);
-        showMissingSectionFile({
-          type: "show-missing-section-file",
-          path: schemaPath,
-          section: "Schema",
-          title: "结构文件不可用",
-          message: "schema.md 在这个项目中不可用。",
-        });
-        return;
-      }
-
       cancelFileLoad();
       setActiveRequestPath(null);
       setPanelNotice(null);
       setSection(nextSection);
     },
-    [blocksDraftReplacement, cancelFileLoad, requestOpenRelativePath, setSection, showMissingSectionFile, treePaths],
+    [cancelFileLoad, setSection],
   );
 
   const handleSave = useCallback(async (): Promise<SaveOutcome> => {
@@ -530,14 +441,9 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
         return;
       }
 
-      if (intent.type === "show-missing-section-file") {
-        showMissingSectionFile(intent);
-        return;
-      }
-
       await performOpenRelativePath(intent.path, intent.type === "open-section-file" ? intent.section : "Files");
     },
-    [performOpenRelativePath, performReloadProject, showMissingSectionFile],
+    [performOpenRelativePath, performReloadProject],
   );
 
   const activePendingIntent = blocksDraftReplacement ? pendingIntent : null;
@@ -609,6 +515,20 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
     loadState.status === "ready"
       ? "打开项目文件树，检查来源文件，并通过项目路由编辑允许修改的标记文档记录。"
       : "正在加载项目档案和文件树。";
+  const visibleSections = useMemo(
+    () => (loadState.status === "ready" ? getVisibleWorkbenchSections(loadState.detail.sections) : []),
+    [loadState],
+  );
+  const visibleSectionSet = useMemo(() => new Set(visibleSections), [visibleSections]);
+  const currentSection = visibleSectionSet.has(section) ? section : visibleSections[0] ?? "Overview";
+
+  useEffect(() => {
+    if (loadState.status !== "ready" || visibleSectionSet.has(section)) {
+      return;
+    }
+
+    setSection(currentSection);
+  }, [currentSection, loadState.status, section, setSection, visibleSectionSet]);
 
   return (
     <AppShell
@@ -629,7 +549,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
           className="space-y-4"
         >
           <Tabs
-            value={section}
+            value={currentSection}
             onValueChange={(value) => {
               void handleSectionChange(value as WorkbenchSection);
             }}
@@ -639,7 +559,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
               variant="line"
               className="w-full justify-start gap-2 rounded-[22px] border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/90 p-2"
             >
-              {loadState.detail.sections.map((item) => (
+              {visibleSections.map((item) => (
                 <TabsTrigger
                   key={item}
                   value={item}
@@ -667,20 +587,11 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
             }}
           />
 
-          {section === "Overview" ? (
-            <ProjectOverview
-              project={loadState.detail}
-              tree={loadState.tree}
-              onChangeSection={(nextSection) => {
-                void handleSectionChange(nextSection);
-              }}
-              onOpenFile={(relativePath) => {
-                void requestOpenRelativePath(relativePath, "Files");
-              }}
-            />
+          {currentSection === "Overview" ? (
+            <ProjectOverview project={loadState.detail} tree={loadState.tree} />
           ) : null}
 
-          {section === "Ask" ? (
+          {currentSection === "Ask" ? (
             <ProjectQuestionPanel
               projectId={projectId}
               onOpenFile={(relativePath) => {
@@ -689,7 +600,7 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
             />
           ) : null}
 
-          {section === "Insights" ? (
+          {currentSection === "Insights" ? (
             <ProjectInsightsPanel
               projectId={projectId}
               onOpenFile={(relativePath) => {
@@ -698,10 +609,10 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
             />
           ) : null}
 
-          {(section === "Files" || section === "Purpose" || section === "Schema") ? (
+          {currentSection === "Files" ? (
             <div className="grid gap-4 xl:grid-cols-[19rem_minmax(0,1fr)]">
               <motion.div
-                key={`${projectId}-tree-${section}`}
+                key={`${projectId}-tree-${currentSection}`}
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.22 }}
@@ -718,13 +629,13 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
               </motion.div>
 
               <motion.div
-                key={`${projectId}-panel-${section}`}
+                key={`${projectId}-panel-${currentSection}`}
                 initial={{ opacity: 0, x: 10 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.22 }}
               >
                 <FilePanel
-                  section={section}
+                  section={currentSection}
                   selectedPath={selectedPath}
                   file={file}
                   draft={draft}
@@ -744,16 +655,12 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
                   onReset={handleResetDraft}
                   onReloadRemote={() => {
                     if (file) {
-                      void requestOpenRelativePath(file.relativePath, section);
+                      void requestOpenRelativePath(file.relativePath, currentSection);
                     }
                   }}
                 />
               </motion.div>
             </div>
-          ) : null}
-
-          {section === "Project Info" ? (
-            <ProjectInfoPanel detail={loadState.detail} tree={loadState.tree} />
           ) : null}
         </motion.div>
       ) : null}
@@ -905,80 +812,10 @@ function WorkbenchError({
   );
 }
 
-function ProjectInfoPanel({
-  detail,
-  tree,
-}: {
-  detail: ProjectDetail;
-  tree: FileTreeNode[];
-}) {
-  return (
-    <Card className="border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/92 shadow-[0_18px_56px_rgba(var(--shadow-panel),0.08)]">
-      <CardHeader className="border-b border-[color:var(--paper-border)]">
-        <CardTitle>项目信息</CardTitle>
-        <CardDescription>
-          已解析项目路由和文件树组成摘要。
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4 pt-4 md:grid-cols-2 xl:grid-cols-3">
-        <InfoBlock label="项目名称" value={detail.name} />
-        <InfoBlock label="项目编号" value={detail.id} mono />
-        <InfoBlock label="状态" value={formatProjectStatusLabel(detail.status)} />
-        <InfoBlock label="访问模式" value={formatAccessModeLabel(detail.access.mode)} />
-        <InfoBlock label="写入权限" value={detail.access.canWrite ? "是" : "否"} />
-        <InfoBlock label="重任务运行时" value={formatHeavyTaskEngineLabel(detail.runtime.activeEngine)} />
-        <InfoBlock label="桥接状态" value={formatHeavyTaskBridgeStatusLabel(detail.runtime.bridgeStatus)} />
-        <InfoBlock
-          label="已跟踪重任务"
-          value={detail.runtime.heavyTasks.map((task) => formatHeavyTaskNameLabel(task.task)).join("、")}
-        />
-        <InfoBlock label="目标文件" value={detail.hasPurpose ? "已存在" : "缺失"} />
-        <InfoBlock label="结构文件" value={detail.hasSchema ? "已存在" : "缺失"} />
-        <InfoBlock label="知识库目录" value={detail.hasWikiDirectory ? "已存在" : "缺失"} />
-        <InfoBlock
-          label="原始资料目录"
-          value={detail.hasRawSourcesDirectory ? "已存在" : "缺失"}
-        />
-        <InfoBlock label="工作区" value={detail.sections.map(formatWorkbenchSectionLabel).join("、")} />
-        <InfoBlock label="文件树条目" value={String(collectTreePaths(tree).size)} />
-      </CardContent>
-    </Card>
-  );
-}
+function getVisibleWorkbenchSections(sections: WorkbenchSection[]) {
+  const allowed = new Set<WorkbenchSection>(["Overview", "Ask", "Insights", "Files"]);
 
-function InfoBlock({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className="rounded-[20px] border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)]/55 p-4">
-      <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
-      <p className={mono ? "mt-2 font-mono text-sm text-[color:var(--ink-strong)]" : "mt-2 text-sm font-medium text-[color:var(--ink-strong)]"}>
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function collectTreePaths(nodes: FileTreeNode[]): Set<string> {
-  const paths = new Set<string>();
-
-  for (const node of nodes) {
-    paths.add(node.relativePath);
-
-    if (node.nodeType === "directory") {
-      for (const child of collectTreePaths(node.children ?? [])) {
-        paths.add(child);
-      }
-    }
-  }
-
-  return paths;
+  return sections.filter((item) => allowed.has(item));
 }
 
 function getContentSize(content: string) {

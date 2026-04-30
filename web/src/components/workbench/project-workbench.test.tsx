@@ -140,7 +140,7 @@ afterEach(() => {
 });
 
 describe("ProjectWorkbench draft guard", () => {
-  it("shows read-only project access in the aside and project info", async () => {
+  it("shows only the active workbench tabs once ready", async () => {
     vi.mocked(fetchProjectDetail).mockResolvedValue({
       id: "project-1",
       name: "Project One",
@@ -165,26 +165,25 @@ describe("ProjectWorkbench draft guard", () => {
 
     renderProjectWorkbench();
 
+    await waitForText("概览");
     await waitForText("只读");
-    await clickButton("项目信息");
 
-    expect(container?.textContent).toContain("访问模式");
-    expect(container?.textContent).toContain("只读");
-    expect(container?.textContent).toContain("写入权限");
-    expect(container?.textContent).toContain("否");
-    expect(container?.textContent).toContain("重任务运行时");
-    expect(container?.textContent).toContain("内置运行时");
-    expect(container?.textContent).toContain("桥接状态");
-    expect(container?.textContent).toContain("未配置");
-    expect(container?.textContent).toContain("已跟踪重任务");
-    expect(container?.textContent).toContain("项目搜索、项目洞察");
+    expect(container?.textContent).toContain("概览");
+    expect(container?.textContent).toContain("问答");
+    expect(container?.textContent).toContain("分析");
+    expect(container?.textContent).toContain("文件");
+    expect(buttonNamed("目标")).toBeNull();
+    expect(buttonNamed("结构")).toBeNull();
+    expect(buttonNamed("项目信息")).toBeNull();
   });
 
   it("shows and cancels the dirty draft guard from an Ask source open", async () => {
     renderProjectWorkbench();
 
-    await waitForButton("目标");
-    await clickButton("目标");
+    await waitForButton("文件");
+    await clickButton("文件");
+    await waitForButton("purpose.md");
+    await clickButton("purpose.md");
     await waitForText("purpose.md");
     await clickButton("编辑");
 
@@ -208,8 +207,10 @@ describe("ProjectWorkbench draft guard", () => {
   it("shows and cancels the dirty draft guard from an Insights source open", async () => {
     renderProjectWorkbench();
 
-    await waitForButton("目标");
-    await clickButton("目标");
+    await waitForButton("文件");
+    await clickButton("文件");
+    await waitForButton("purpose.md");
+    await clickButton("purpose.md");
     await waitForText("purpose.md");
     await clickButton("编辑");
 
