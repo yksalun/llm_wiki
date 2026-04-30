@@ -16,7 +16,7 @@ const project: ProjectDetail = {
   hasWikiDirectory: true,
   hasRawSourcesDirectory: false,
   updatedAt: "2026-04-26T00:00:00.000Z",
-  sections: ["Overview", "Ask", "Insights", "Files"],
+  sections: ["Overview", "Ask", "Insights", "Files", "Purpose", "Schema", "Project Info"],
   rootPathHint: null,
   access: {
     mode: "read-write",
@@ -74,5 +74,22 @@ describe("ProjectOverview", () => {
     expect(html).toContain("桥接状态");
     expect(html).toContain("未配置");
     expect(html).toContain("文件树条目");
+
+    const workbenchValue = extractInfoBlockValue(html, "工作区");
+
+    expect(workbenchValue).toBe("概览、问答、分析、文件");
+    expect(workbenchValue).not.toContain("目标");
+    expect(workbenchValue).not.toContain("结构");
+    expect(workbenchValue).not.toContain("项目信息");
   });
 });
+
+function extractInfoBlockValue(html: string, label: string) {
+  const match = html.match(new RegExp(`${label}</p><p class="[^"]*">([^<]*)</p>`));
+
+  if (!match) {
+    throw new Error(`Expected InfoBlock label ${label}.`);
+  }
+
+  return match[1];
+}

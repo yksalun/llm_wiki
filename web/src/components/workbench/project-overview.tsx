@@ -15,7 +15,7 @@ import {
   formatProjectStatusLabel,
   formatWorkbenchSectionLabel,
 } from "@/lib/display-labels";
-import type { FileTreeNode, ProjectDetail } from "@/lib/types";
+import type { FileTreeNode, ProjectDetail, WorkbenchSection } from "@/lib/types";
 
 interface ProjectOverviewProps {
   project: ProjectDetail;
@@ -23,6 +23,8 @@ interface ProjectOverviewProps {
 }
 
 export function ProjectOverview({ project, tree }: ProjectOverviewProps) {
+  const visibleSections = getVisibleWorkbenchSections(project.sections);
+
   return (
     <Card className="border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/92 shadow-[0_18px_56px_rgba(var(--shadow-panel),0.08)]">
       <CardHeader className="border-b border-[color:var(--paper-border)]">
@@ -48,7 +50,7 @@ export function ProjectOverview({ project, tree }: ProjectOverviewProps) {
           label="原始资料目录"
           value={project.hasRawSourcesDirectory ? "已存在" : "缺失"}
         />
-        <InfoBlock label="工作区" value={project.sections.map(formatWorkbenchSectionLabel).join("、")} />
+        <InfoBlock label="工作区" value={visibleSections.map(formatWorkbenchSectionLabel).join("、")} />
         <InfoBlock label="文件树条目" value={String(collectTreePaths(tree).size)} />
       </CardContent>
     </Card>
@@ -88,4 +90,10 @@ function collectTreePaths(nodes: FileTreeNode[]): Set<string> {
   }
 
   return paths;
+}
+
+function getVisibleWorkbenchSections(sections: WorkbenchSection[]) {
+  const allowed = new Set<WorkbenchSection>(["Overview", "Ask", "Insights", "Files"]);
+
+  return sections.filter((item) => allowed.has(item));
 }
