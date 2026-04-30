@@ -29,6 +29,19 @@ import {
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
   .IS_REACT_ACT_ENVIRONMENT = true;
 
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver =
+  ResizeObserverMock as typeof ResizeObserver;
+
+if (!HTMLElement.prototype.scrollTo) {
+  HTMLElement.prototype.scrollTo = vi.fn();
+}
+
 const apiMocks = vi.mocked({
   createQuestionConversation,
   listQuestionConversations,
@@ -75,6 +88,9 @@ describe("ProjectQuestionPanel", () => {
     renderProjectQuestionPanel({ projectId: "project/a" });
     await waitForText("schema 在 wiki/schema.md。");
 
+    expect(container?.textContent).toContain("历史会话");
+    expect(container?.textContent).toContain("新会话");
+    expect(container?.textContent).toContain("项目问答");
     expect(apiMocks.listQuestionConversations).toHaveBeenCalledWith(
       "project/a",
       expect.any(AbortSignal),
@@ -85,7 +101,6 @@ describe("ProjectQuestionPanel", () => {
       "conv-history",
       expect.any(AbortSignal),
     );
-    expect(container?.textContent).toContain("历史会话");
     expect(container?.textContent).toContain("schema 在哪里？");
     expect(container?.textContent).toContain("wiki/schema.md");
   });
@@ -132,28 +147,30 @@ describe("ProjectQuestionPanel", () => {
     const reference = { title: "schema.md", path: "wiki/schema.md" };
     apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
     apiMocks.listQuestionMessages.mockResolvedValue([]);
-    apiMocks.streamQuestionMessage.mockImplementation(async (_projectId, _conversationId, _message, handlers) => {
-      handlers.onToken("schema ");
-      handlers.onToken("在这里。");
-      handlers.onReferences([reference]);
-      await Promise.resolve();
-      handlers.onDone(
-        createMessage({
-          id: "assistant-final",
-          role: "assistant",
-          content: "schema 在这里。",
-          conversationId: conversation.id,
-          references: [reference],
-        }),
-      );
-    });
+    apiMocks.streamQuestionMessage.mockImplementation(
+      async (_projectId, _conversationId, _message, handlers) => {
+        handlers.onToken("## 结论\n\n");
+        handlers.onToken("- schema 在这里");
+        handlers.onReferences([reference]);
+        await Promise.resolve();
+        handlers.onDone(
+          createMessage({
+            id: "assistant-final",
+            role: "assistant",
+            content: "## 结论\n\n- schema 在这里",
+            conversationId: conversation.id,
+            references: [reference],
+          }),
+        );
+      },
+    );
 
     renderProjectQuestionPanel({ onOpenFile });
     await waitForReady();
     updateQuestion("schema 在哪里？");
 
     await clickButton("发送");
-    await waitForText("schema 在这里。");
+    await waitForText("schema 在这里");
 
     expect(apiMocks.streamQuestionMessage).toHaveBeenCalledWith(
       "project-1",
@@ -164,6 +181,10 @@ describe("ProjectQuestionPanel", () => {
     expect(container?.textContent).toContain("schema 在哪里？");
     expect(container?.textContent).toContain("schema.md");
     expect(container?.textContent).toContain("wiki/schema.md");
+    const headings = Array.from(container?.querySelectorAll("h2") ?? []).map(
+      (node) => node.textContent,
+    );
+    expect(headings).toContain("结论");
 
     await clickButtonContaining("schema.md");
 
