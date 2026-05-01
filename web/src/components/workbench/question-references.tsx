@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  type ComponentProps,
   useCallback,
   useEffect,
   useRef,
@@ -30,13 +29,6 @@ import { fetchProjectFile } from "@/lib/client/api";
 import type { DesktopBridgeReference, FileReadResult } from "@/lib/types";
 
 type PreviewStatus = "idle" | "loading" | "ready" | "error";
-type SourcesWithDefaultOpenProps = ComponentProps<typeof Sources> & {
-  defaultOpen?: boolean;
-};
-
-const SourcesWithDefaultOpen = Sources as (
-  props: SourcesWithDefaultOpenProps,
-) => ReturnType<typeof Sources>;
 
 interface QuestionReferencesProps {
   projectId: string;
@@ -115,7 +107,7 @@ export function QuestionReferences({
 
   return (
     <>
-      <SourcesWithDefaultOpen className="mt-3" defaultOpen={references.length <= 3}>
+      <Sources className="mt-3" defaultOpen={references.length <= 3}>
         <SourcesTrigger count={references.length}>
           <span className="font-medium">引用 {references.length} 个文件</span>
         </SourcesTrigger>
@@ -131,7 +123,7 @@ export function QuestionReferences({
             ))}
           </div>
         </SourcesContent>
-      </SourcesWithDefaultOpen>
+      </Sources>
 
       <Sheet
         open={open}

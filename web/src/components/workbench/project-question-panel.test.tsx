@@ -48,6 +48,14 @@ if (!HTMLElement.prototype.scrollTo) {
   HTMLElement.prototype.scrollTo = vi.fn();
 }
 
+const elementPrototype = Element.prototype as Element & {
+  getAnimations?: () => Animation[];
+};
+
+if (!elementPrototype.getAnimations) {
+  elementPrototype.getAnimations = vi.fn(() => []);
+}
+
 const apiMocks = vi.mocked({
   createQuestionConversation,
   fetchProjectFile,
@@ -223,6 +231,18 @@ describe("ProjectQuestionPanel", () => {
     await clickButtonContaining("schema.md");
     await waitForBodyText("Desktop bridge reference body.");
 
+    const closeButton = Array.from(document.body.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Close"),
+    );
+
+    if (closeButton) {
+      await act(async () => {
+        closeButton.click();
+        await Promise.resolve();
+      });
+    }
+
+    expect(document.body.textContent).toContain("schema.md");
     expect(apiMocks.fetchProjectFile).toHaveBeenCalledWith(
       "project-1",
       "wiki/schema.md",
@@ -404,6 +424,43 @@ describe("ProjectQuestionPanel", () => {
       expect.any(AbortSignal),
     );
     expect(onOpenFile).not.toHaveBeenCalled();
+  });
+
+  it("shows a loading state while a referenced file is loading", async () => {
+    const conversation = createConversation({
+      id: "conv-preview-loading",
+      title: "preview loading",
+    });
+    const pendingFile = createDeferred<FileReadResult>();
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([
+      createMessage({
+        id: "msg-preview-loading",
+        role: "assistant",
+        content: "The answer references a slow file.",
+        conversationId: conversation.id,
+        references: [{ title: "slow.md", path: "wiki/slow.md" }],
+      }),
+    ]);
+    apiMocks.fetchProjectFile.mockReturnValue(pendingFile.promise);
+
+    renderProjectQuestionPanel();
+    await waitForText("The answer references a slow file.");
+
+    await clickButtonContaining("slow.md");
+    await waitForBodyText("正在加载引用文件");
+
+    await act(async () => {
+      pendingFile.resolve(
+        createFile({
+          relativePath: "wiki/slow.md",
+          content: "# Slow\n\nLoaded file.",
+        }),
+      );
+      await pendingFile.promise;
+    });
+
+    await waitForBodyText("Loaded file.");
   });
 
   it("collapses long assistant reference lists by default and can expand them", async () => {

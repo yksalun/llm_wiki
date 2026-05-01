@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, LoaderCircle, MessageSquare, Plus, StopCircle } from "lucide-react";
+import { LoaderCircle, MessageSquare, Plus, StopCircle } from "lucide-react";
 import {
   AssistantRuntimeProvider,
   ComposerPrimitive,
@@ -16,6 +16,7 @@ import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { QuestionReferences } from "@/components/workbench/question-references";
 import { cn } from "@/lib/utils";
 import {
   createQuestionConversation,
@@ -36,13 +37,11 @@ interface ProjectQuestionPanelProps {
 
 type QuestionStatus = "loading" | "ready" | "streaming" | "error";
 
-export function ProjectQuestionPanel({ projectId, onOpenFile }: ProjectQuestionPanelProps) {
-  return (
-    <ProjectQuestionPanelSession key={projectId} projectId={projectId} onOpenFile={onOpenFile} />
-  );
+export function ProjectQuestionPanel({ projectId }: ProjectQuestionPanelProps) {
+  return <ProjectQuestionPanelSession key={projectId} projectId={projectId} />;
 }
 
-function ProjectQuestionPanelSession({ projectId, onOpenFile }: ProjectQuestionPanelProps) {
+function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
   const [conversations, setConversations] = useState<DesktopBridgeConversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<DesktopBridgeMessage[]>([]);
@@ -445,7 +444,7 @@ function ProjectQuestionPanelSession({ projectId, onOpenFile }: ProjectQuestionP
                 ) : null}
               </ThreadPrimitive.Empty>
               <ThreadPrimitive.Messages>
-                {({ message }) => <ChatMessage message={message} onOpenFile={onOpenFile} />}
+                {({ message }) => <ChatMessage projectId={projectId} message={message} />}
               </ThreadPrimitive.Messages>
             </ThreadPrimitive.Viewport>
 
@@ -515,21 +514,17 @@ function ProjectQuestionPanelSession({ projectId, onOpenFile }: ProjectQuestionP
 }
 
 function ChatMessage({
+  projectId,
   message,
-  onOpenFile,
 }: {
+  projectId: string;
   message: MessageState;
-  onOpenFile: (relativePath: string) => void;
 }) {
   const label =
     message.role === "user" ? "用户" : message.role === "assistant" ? "助手" : "系统";
 
   const isUserMessage = message.role === "user";
-  const [referencesExpanded, setReferencesExpanded] = useState(false);
   const references = getMessageReferences(message);
-  const hasCollapsibleReferences = references.length > 3;
-  const visibleReferences =
-    hasCollapsibleReferences && !referencesExpanded ? references.slice(0, 3) : references;
 
   return (
     <MessagePrimitive.Root
@@ -557,43 +552,7 @@ function ChatMessage({
           <MessagePrimitive.Parts components={{ Text: MarkdownTextPart }} />
         </div>
         {references.length > 0 ? (
-          <div className="mt-3 space-y-2">
-            {hasCollapsibleReferences ? (
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span>
-                  引用 {references.length} 条，已显示 {visibleReferences.length} 条
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2"
-                  onClick={() => setReferencesExpanded((current) => !current)}
-                >
-                  {referencesExpanded ? "收起" : "展开全部"}
-                </Button>
-              </div>
-            ) : null}
-            <ul className="space-y-2">
-              {visibleReferences.map((reference) => (
-                <li key={`${reference.path}-${reference.title}`}>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-auto w-full justify-start whitespace-normal text-left"
-                    onClick={() => onOpenFile(reference.path)}
-                  >
-                    <ExternalLink className="size-4 shrink-0" aria-hidden="true" />
-                    <span className="min-w-0">
-                      <span className="block font-medium">{reference.title}</span>
-                      <span className="block text-xs text-muted-foreground">{reference.path}</span>
-                    </span>
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <QuestionReferences projectId={projectId} references={references} />
         ) : null}
       </div>
     </MessagePrimitive.Root>
@@ -623,13 +582,17 @@ function MarkdownTextPart() {
   );
 }
 
+function stripHiddenHtmlComments(content: string) {
+  return content.replace(/<!--[\s\S]*?-->/g, "").trimEnd();
+}
+
 function toThreadMessageLike(message: DesktopBridgeMessage): ThreadMessageLike {
   const running = message.id === "streaming";
 
   return {
     id: message.id,
     role: message.role,
-    content: message.content,
+    content: stripHiddenHtmlComments(message.content),
     createdAt: new Date(message.timestamp),
     status:
       message.role === "assistant"
