@@ -525,6 +525,11 @@ function ChatMessage({
     message.role === "user" ? "用户" : message.role === "assistant" ? "助手" : "系统";
 
   const isUserMessage = message.role === "user";
+  const [referencesExpanded, setReferencesExpanded] = useState(false);
+  const references = getMessageReferences(message);
+  const hasCollapsibleReferences = references.length > 3;
+  const visibleReferences =
+    hasCollapsibleReferences && !referencesExpanded ? references.slice(0, 3) : references;
 
   return (
     <MessagePrimitive.Root
@@ -551,26 +556,44 @@ function ChatMessage({
         <div className="mt-1">
           <MessagePrimitive.Parts components={{ Text: MarkdownTextPart }} />
         </div>
-        {getMessageReferences(message).length > 0 ? (
-          <ul className="mt-3 space-y-2">
-            {getMessageReferences(message).map((reference) => (
-              <li key={`${reference.path}-${reference.title}`}>
+        {references.length > 0 ? (
+          <div className="mt-3 space-y-2">
+            {hasCollapsibleReferences ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span>
+                  引用 {references.length} 条，已显示 {visibleReferences.length} 条
+                </span>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  className="h-auto w-full justify-start whitespace-normal text-left"
-                  onClick={() => onOpenFile(reference.path)}
+                  className="h-7 px-2"
+                  onClick={() => setReferencesExpanded((current) => !current)}
                 >
-                  <ExternalLink className="size-4 shrink-0" aria-hidden="true" />
-                  <span className="min-w-0">
-                    <span className="block font-medium">{reference.title}</span>
-                    <span className="block text-xs text-muted-foreground">{reference.path}</span>
-                  </span>
+                  {referencesExpanded ? "收起" : "展开全部"}
                 </Button>
-              </li>
-            ))}
-          </ul>
+              </div>
+            ) : null}
+            <ul className="space-y-2">
+              {visibleReferences.map((reference) => (
+                <li key={`${reference.path}-${reference.title}`}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-auto w-full justify-start whitespace-normal text-left"
+                    onClick={() => onOpenFile(reference.path)}
+                  >
+                    <ExternalLink className="size-4 shrink-0" aria-hidden="true" />
+                    <span className="min-w-0">
+                      <span className="block font-medium">{reference.title}</span>
+                      <span className="block text-xs text-muted-foreground">{reference.path}</span>
+                    </span>
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : null}
       </div>
     </MessagePrimitive.Root>

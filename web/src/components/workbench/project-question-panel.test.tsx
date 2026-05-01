@@ -337,6 +337,53 @@ describe("ProjectQuestionPanel", () => {
     expect(assistantMessage.dataset.messageRole).toBe("assistant");
     expect(assistantMessage.dataset.messageAlign).toBe("left");
   });
+
+  it("collapses long assistant reference lists by default and can expand them", async () => {
+    const onOpenFile = vi.fn();
+    const conversation = createConversation({ id: "conv-references", title: "references" });
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([
+      createMessage({
+        id: "msg-with-references",
+        role: "assistant",
+        content: "assistant references message",
+        conversationId: conversation.id,
+        references: [
+          { title: "引用 1", path: "wiki/ref-1.md" },
+          { title: "引用 2", path: "wiki/ref-2.md" },
+          { title: "引用 3", path: "wiki/ref-3.md" },
+          { title: "引用 4", path: "wiki/ref-4.md" },
+          { title: "引用 5", path: "wiki/ref-5.md" },
+        ],
+      }),
+    ]);
+
+    renderProjectQuestionPanel({ onOpenFile });
+    await waitForText("assistant references message");
+
+    expect(container?.textContent).toContain("引用 5 条，已显示 3 条");
+    expect(container?.textContent).toContain("wiki/ref-1.md");
+    expect(container?.textContent).toContain("wiki/ref-2.md");
+    expect(container?.textContent).toContain("wiki/ref-3.md");
+    expect(container?.textContent).not.toContain("wiki/ref-4.md");
+    expect(container?.textContent).not.toContain("wiki/ref-5.md");
+
+    await clickButton("展开全部");
+
+    expect(container?.textContent).toContain("引用 5 条，已显示 5 条");
+    expect(container?.textContent).toContain("wiki/ref-4.md");
+    expect(container?.textContent).toContain("wiki/ref-5.md");
+
+    await clickButtonContaining("引用 5");
+
+    expect(onOpenFile).toHaveBeenCalledWith("wiki/ref-5.md");
+
+    await clickButton("收起");
+
+    expect(container?.textContent).toContain("引用 5 条，已显示 3 条");
+    expect(container?.textContent).not.toContain("wiki/ref-4.md");
+    expect(container?.textContent).not.toContain("wiki/ref-5.md");
+  });
 });
 
 function renderProjectQuestionPanel({
