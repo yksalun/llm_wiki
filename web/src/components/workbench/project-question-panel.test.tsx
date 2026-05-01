@@ -221,7 +221,7 @@ describe("ProjectQuestionPanel", () => {
     );
 
     await clickButtonContaining("schema.md");
-    await waitForText("Desktop bridge reference body.");
+    await waitForBodyText("Desktop bridge reference body.");
 
     expect(apiMocks.fetchProjectFile).toHaveBeenCalledWith(
       "project-1",
@@ -396,7 +396,7 @@ describe("ProjectQuestionPanel", () => {
     await waitForText("The answer references a missing page.");
 
     await clickButtonContaining("missing.md");
-    await waitForText("File not found");
+    await waitForBodyText("File not found");
 
     expect(apiMocks.fetchProjectFile).toHaveBeenCalledWith(
       "project-1",
@@ -444,8 +444,8 @@ describe("ProjectQuestionPanel", () => {
       }),
     );
 
-    await clickButtonContaining("引用 5");
-    await waitForText("Expanded reference file.");
+    await clickButtonContaining("wiki/ref-5.md");
+    await waitForBodyText("Expanded reference file.");
 
     expect(apiMocks.fetchProjectFile).toHaveBeenCalledWith(
       "project-1",
@@ -566,6 +566,12 @@ async function waitForReady() {
 async function waitForText(text: string) {
   await waitFor(() => {
     expect(container?.textContent).toContain(text);
+  });
+}
+
+async function waitForBodyText(text: string) {
+  await waitFor(() => {
+    expect(document.body.textContent).toContain(text);
   });
 }
 
