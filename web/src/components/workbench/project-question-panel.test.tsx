@@ -447,6 +447,11 @@ describe("ProjectQuestionPanel", () => {
     await clickButtonContaining("引用 5");
     await waitForText("Expanded reference file.");
 
+    expect(apiMocks.fetchProjectFile).toHaveBeenCalledWith(
+      "project-1",
+      "wiki/ref-5.md",
+      expect.any(AbortSignal),
+    );
     expect(onOpenFile).not.toHaveBeenCalled();
   });
 });
