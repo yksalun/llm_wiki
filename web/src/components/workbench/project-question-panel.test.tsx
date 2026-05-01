@@ -307,6 +307,36 @@ describe("ProjectQuestionPanel", () => {
     expect(requiredButton("conversation-first").getAttribute("aria-current")).toBe("true");
     expect(requiredButton("conversation-second").getAttribute("aria-current")).toBeNull();
   });
+
+  it("aligns user messages to the right and assistant messages to the left", async () => {
+    const conversation = createConversation({ id: "conv-layout", title: "layout conversation" });
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([
+      createMessage({
+        id: "msg-user-layout",
+        role: "user",
+        content: "user layout message",
+        conversationId: conversation.id,
+      }),
+      createMessage({
+        id: "msg-assistant-layout",
+        role: "assistant",
+        content: "assistant layout message",
+        conversationId: conversation.id,
+      }),
+    ]);
+
+    renderProjectQuestionPanel();
+    await waitForText("assistant layout message");
+
+    const userMessage = requiredMessage("user layout message");
+    const assistantMessage = requiredMessage("assistant layout message");
+
+    expect(userMessage.dataset.messageRole).toBe("user");
+    expect(userMessage.dataset.messageAlign).toBe("right");
+    expect(assistantMessage.dataset.messageRole).toBe("assistant");
+    expect(assistantMessage.dataset.messageAlign).toBe("left");
+  });
 });
 
 function renderProjectQuestionPanel({
@@ -396,6 +426,18 @@ function requiredButton(name: string) {
   }
 
   return button;
+}
+
+function requiredMessage(text: string) {
+  const message = Array.from(
+    container?.querySelectorAll<HTMLElement>("[data-message-role]") ?? [],
+  ).find((candidate) => candidate.textContent?.includes(text));
+
+  if (!message) {
+    throw new Error(`Expected message containing ${text}.`);
+  }
+
+  return message;
 }
 
 async function waitForReady() {

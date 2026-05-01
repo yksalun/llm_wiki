@@ -524,33 +524,55 @@ function ChatMessage({
   const label =
     message.role === "user" ? "用户" : message.role === "assistant" ? "助手" : "系统";
 
+  const isUserMessage = message.role === "user";
+
   return (
-    <MessagePrimitive.Root className="rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-3">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <div className="mt-1">
-        <MessagePrimitive.Parts components={{ Text: MarkdownTextPart }} />
+    <MessagePrimitive.Root
+      data-message-role={message.role}
+      data-message-align={isUserMessage ? "right" : "left"}
+      className={cn("flex w-full", isUserMessage ? "justify-end" : "justify-start")}
+    >
+      <div
+        className={cn(
+          "max-w-[78%] rounded-md border p-3",
+          isUserMessage
+            ? "border-primary/25 bg-primary text-primary-foreground"
+            : "border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] text-[color:var(--ink-strong)]",
+        )}
+      >
+        <p
+          className={cn(
+            "text-xs font-medium",
+            isUserMessage ? "text-primary-foreground/80" : "text-muted-foreground",
+          )}
+        >
+          {label}
+        </p>
+        <div className="mt-1">
+          <MessagePrimitive.Parts components={{ Text: MarkdownTextPart }} />
+        </div>
+        {getMessageReferences(message).length > 0 ? (
+          <ul className="mt-3 space-y-2">
+            {getMessageReferences(message).map((reference) => (
+              <li key={`${reference.path}-${reference.title}`}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-auto w-full justify-start whitespace-normal text-left"
+                  onClick={() => onOpenFile(reference.path)}
+                >
+                  <ExternalLink className="size-4 shrink-0" aria-hidden="true" />
+                  <span className="min-w-0">
+                    <span className="block font-medium">{reference.title}</span>
+                    <span className="block text-xs text-muted-foreground">{reference.path}</span>
+                  </span>
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
-      {getMessageReferences(message).length > 0 ? (
-        <ul className="mt-3 space-y-2">
-          {getMessageReferences(message).map((reference) => (
-            <li key={`${reference.path}-${reference.title}`}>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-auto w-full justify-start whitespace-normal text-left"
-                onClick={() => onOpenFile(reference.path)}
-              >
-                <ExternalLink className="size-4 shrink-0" aria-hidden="true" />
-                <span className="min-w-0">
-                  <span className="block font-medium">{reference.title}</span>
-                  <span className="block text-xs text-muted-foreground">{reference.path}</span>
-                </span>
-              </Button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
     </MessagePrimitive.Root>
   );
 }
@@ -558,13 +580,13 @@ function ChatMessage({
 function MarkdownTextPart() {
   return (
     <MarkdownTextPrimitive
-      className="space-y-2 text-sm leading-6 text-[color:var(--ink-strong)]"
+      className="space-y-2 text-sm leading-6 text-inherit"
       components={{
         h1: ({ children }) => (
-          <h1 className="text-lg font-semibold text-[color:var(--ink-strong)]">{children}</h1>
+          <h1 className="text-lg font-semibold text-inherit">{children}</h1>
         ),
         h2: ({ children }) => (
-          <h2 className="text-base font-semibold text-[color:var(--ink-strong)]">{children}</h2>
+          <h2 className="text-base font-semibold text-inherit">{children}</h2>
         ),
         ul: ({ children }) => <ul className="ml-5 list-disc space-y-1">{children}</ul>,
         ol: ({ children }) => <ol className="ml-5 list-decimal space-y-1">{children}</ol>,
