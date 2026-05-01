@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   DesktopBridgeConversation,
   DesktopBridgeMessage,
+  FileReadResult,
 } from "@/lib/types";
 
 import { ProjectQuestionPanel } from "./project-question-panel";
@@ -18,6 +19,11 @@ vi.mock("@/lib/client/desktop-question-api", () => ({
   streamQuestionMessage: vi.fn(),
 }));
 
+vi.mock("@/lib/client/api", () => ({
+  fetchProjectFile: vi.fn(),
+}));
+
+import { fetchProjectFile } from "@/lib/client/api";
 import {
   createQuestionConversation,
   listQuestionConversations,
@@ -44,6 +50,7 @@ if (!HTMLElement.prototype.scrollTo) {
 
 const apiMocks = vi.mocked({
   createQuestionConversation,
+  fetchProjectFile,
   listQuestionConversations,
   listQuestionMessages,
   streamQuestionMessage,
@@ -103,6 +110,26 @@ describe("ProjectQuestionPanel", () => {
     );
     expect(container?.textContent).toContain("schema 在哪里？");
     expect(container?.textContent).toContain("wiki/schema.md");
+  });
+
+  it("does not render hidden citation comments from assistant messages", async () => {
+    const conversation = createConversation({ id: "conv-cited-comment", title: "citations" });
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([
+      createMessage({
+        id: "msg-hidden-citation",
+        role: "assistant",
+        content: "Answer body.\n\n<!-- cited: 1, 3 -->",
+        conversationId: conversation.id,
+        references: [{ title: "schema.md", path: "wiki/schema.md" }],
+      }),
+    ]);
+
+    renderProjectQuestionPanel();
+    await waitForText("Answer body.");
+
+    expect(document.body.textContent).not.toContain("<!-- cited:");
+    expect(document.body.textContent).not.toContain("cited: 1, 3");
   });
 
   it("没有会话时创建新会话，并可通过新会话按钮切换", async () => {
@@ -186,10 +213,22 @@ describe("ProjectQuestionPanel", () => {
     );
     expect(headings).toContain("结论");
 
-    await clickButtonContaining("schema.md");
+    apiMocks.fetchProjectFile.mockResolvedValue(
+      createFile({
+        relativePath: "wiki/schema.md",
+        content: "# Schema\n\nDesktop bridge reference body.",
+      }),
+    );
 
-    expect(onOpenFile).toHaveBeenCalledWith("wiki/schema.md");
-    expect(onOpenFile).toHaveBeenCalledTimes(1);
+    await clickButtonContaining("schema.md");
+    await waitForText("Desktop bridge reference body.");
+
+    expect(apiMocks.fetchProjectFile).toHaveBeenCalledWith(
+      "project-1",
+      "wiki/schema.md",
+      expect.any(AbortSignal),
+    );
+    expect(onOpenFile).not.toHaveBeenCalled();
   });
 
   it("切换会话时清空 composer 草稿，避免发送到新会话", async () => {
@@ -338,6 +377,35 @@ describe("ProjectQuestionPanel", () => {
     expect(assistantMessage.dataset.messageAlign).toBe("left");
   });
 
+  it("shows a Sheet error when a referenced file cannot be loaded", async () => {
+    const onOpenFile = vi.fn();
+    const conversation = createConversation({ id: "conv-preview-error", title: "preview error" });
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([
+      createMessage({
+        id: "msg-preview-error",
+        role: "assistant",
+        content: "The answer references a missing page.",
+        conversationId: conversation.id,
+        references: [{ title: "missing.md", path: "wiki/missing.md" }],
+      }),
+    ]);
+    apiMocks.fetchProjectFile.mockRejectedValue(new Error("File not found"));
+
+    renderProjectQuestionPanel({ onOpenFile });
+    await waitForText("The answer references a missing page.");
+
+    await clickButtonContaining("missing.md");
+    await waitForText("File not found");
+
+    expect(apiMocks.fetchProjectFile).toHaveBeenCalledWith(
+      "project-1",
+      "wiki/missing.md",
+      expect.any(AbortSignal),
+    );
+    expect(onOpenFile).not.toHaveBeenCalled();
+  });
+
   it("collapses long assistant reference lists by default and can expand them", async () => {
     const onOpenFile = vi.fn();
     const conversation = createConversation({ id: "conv-references", title: "references" });
@@ -361,28 +429,25 @@ describe("ProjectQuestionPanel", () => {
     renderProjectQuestionPanel({ onOpenFile });
     await waitForText("assistant references message");
 
-    expect(container?.textContent).toContain("引用 5 条，已显示 3 条");
-    expect(container?.textContent).toContain("wiki/ref-1.md");
-    expect(container?.textContent).toContain("wiki/ref-2.md");
-    expect(container?.textContent).toContain("wiki/ref-3.md");
-    expect(container?.textContent).not.toContain("wiki/ref-4.md");
-    expect(container?.textContent).not.toContain("wiki/ref-5.md");
+    expect(document.body.textContent).toContain("引用 5 个文件");
+    expect(document.body.textContent).not.toContain("wiki/ref-5.md");
 
-    await clickButton("展开全部");
+    await clickButtonContaining("引用 5 个文件");
 
-    expect(container?.textContent).toContain("引用 5 条，已显示 5 条");
-    expect(container?.textContent).toContain("wiki/ref-4.md");
-    expect(container?.textContent).toContain("wiki/ref-5.md");
+    expect(document.body.textContent).toContain("wiki/ref-1.md");
+    expect(document.body.textContent).toContain("wiki/ref-5.md");
+
+    apiMocks.fetchProjectFile.mockResolvedValue(
+      createFile({
+        relativePath: "wiki/ref-5.md",
+        content: "# Ref 5\n\nExpanded reference file.",
+      }),
+    );
 
     await clickButtonContaining("引用 5");
+    await waitForText("Expanded reference file.");
 
-    expect(onOpenFile).toHaveBeenCalledWith("wiki/ref-5.md");
-
-    await clickButton("收起");
-
-    expect(container?.textContent).toContain("引用 5 条，已显示 3 条");
-    expect(container?.textContent).not.toContain("wiki/ref-4.md");
-    expect(container?.textContent).not.toContain("wiki/ref-5.md");
+    expect(onOpenFile).not.toHaveBeenCalled();
   });
 });
 
@@ -538,6 +603,19 @@ function createMessage(overrides: Partial<DesktopBridgeMessage> = {}): DesktopBr
     content: "默认消息",
     timestamp: 1,
     conversationId: "conv-1",
+    ...overrides,
+  };
+}
+
+function createFile(overrides: Partial<FileReadResult> = {}): FileReadResult {
+  return {
+    relativePath: "wiki/schema.md",
+    mode: "preview",
+    content: "# Schema\n\nReference file body.",
+    editable: false,
+    size: 31,
+    lastModified: "2026-05-01T00:00:00.000Z",
+    metadata: {},
     ...overrides,
   };
 }
