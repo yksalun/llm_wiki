@@ -12,7 +12,7 @@ type MarkdownBlock =
 export function MarkdownReader({ content }: { content: string }) {
   if (!content.trim()) {
     return (
-      <div className="rounded-[20px] border border-dashed border-black/10 bg-[linear-gradient(180deg,rgba(255,252,246,0.72),rgba(245,239,229,0.46))] p-6 text-sm leading-7 text-muted-foreground">
+      <div className="rounded-md border border-dashed border-[color:var(--paper-border)] bg-[color:var(--paper-muted)]/50 p-6 text-sm leading-7 text-muted-foreground">
         This file is empty.
       </div>
     );
@@ -21,7 +21,7 @@ export function MarkdownReader({ content }: { content: string }) {
   const blocks = parseMarkdownBlocks(content);
 
   return (
-    <article className="space-y-5 rounded-[20px] border border-black/8 bg-white/70 px-5 py-5 text-sm leading-7 text-[color:var(--ink-strong)]">
+    <article className="space-y-5 rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)] px-5 py-5 text-sm leading-7 text-[color:var(--ink-strong)]">
       {blocks.map((block, index) => renderBlock(block, index))}
     </article>
   );
@@ -188,7 +188,7 @@ function renderBlock(block: MarkdownBlock, index: number) {
     return (
       <blockquote
         key={index}
-        className="border-l-4 border-black/10 bg-black/[0.02] px-4 py-3 text-muted-foreground"
+        className="border-l-4 border-[color:var(--paper-accent)] bg-[color:var(--paper-muted)]/50 px-4 py-3 text-muted-foreground"
       >
         {renderInlineMarkdown(block.text)}
       </blockquote>
@@ -199,14 +199,14 @@ function renderBlock(block: MarkdownBlock, index: number) {
     return (
       <pre
         key={index}
-        className="overflow-x-auto rounded-[16px] border border-black/8 bg-[color:var(--ink-strong)] px-4 py-3 font-mono text-xs leading-6 text-white"
+        className="overflow-x-auto rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-elevated)] px-4 py-3 font-mono text-xs leading-6 text-[color:var(--ink-strong)]"
       >
         <code data-language={block.language ?? undefined}>{block.code}</code>
       </pre>
     );
   }
 
-  return <hr key={index} className="border-black/10" />;
+  return <hr key={index} className="border-[color:var(--paper-border)]" />;
 }
 
 function renderInlineMarkdown(text: string): ReactNode[] {
@@ -226,7 +226,7 @@ function renderInlineMarkdown(text: string): ReactNode[] {
       nodes.push(
         <code
           key={`code-${match.index}`}
-          className="rounded border border-black/10 bg-black/[0.04] px-1 py-0.5 font-mono text-[0.92em]"
+          className="rounded border border-[color:var(--paper-border)] bg-[color:var(--paper-elevated)] px-1 py-0.5 font-mono text-[0.92em]"
         >
           {token.slice(1, -1)}
         </code>,

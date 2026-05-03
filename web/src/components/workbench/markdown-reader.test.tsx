@@ -43,6 +43,32 @@ describe("MarkdownReader", () => {
     expect(html).toContain("Save file");
   });
 
+  it("uses theme-aware preview surfaces instead of white overlays", () => {
+    const html = renderToStaticMarkup(
+      <MarkdownReader
+        content={[
+          "# Dark Theme",
+          "",
+          "A paragraph with `inline code`.",
+          "",
+          "> Quoted text.",
+          "",
+          "```ts",
+          "const value = 1;",
+          "```",
+        ].join("\n")}
+      />,
+    );
+
+    expect(html).toContain("var(--paper-panel)");
+    expect(html).toContain("var(--paper-elevated)");
+    expect(html).toContain("var(--paper-border)");
+    expect(html).not.toContain("bg-white");
+    expect(html).not.toContain("border-black");
+    expect(html).not.toContain("bg-black");
+    expect(html).not.toContain("text-white");
+  });
+
   it("renders fenced code blocks, blockquotes, and horizontal rules", () => {
     const html = renderToStaticMarkup(
       <MarkdownReader
