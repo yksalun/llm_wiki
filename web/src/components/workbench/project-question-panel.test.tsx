@@ -231,6 +231,12 @@ describe("ProjectQuestionPanel", () => {
     await clickButtonContaining("schema.md");
     await waitForBodyText("Desktop bridge reference body.");
 
+    const previewBody = document.body.querySelector<HTMLElement>(
+      "[data-reference-preview-body]",
+    );
+    expect(previewBody?.textContent).toContain("Desktop bridge reference body.");
+    expect(previewBody?.className).toContain("overflow-y-auto");
+
     const closeButton = Array.from(document.body.querySelectorAll("button")).find((button) =>
       button.textContent?.includes("Close"),
     );
@@ -486,12 +492,25 @@ describe("ProjectQuestionPanel", () => {
     renderProjectQuestionPanel({ onOpenFile });
     await waitForText("assistant references message");
 
+    const referencesPanel = container?.querySelector<HTMLElement>(
+      '[data-reference-panel="true"]',
+    );
+    expect(referencesPanel).not.toBeNull();
+    expect(referencesPanel?.className).toContain("bg-muted");
+    expect(referencesPanel?.className).toContain("text-xs");
+
+    expect(document.body.textContent).toContain("引用文件");
     expect(document.body.textContent).toContain("引用 5 个文件");
+    expect(document.body.textContent).toContain("wiki/ref-1.md");
+    expect(document.body.textContent).toContain("wiki/ref-2.md");
+    expect(document.body.textContent).toContain("wiki/ref-3.md");
+    expect(document.body.textContent).not.toContain("wiki/ref-4.md");
     expect(document.body.textContent).not.toContain("wiki/ref-5.md");
 
-    await clickButtonContaining("引用 5 个文件");
+    await clickButtonContaining("展开全部 5 个引用");
 
     expect(document.body.textContent).toContain("wiki/ref-1.md");
+    expect(document.body.textContent).toContain("wiki/ref-4.md");
     expect(document.body.textContent).toContain("wiki/ref-5.md");
 
     apiMocks.fetchProjectFile.mockResolvedValue(
