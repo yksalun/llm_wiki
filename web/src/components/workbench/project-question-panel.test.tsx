@@ -224,7 +224,9 @@ describe("ProjectQuestionPanel", () => {
     apiMocks.fetchProjectFile.mockResolvedValue(
       createFile({
         relativePath: "wiki/schema.md",
+        mode: "editable",
         content: "# Schema\n\nDesktop bridge reference body.",
+        editable: true,
       }),
     );
 

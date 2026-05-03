@@ -38,6 +38,22 @@ describe("FilePreview", () => {
     expect(html).toContain("Title");
   });
 
+  it("previews editable markdown files as markdown content", () => {
+    const html = renderToStaticMarkup(
+      <FilePreview
+        file={createFile({
+          relativePath: "wiki/schema.md",
+          mode: "editable",
+          content: "# Editable Schema",
+          editable: true,
+        })}
+      />,
+    );
+
+    expect(html).toContain("<h1");
+    expect(html).toContain("Editable Schema");
+  });
+
   it("renders an empty state for empty preview content", () => {
     const html = renderToStaticMarkup(<FilePreview file={createFile({ content: "" })} />);
 

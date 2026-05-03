@@ -7,7 +7,7 @@ import type { FileReadResult } from "@/lib/types";
 import { MarkdownReader } from "./markdown-reader";
 
 export function FilePreview({ file }: { file: FileReadResult }) {
-  if (file.mode === "preview") {
+  if (file.mode === "preview" || file.mode === "editable") {
     if (file.relativePath.toLowerCase().endsWith(".md")) {
       return <MarkdownReader content={file.content ?? ""} />;
     }
