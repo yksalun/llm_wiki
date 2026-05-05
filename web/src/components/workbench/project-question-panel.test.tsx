@@ -498,8 +498,16 @@ describe("ProjectQuestionPanel", () => {
       '[data-reference-panel="true"]',
     );
     expect(referencesPanel).not.toBeNull();
-    expect(referencesPanel?.className).toContain("bg-muted");
-    expect(referencesPanel?.className).toContain("text-xs");
+    expect(referencesPanel?.className).toContain("bg-muted/15");
+    expect(referencesPanel?.className).toContain("border-transparent");
+    expect(referencesPanel?.className).toContain("text-[11px]");
+
+    const referenceItems = Array.from(
+      container?.querySelectorAll<HTMLElement>('[data-reference-item="true"]') ?? [],
+    );
+    expect(referenceItems).toHaveLength(3);
+    expect(referenceItems[0]?.className).toContain("bg-transparent");
+    expect(referenceItems[0]?.className).toContain("text-[11px]");
 
     expect(document.body.textContent).toContain("引用文件");
     expect(document.body.textContent).toContain("引用 5 个文件");

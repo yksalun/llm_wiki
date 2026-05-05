@@ -117,17 +117,17 @@ export function QuestionReferences({
       <Card
         data-reference-panel="true"
         size="sm"
-        className="mt-3 gap-2 rounded-lg border-dashed bg-muted/40 py-2 text-xs shadow-none"
+        className="mt-2 gap-1.5 rounded-md border border-transparent bg-muted/15 py-1.5 text-[11px] text-muted-foreground shadow-none ring-0"
         role="group"
         aria-label="引用文件"
       >
-        <CardHeader className="grid-cols-[1fr_auto] gap-2 px-3">
+        <CardHeader className="grid-cols-[1fr_auto] gap-1.5 px-2.5">
           <div>
-            <CardTitle className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-              <BookOpen className="size-3.5" aria-hidden="true" />
+            <CardTitle className="flex items-center gap-1.5 text-[11px] font-normal text-muted-foreground">
+              <BookOpen className="size-3" aria-hidden="true" />
               引用文件
             </CardTitle>
-            <CardDescription className="mt-0.5 text-xs">
+            <CardDescription className="mt-0.5 text-[10px] text-muted-foreground/80">
               引用 {references.length} 个文件
             </CardDescription>
           </div>
@@ -137,7 +137,7 @@ export function QuestionReferences({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-7 px-2 text-xs"
+                className="h-6 px-1.5 text-[11px] text-muted-foreground hover:bg-muted/20 hover:text-foreground"
                 onClick={() => setExpanded((current) => !current)}
               >
                 {expanded ? "收起引用" : `展开全部 ${references.length} 个引用`}
@@ -145,8 +145,8 @@ export function QuestionReferences({
             </CardAction>
           ) : null}
         </CardHeader>
-        <CardContent className="px-3">
-          <div className="grid gap-2">
+        <CardContent className="px-2.5">
+          <div className="grid gap-1">
             {visibleReferences.map((reference, index) => (
               <ReferenceButton
                 key={`${reference.path}-${reference.title}-${index}`}
@@ -203,22 +203,23 @@ function ReferenceButton({
 }) {
   return (
     <Button
+      data-reference-item="true"
       type="button"
-      variant="outline"
+      variant="ghost"
       size="sm"
-      className="h-auto w-full justify-start whitespace-normal bg-background/70 px-2 py-2 text-left text-xs"
+      className="h-auto w-full justify-start whitespace-normal bg-transparent px-1.5 py-1 text-left text-[11px] text-muted-foreground hover:bg-muted/20 hover:text-foreground"
       onClick={onOpen}
     >
-      <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-medium text-muted-foreground">
+      <span className="flex size-4 shrink-0 items-center justify-center rounded-sm bg-muted/40 text-[10px] font-medium text-muted-foreground/80">
         {index + 1}
       </span>
       <BookOpen
-        className="size-4 shrink-0 text-muted-foreground"
+        className="size-3 shrink-0 text-muted-foreground/80"
         aria-hidden="true"
       />
       <span className="min-w-0">
-        <span className="block truncate font-medium">{reference.title}</span>
-        <span className="block break-all text-xs text-muted-foreground">
+        <span className="block truncate font-normal">{reference.title}</span>
+        <span className="block break-all text-[10px] text-muted-foreground/75">
           {reference.path}
         </span>
       </span>
