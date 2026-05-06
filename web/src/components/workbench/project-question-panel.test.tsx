@@ -215,7 +215,12 @@ describe("ProjectQuestionPanel", () => {
     );
     expect(container?.textContent).toContain("schema 在哪里？");
     expect(container?.textContent).toContain("schema.md");
-    expect(container?.textContent).toContain("wiki/schema.md");
+    const referenceItems = Array.from(
+      container?.querySelectorAll<HTMLElement>('[data-reference-item="true"]') ?? [],
+    );
+    expect(referenceItems).toHaveLength(1);
+    expect(referenceItems[0]?.textContent).toContain("schema.md");
+    expect(referenceItems[0]?.textContent).not.toContain("wiki/schema.md");
     const headings = Array.from(container?.querySelectorAll("h2") ?? []).map(
       (node) => node.textContent,
     );
@@ -232,6 +237,7 @@ describe("ProjectQuestionPanel", () => {
 
     await clickButtonContaining("schema.md");
     await waitForBodyText("Desktop bridge reference body.");
+    expect(document.body.textContent).toContain("wiki/schema.md");
 
     const previewBody = document.body.querySelector<HTMLElement>(
       "[data-reference-preview-body]",
@@ -498,9 +504,15 @@ describe("ProjectQuestionPanel", () => {
       '[data-reference-panel="true"]',
     );
     expect(referencesPanel).not.toBeNull();
-    expect(referencesPanel?.className).toContain("bg-muted/15");
+    expect(referencesPanel?.className.split(/\s+/)).toContain("bg-muted/10");
     expect(referencesPanel?.className).toContain("border-transparent");
     expect(referencesPanel?.className).toContain("text-[11px]");
+    expect(referencesPanel?.className.split(/\s+/)).toContain("py-1");
+
+    const referenceList = referencesPanel?.querySelector<HTMLElement>(
+      '[data-reference-list="true"]',
+    );
+    expect(referenceList?.className.split(/\s+/)).toContain("gap-0.5");
 
     const referenceItems = Array.from(
       container?.querySelectorAll<HTMLElement>('[data-reference-item="true"]') ?? [],
@@ -508,20 +520,46 @@ describe("ProjectQuestionPanel", () => {
     expect(referenceItems).toHaveLength(3);
     expect(referenceItems[0]?.className).toContain("bg-transparent");
     expect(referenceItems[0]?.className).toContain("text-[11px]");
+    expect(referenceItems[0]?.className.split(/\s+/)).toContain("h-5");
+    expect(referenceItems[0]?.className.split(/\s+/)).toContain("py-0.5");
+    expect(referenceItems[0]?.className.split(/\s+/)).toContain("cursor-pointer");
+    expect(referenceItems[0]?.textContent).toContain("[1]");
+    expect(referenceItems[0]?.textContent).toContain("ref-1.md");
+    expect(referenceItems[0]?.textContent).not.toContain("引用 1");
+    expect(referenceItems[0]?.textContent).not.toContain("wiki/ref-1.md");
+    expect(referenceItems[1]?.textContent).toContain("[2]");
+    expect(referenceItems[1]?.textContent).toContain("ref-2.md");
+    expect(referenceItems[1]?.textContent).not.toContain("wiki/ref-2.md");
+    expect(referenceItems[2]?.textContent).toContain("[3]");
+    expect(referenceItems[2]?.textContent).toContain("ref-3.md");
+    expect(referenceItems[2]?.textContent).not.toContain("wiki/ref-3.md");
 
     expect(document.body.textContent).toContain("引用文件");
-    expect(document.body.textContent).toContain("引用 5 个文件");
-    expect(document.body.textContent).toContain("wiki/ref-1.md");
-    expect(document.body.textContent).toContain("wiki/ref-2.md");
-    expect(document.body.textContent).toContain("wiki/ref-3.md");
+    expect(document.body.textContent).not.toContain("引用 5 个文件");
+    expect(document.body.textContent).toContain("ref-1.md");
+    expect(document.body.textContent).toContain("ref-2.md");
+    expect(document.body.textContent).toContain("ref-3.md");
+    expect(document.body.textContent).not.toContain("wiki/ref-1.md");
+    expect(document.body.textContent).not.toContain("wiki/ref-2.md");
+    expect(document.body.textContent).not.toContain("wiki/ref-3.md");
     expect(document.body.textContent).not.toContain("wiki/ref-4.md");
     expect(document.body.textContent).not.toContain("wiki/ref-5.md");
 
     await clickButtonContaining("展开全部 5 个引用");
 
-    expect(document.body.textContent).toContain("wiki/ref-1.md");
-    expect(document.body.textContent).toContain("wiki/ref-4.md");
-    expect(document.body.textContent).toContain("wiki/ref-5.md");
+    const expandedReferenceItems = Array.from(
+      container?.querySelectorAll<HTMLElement>('[data-reference-item="true"]') ?? [],
+    );
+    expect(expandedReferenceItems).toHaveLength(5);
+    expect(expandedReferenceItems[3]?.textContent).toContain("[4]");
+    expect(expandedReferenceItems[3]?.textContent).toContain("ref-4.md");
+    expect(expandedReferenceItems[3]?.textContent).not.toContain("wiki/ref-4.md");
+    expect(expandedReferenceItems[4]?.textContent).toContain("[5]");
+    expect(expandedReferenceItems[4]?.textContent).toContain("ref-5.md");
+    expect(expandedReferenceItems[4]?.textContent).not.toContain("wiki/ref-5.md");
+    expect(document.body.textContent).not.toContain("wiki/ref-1.md");
+    expect(document.body.textContent).not.toContain("wiki/ref-4.md");
+    expect(document.body.textContent).not.toContain("wiki/ref-5.md");
 
     apiMocks.fetchProjectFile.mockResolvedValue(
       createFile({
@@ -530,8 +568,9 @@ describe("ProjectQuestionPanel", () => {
       }),
     );
 
-    await clickButtonContaining("wiki/ref-5.md");
+    await clickButtonContaining("ref-5.md");
     await waitForBodyText("Expanded reference file.");
+    expect(document.body.textContent).toContain("wiki/ref-5.md");
 
     expect(apiMocks.fetchProjectFile).toHaveBeenCalledWith(
       "project-1",

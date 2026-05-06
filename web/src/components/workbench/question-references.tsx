@@ -14,7 +14,6 @@ import {
   Card,
   CardAction,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -117,19 +116,16 @@ export function QuestionReferences({
       <Card
         data-reference-panel="true"
         size="sm"
-        className="mt-2 gap-1.5 rounded-md border border-transparent bg-muted/15 py-1.5 text-[11px] text-muted-foreground shadow-none ring-0"
+        className="mt-2 gap-1 rounded-md border border-transparent bg-muted/10 py-1 text-[11px] text-muted-foreground shadow-none ring-0"
         role="group"
         aria-label="引用文件"
       >
-        <CardHeader className="grid-cols-[1fr_auto] gap-1.5 px-2.5">
+        <CardHeader className="grid-cols-[1fr_auto] gap-1 px-2">
           <div>
-            <CardTitle className="flex items-center gap-1.5 text-[11px] font-normal text-muted-foreground">
+            <CardTitle className="flex items-center gap-1 text-[10px] font-normal leading-3 text-muted-foreground/85">
               <BookOpen className="size-3" aria-hidden="true" />
               引用文件
             </CardTitle>
-            <CardDescription className="mt-0.5 text-[10px] text-muted-foreground/80">
-              引用 {references.length} 个文件
-            </CardDescription>
           </div>
           {hasOverflowReferences ? (
             <CardAction>
@@ -137,7 +133,7 @@ export function QuestionReferences({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-6 px-1.5 text-[11px] text-muted-foreground hover:bg-muted/20 hover:text-foreground"
+                className="h-5 px-1.5 text-[10px] text-muted-foreground/80 hover:bg-muted/20 hover:text-foreground"
                 onClick={() => setExpanded((current) => !current)}
               >
                 {expanded ? "收起引用" : `展开全部 ${references.length} 个引用`}
@@ -145,8 +141,8 @@ export function QuestionReferences({
             </CardAction>
           ) : null}
         </CardHeader>
-        <CardContent className="px-2.5">
-          <div className="grid gap-1">
+        <CardContent className="px-2">
+          <div data-reference-list="true" className="grid gap-0.5">
             {visibleReferences.map((reference, index) => (
               <ReferenceButton
                 key={`${reference.path}-${reference.title}-${index}`}
@@ -170,7 +166,9 @@ export function QuestionReferences({
         <SheetContent className="flex w-[min(42rem,calc(100vw-2rem))] flex-col overflow-hidden sm:max-w-2xl">
           <SheetHeader>
             <SheetTitle className="truncate">
-              {selectedReference?.title ?? "引用文件"}
+              {selectedReference
+                ? getReferenceFileName(selectedReference)
+                : "引用文件"}
             </SheetTitle>
             <SheetDescription className="break-all">
               {selectedReference?.path ?? "未选择文件"}
@@ -201,30 +199,29 @@ function ReferenceButton({
   reference: DesktopBridgeReference;
   onOpen: () => void;
 }) {
+  const fileName = getReferenceFileName(reference);
+
   return (
     <Button
       data-reference-item="true"
       type="button"
       variant="ghost"
       size="sm"
-      className="h-auto w-full justify-start whitespace-normal bg-transparent px-1.5 py-1 text-left text-[11px] text-muted-foreground hover:bg-muted/20 hover:text-foreground"
+      className="h-5 w-full min-w-0 cursor-pointer justify-start truncate bg-transparent px-1 py-0.5 text-left text-[11px] font-normal leading-4 text-muted-foreground/85 hover:bg-muted/20 hover:text-foreground"
       onClick={onOpen}
+      title={reference.path}
     >
-      <span className="flex size-4 shrink-0 items-center justify-center rounded-sm bg-muted/40 text-[10px] font-medium text-muted-foreground/80">
-        {index + 1}
+      <span className="mr-1 shrink-0 text-muted-foreground/75">
+        [{index + 1}]
       </span>
-      <BookOpen
-        className="size-3 shrink-0 text-muted-foreground/80"
-        aria-hidden="true"
-      />
-      <span className="min-w-0">
-        <span className="block truncate font-normal">{reference.title}</span>
-        <span className="block break-all text-[10px] text-muted-foreground/75">
-          {reference.path}
-        </span>
-      </span>
+      <span className="min-w-0 truncate">{fileName}</span>
     </Button>
   );
+}
+
+function getReferenceFileName(reference: DesktopBridgeReference) {
+  const parts = reference.path.split(/[\\/]+/).filter(Boolean);
+  return parts[parts.length - 1] ?? reference.title;
 }
 
 function ReferencePreviewBody({
