@@ -13,9 +13,13 @@ import type {
 import { ProjectQuestionPanel } from "./project-question-panel";
 
 vi.mock("@/lib/client/desktop-question-api", () => ({
+  copyQuestionAnswer: vi.fn(),
   createQuestionConversation: vi.fn(),
   listQuestionConversations: vi.fn(),
   listQuestionMessages: vi.fn(),
+  regenerateQuestionAnswer: vi.fn(),
+  saveQuestionAnswerToWiki: vi.fn(),
+  streamRegenerateQuestionAnswer: vi.fn(),
   streamQuestionMessage: vi.fn(),
 }));
 
@@ -25,9 +29,13 @@ vi.mock("@/lib/client/api", () => ({
 
 import { fetchProjectFile } from "@/lib/client/api";
 import {
+  copyQuestionAnswer,
   createQuestionConversation,
   listQuestionConversations,
   listQuestionMessages,
+  regenerateQuestionAnswer,
+  saveQuestionAnswerToWiki,
+  streamRegenerateQuestionAnswer,
   streamQuestionMessage,
   type StreamQuestionMessageHandlers,
 } from "@/lib/client/desktop-question-api";
@@ -52,15 +60,27 @@ const elementPrototype = Element.prototype as Element & {
   getAnimations?: () => Animation[];
 };
 
-if (!elementPrototype.getAnimations) {
+  if (!elementPrototype.getAnimations) {
   elementPrototype.getAnimations = vi.fn(() => []);
 }
 
+const writeTextMock = vi.fn();
+Object.defineProperty(navigator, "clipboard", {
+  configurable: true,
+  value: {
+    writeText: writeTextMock,
+  },
+});
+
 const apiMocks = vi.mocked({
+  copyQuestionAnswer,
   createQuestionConversation,
   fetchProjectFile,
   listQuestionConversations,
   listQuestionMessages,
+  regenerateQuestionAnswer,
+  saveQuestionAnswerToWiki,
+  streamRegenerateQuestionAnswer,
   streamQuestionMessage,
 });
 
@@ -77,7 +97,8 @@ afterEach(() => {
   container?.remove();
   container = null;
   root = null;
-  vi.clearAllMocks();
+  writeTextMock.mockReset();
+  vi.resetAllMocks();
 });
 
 describe("ProjectQuestionPanel", () => {
@@ -120,6 +141,18 @@ describe("ProjectQuestionPanel", () => {
     expect(container?.textContent).toContain("wiki/schema.md");
   });
 
+  it("使用单个原生 textarea 作为问答输入框", async () => {
+    const conversation = createConversation({ id: "conv-native-textarea" });
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([]);
+
+    renderProjectQuestionPanel();
+    await waitForReady();
+
+    expect(container?.querySelectorAll('textarea[aria-label="项目问答输入"]')).toHaveLength(1);
+    expect(container?.querySelectorAll("textarea")).toHaveLength(1);
+  });
+
   it("does not render hidden citation comments from assistant messages", async () => {
     const conversation = createConversation({ id: "conv-cited-comment", title: "citations" });
     apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
@@ -138,6 +171,424 @@ describe("ProjectQuestionPanel", () => {
 
     expect(document.body.textContent).not.toContain("<!-- cited:");
     expect(document.body.textContent).not.toContain("cited: 1, 3");
+  });
+
+  it("separates assistant answer content, references, and hover actions", async () => {
+    const conversation = createConversation({ id: "conv-answer-layout", title: "answer layout" });
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([
+      createMessage({
+        id: "msg-answer-layout",
+        role: "assistant",
+        content: "Answer content with references.",
+        conversationId: conversation.id,
+        references: [{ title: "schema.md", path: "wiki/schema.md" }],
+      }),
+    ]);
+
+    renderProjectQuestionPanel();
+    await waitForText("Answer content with references.");
+
+    const answerMessage = requiredAnswerMessage("Answer content with references.");
+    const answerContent = answerMessage.querySelector<HTMLElement>(
+      '[data-answer-content="true"]',
+    );
+    const answerReferences = answerMessage.querySelector<HTMLElement>(
+      '[data-answer-references="true"]',
+    );
+    const answerActions = answerMessage.querySelector<HTMLElement>(
+      '[data-answer-actions="true"]',
+    );
+
+    expect(answerMessage.className.split(/\s+/)).toContain("group");
+    expect(answerContent?.textContent).toContain("Answer content with references.");
+    expect(answerReferences?.textContent).toContain("schema.md");
+    expect(answerActions?.className).toContain("group-hover:opacity-100");
+    expect(answerActions?.textContent).toContain("复制");
+    expect(answerActions?.textContent).toContain("保存到 Wiki");
+    expect(answerActions?.textContent).toContain("重新生成");
+  });
+
+  it("renders inline markdown emphasis in assistant answers", async () => {
+    const conversation = createConversation({ id: "conv-markdown-inline", title: "markdown" });
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([
+      createMessage({
+        id: "msg-markdown-inline",
+        role: "assistant",
+        content: "Answer with **bold text** and `code`.",
+        conversationId: conversation.id,
+      }),
+    ]);
+
+    renderProjectQuestionPanel();
+    await waitForText("Answer with");
+
+    const answerMessage = requiredAnswerMessage("bold text");
+    const strong = answerMessage.querySelector("strong");
+    const code = answerMessage.querySelector("code");
+
+    expect(strong?.textContent).toBe("bold text");
+    expect(code?.textContent).toBe("code");
+    expect(answerMessage.textContent).not.toContain("**bold text**");
+  });
+
+  it("copies the displayed answer content in the web client without calling the desktop copy action", async () => {
+    const conversation = createConversation({ id: "conv-actions", title: "actions" });
+    const reference = { title: "schema.md", path: "wiki/schema.md" };
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([
+      createMessage({
+        id: "msg-actions",
+        role: "assistant",
+        content: "Action answer.\n\n<!-- cited: 1 -->",
+        conversationId: conversation.id,
+        references: [reference],
+      }),
+    ]);
+    writeTextMock.mockResolvedValue(undefined);
+
+    renderProjectQuestionPanel({ projectId: "project-actions" });
+    await waitForText("Action answer.");
+
+    await clickButton("复制");
+
+    expect(writeTextMock).toHaveBeenCalledWith("Action answer.");
+    expect(apiMocks.copyQuestionAnswer).not.toHaveBeenCalled();
+  });
+
+  it("calls desktop save action with the displayed answer content and references", async () => {
+    const conversation = createConversation({ id: "conv-save-action", title: "save action" });
+    const reference = { title: "schema.md", path: "wiki/schema.md" };
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([
+      createMessage({
+        id: "msg-save-action",
+        role: "assistant",
+        content: "Save action answer.\n\n<!-- cited: 1 -->",
+        conversationId: conversation.id,
+        references: [reference],
+      }),
+    ]);
+    apiMocks.saveQuestionAnswerToWiki.mockResolvedValue({
+      ok: true,
+      savedPath: "wiki/queries/action-answer.md",
+    });
+
+    renderProjectQuestionPanel({ projectId: "project-save-action" });
+    await waitForText("Save action answer.");
+
+    await clickButton("保存到 Wiki");
+
+    const expectedPayload = {
+      content: "Save action answer.",
+      references: [reference],
+    };
+    expect(apiMocks.saveQuestionAnswerToWiki).toHaveBeenCalledWith(
+      "project-save-action",
+      "conv-save-action",
+      "msg-save-action",
+      expectedPayload,
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("shows a thinking placeholder before the first streamed assistant token arrives", async () => {
+    const conversation = createConversation({ id: "conv-thinking", title: "thinking" });
+    const stream = createDeferred<void>();
+    let handlers: StreamQuestionMessageHandlers | undefined;
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([]);
+    apiMocks.streamQuestionMessage.mockImplementation(
+      async (_projectId, _conversationId, _message, nextHandlers) => {
+        handlers = nextHandlers;
+        await stream.promise;
+      },
+    );
+
+    renderProjectQuestionPanel();
+    await waitForReady();
+    updateQuestion("Where is the schema?");
+
+    await clickButton("发送");
+    await waitForText("Where is the schema?");
+    await waitForText("思考中");
+
+    act(() => {
+      requireStreamHandlers(handlers).onDone(
+        createMessage({
+          id: "msg-thinking-done",
+          role: "assistant",
+          content: "The schema is in wiki/schema.md.",
+          conversationId: conversation.id,
+        }),
+      );
+      stream.resolve();
+    });
+
+    await stream.promise;
+    await waitForText("The schema is in wiki/schema.md.");
+  });
+
+  it("renames a placeholder conversation from the first submitted question", async () => {
+    const conversation = createConversation({
+      id: "conv-placeholder-title",
+      title: "New Conversation",
+    });
+    const stream = createDeferred<void>();
+    let handlers: StreamQuestionMessageHandlers | undefined;
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([]);
+    apiMocks.streamQuestionMessage.mockImplementation(
+      async (_projectId, _conversationId, _message, nextHandlers) => {
+        handlers = nextHandlers;
+        await stream.promise;
+      },
+    );
+
+    renderProjectQuestionPanel();
+    await waitForReady();
+    updateQuestion("How should we deploy this?");
+
+    await clickButton("发送");
+    await waitForText("当前会话：How should we deploy this?");
+
+    expect(requiredButton("How should we deploy this?")).not.toBeNull();
+
+    act(() => {
+      requireStreamHandlers(handlers).onDone(
+        createMessage({
+          id: "msg-title-done",
+          role: "assistant",
+          content: "Deploy from the release workflow.",
+          conversationId: conversation.id,
+        }),
+      );
+      stream.resolve();
+    });
+
+    await stream.promise;
+  });
+
+  it("derives a placeholder conversation title from loaded question history", async () => {
+    const conversation = createConversation({
+      id: "conv-loaded-placeholder-title",
+      title: "New Conversation",
+    });
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([
+      createMessage({
+        id: "msg-loaded-question",
+        role: "user",
+        content: "Loaded question title?",
+        conversationId: conversation.id,
+      }),
+      createMessage({
+        id: "msg-loaded-answer",
+        role: "assistant",
+        content: "Loaded answer.",
+        conversationId: conversation.id,
+      }),
+    ]);
+
+    renderProjectQuestionPanel();
+    await waitForText("Loaded answer.");
+
+    expect(requiredButton("Loaded question title?")).not.toBeNull();
+    expect(container?.textContent).toContain("当前会话：Loaded question title?");
+  });
+
+  it("reveals a streamed assistant chunk incrementally instead of displaying it all at once", async () => {
+    const conversation = createConversation({ id: "conv-smooth-stream", title: "smooth" });
+    const stream = createDeferred<void>();
+    let handlers: StreamQuestionMessageHandlers | undefined;
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([]);
+    apiMocks.streamQuestionMessage.mockImplementation(
+      async (_projectId, _conversationId, _message, nextHandlers) => {
+        handlers = nextHandlers;
+        await stream.promise;
+      },
+    );
+
+    renderProjectQuestionPanel();
+    await waitForReady();
+
+    updateQuestion("Stream this smoothly.");
+    await clickButton("发送");
+    await waitForText("思考中");
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        requireStreamHandlers(handlers).onToken("Chunked answer");
+      });
+
+      expect(container?.textContent).not.toContain("Chunked answer");
+
+      await act(async () => {
+        vi.advanceTimersByTime(20);
+      });
+
+      expect(container?.textContent).toContain("C");
+      expect(container?.textContent).not.toContain("Chunked answer");
+
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+      });
+
+      expect(container?.textContent).toContain("Chunked answer");
+    } finally {
+      vi.useRealTimers();
+    }
+
+    act(() => {
+      requireStreamHandlers(handlers).onDone(
+        createMessage({
+          id: "msg-smooth-done",
+          role: "assistant",
+          content: "Chunked answer",
+          conversationId: conversation.id,
+        }),
+      );
+      stream.resolve();
+    });
+
+    await stream.promise;
+  });
+
+  it("streams regenerated content after clearing the previous assistant answer", async () => {
+    const conversation = createConversation({ id: "conv-regenerate", title: "regenerate" });
+    const firstAssistant = createMessage({
+      id: "msg-first-assistant",
+      role: "assistant",
+      content: "Older assistant answer.",
+      conversationId: conversation.id,
+    });
+    const lastUser = createMessage({
+      id: "msg-last-user",
+      role: "user",
+      content: "Last question?",
+      conversationId: conversation.id,
+    });
+    const lastAssistant = createMessage({
+      id: "msg-last-assistant",
+      role: "assistant",
+      content: "Old final answer.",
+      conversationId: conversation.id,
+      references: [{ title: "old.md", path: "wiki/old.md" }],
+    });
+    const stream = createDeferred<void>();
+    let handlers: StreamQuestionMessageHandlers | undefined;
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([firstAssistant, lastUser, lastAssistant]);
+    apiMocks.streamRegenerateQuestionAnswer.mockImplementation(
+      async (_projectId, _conversationId, _messageId, _payload, nextHandlers) => {
+        handlers = nextHandlers;
+        await stream.promise;
+      },
+    );
+
+    renderProjectQuestionPanel({ projectId: "project-regenerate" });
+    await waitForText("Old final answer.");
+
+    expect(buttonsNamed("重新生成")).toHaveLength(1);
+
+    await clickButton("重新生成");
+    await waitForText("思考中");
+
+    expect(container?.textContent).not.toContain("Old final answer.");
+    expect(container?.textContent).toContain("Older assistant answer.");
+
+    act(() => {
+      requireStreamHandlers(handlers).onToken("Regenerated ");
+    });
+
+    await waitForText("Regenerated");
+
+    act(() => {
+      requireStreamHandlers(handlers).onToken("final answer.");
+      requireStreamHandlers(handlers).onDone(
+        createMessage({
+          id: "msg-regenerated",
+          role: "assistant",
+          content: "Regenerated final answer.",
+          conversationId: conversation.id,
+          references: [{ title: "new.md", path: "wiki/new.md" }],
+        }),
+      );
+      stream.resolve();
+    });
+
+    await stream.promise;
+    await waitForText("Regenerated final answer.");
+
+    expect(apiMocks.streamRegenerateQuestionAnswer).toHaveBeenCalledWith(
+      "project-regenerate",
+      "conv-regenerate",
+      "msg-last-assistant",
+      {
+        content: "Old final answer.",
+        references: [{ title: "old.md", path: "wiki/old.md" }],
+      },
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        onToken: expect.any(Function),
+        onDone: expect.any(Function),
+      }),
+    );
+  });
+
+  it("restores the previous answer when regenerate streaming fails", async () => {
+    const conversation = createConversation({ id: "conv-regenerate-fail", title: "refresh" });
+    const originalMessages = [
+      createMessage({
+        id: "msg-refresh-user",
+        role: "user",
+        content: "Refresh question?",
+        conversationId: conversation.id,
+      }),
+      createMessage({
+        id: "msg-refresh-assistant",
+        role: "assistant",
+        content: "Refresh old answer.",
+        conversationId: conversation.id,
+      }),
+    ];
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue(originalMessages);
+    apiMocks.streamRegenerateQuestionAnswer.mockRejectedValue(new Error("Regenerate failed"));
+
+    renderProjectQuestionPanel({ projectId: "project-regenerate-fail" });
+    await waitForText("Refresh old answer.");
+
+    await clickButton("重新生成");
+    await waitForText("Regenerate failed");
+
+    expect(container?.textContent).toContain("Refresh old answer.");
+  });
+
+  it("shows a compact error when an answer action fails", async () => {
+    const conversation = createConversation({ id: "conv-action-error", title: "action error" });
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([
+      createMessage({
+        id: "msg-action-error",
+        role: "assistant",
+        content: "Action error answer.",
+        conversationId: conversation.id,
+      }),
+    ]);
+    apiMocks.saveQuestionAnswerToWiki.mockRejectedValue(new Error("保存失败"));
+
+    renderProjectQuestionPanel();
+    await waitForText("Action error answer.");
+
+    await clickButton("保存到 Wiki");
+    await waitForText("保存失败");
+
+    const actionError = container?.querySelector<HTMLElement>('[data-answer-action-error="true"]');
+    expect(actionError?.textContent).toContain("保存失败");
+    expect(actionError?.className).toContain("text-xs");
   });
 
   it("没有会话时创建新会话，并可通过新会话按钮切换", async () => {
@@ -221,6 +672,7 @@ describe("ProjectQuestionPanel", () => {
     expect(referenceItems).toHaveLength(1);
     expect(referenceItems[0]?.textContent).toContain("schema.md");
     expect(referenceItems[0]?.textContent).not.toContain("wiki/schema.md");
+    await waitForHeading("结论");
     const headings = Array.from(container?.querySelectorAll("h2") ?? []).map(
       (node) => node.textContent,
     );
@@ -236,26 +688,6 @@ describe("ProjectQuestionPanel", () => {
     );
 
     await clickButtonContaining("schema.md");
-    await waitForBodyText("Desktop bridge reference body.");
-    expect(document.body.textContent).toContain("wiki/schema.md");
-
-    const previewBody = document.body.querySelector<HTMLElement>(
-      "[data-reference-preview-body]",
-    );
-    expect(previewBody?.textContent).toContain("Desktop bridge reference body.");
-    expect(previewBody?.className).toContain("overflow-y-auto");
-
-    const closeButton = Array.from(document.body.querySelectorAll("button")).find((button) =>
-      button.textContent?.includes("Close"),
-    );
-
-    if (closeButton) {
-      await act(async () => {
-        closeButton.click();
-        await Promise.resolve();
-      });
-    }
-
     expect(document.body.textContent).toContain("schema.md");
     expect(apiMocks.fetchProjectFile).toHaveBeenCalledWith(
       "project-1",
@@ -672,6 +1104,24 @@ function requiredMessage(text: string) {
   return message;
 }
 
+function requiredAnswerMessage(text: string) {
+  const message = Array.from(
+    container?.querySelectorAll<HTMLElement>('[data-answer-message="true"]') ?? [],
+  ).find((candidate) => candidate.textContent?.includes(text));
+
+  if (!message) {
+    throw new Error(`Expected assistant answer message containing ${text}.`);
+  }
+
+  return message;
+}
+
+function buttonsNamed(name: string) {
+  return Array.from(container?.querySelectorAll("button") ?? []).filter(
+    (candidate) => candidate.textContent?.trim() === name,
+  );
+}
+
 async function waitForReady() {
   await waitFor(() => {
     expect(questionTextarea().disabled).toBe(false);
@@ -690,20 +1140,27 @@ async function waitForBodyText(text: string) {
   });
 }
 
+async function waitForHeading(text: string) {
+  await waitFor(() => {
+    const headings = Array.from(container?.querySelectorAll("h1, h2, h3") ?? []).map(
+      (node) => node.textContent,
+    );
+    expect(headings).toContain(text);
+  });
+}
+
 async function waitFor(assertion: () => void) {
   let lastError: unknown;
 
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    await act(async () => {
-      await Promise.resolve();
-    });
-
+  for (let attempt = 0; attempt < 120; attempt += 1) {
     try {
       assertion();
       return;
     } catch (error) {
       lastError = error;
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
     }
   }
 

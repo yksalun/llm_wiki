@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const bridgeMocks = vi.hoisted(() => ({
@@ -31,7 +33,6 @@ const project = {
 };
 
 beforeEach(() => {
-  vi.resetModules();
   bridgeMocks.fetchDesktopBridgeJson.mockReset();
   bridgeMocks.fetchDesktopBridgeStream.mockReset();
   projectMocks.getProjectRootsFromEnv.mockReset();
@@ -227,6 +228,53 @@ describe("/api/projects/[projectId]/question/conversations routes", () => {
     expect(bridgeMocks.fetchDesktopBridgeJson).toHaveBeenCalledWith(
       "/projects/project_1/conversations/conv_1/messages/msg_old/actions/regenerate",
       expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("POST regenerate stream proxies to the desktop bridge and returns SSE", async () => {
+    const controller = new AbortController();
+    const request = new Request("http://localhost/api", {
+      method: "POST",
+      body: JSON.stringify({
+        content: "old answer",
+        references: [{ title: "old.md", path: "wiki/old.md" }],
+      }),
+      signal: controller.signal,
+    });
+    bridgeMocks.fetchDesktopBridgeStream.mockResolvedValue(
+      new Response("data: stream\n\n", {
+        headers: { "content-type": "text/event-stream" },
+      }),
+    );
+
+    const { POST } = await import(
+      "../[conversationId]/messages/[messageId]/actions/regenerate/stream/route"
+    );
+    const response = await POST(
+      request,
+      {
+        params: Promise.resolve({
+          projectId: "project_1",
+          conversationId: "conv_1",
+          messageId: "msg_old",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
+    await expect(response.text()).resolves.toBe("data: stream\n\n");
+    expect(bridgeMocks.fetchDesktopBridgeStream).toHaveBeenCalledWith(
+      "/projects/project_1/conversations/conv_1/messages/msg_old/actions/regenerate/stream",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          projectPath: "F:/project",
+          content: "old answer",
+          references: [{ title: "old.md", path: "wiki/old.md" }],
+        }),
+        signal: request.signal,
+      },
     );
   });
 

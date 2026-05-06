@@ -127,26 +127,51 @@ export async function regenerateQuestionAnswer(
   );
 }
 
+export async function streamRegenerateQuestionAnswer(
+  projectId: string,
+  conversationId: string,
+  messageId: string,
+  payload: DesktopBridgeMessageActionPayload,
+  handlers: StreamQuestionMessageHandlers,
+) {
+  return streamQuestionEvents(
+    `/api/projects/${encodeURIComponent(projectId)}/question/conversations/${encodeURIComponent(
+      conversationId,
+    )}/messages/${encodeURIComponent(messageId)}/actions/regenerate/stream`,
+    payload,
+    handlers,
+  );
+}
+
 export async function streamQuestionMessage(
   projectId: string,
   conversationId: string,
   message: string,
   handlers: StreamQuestionMessageHandlers,
 ) {
-  const response = await fetch(
+  return streamQuestionEvents(
     `/api/projects/${encodeURIComponent(projectId)}/question/conversations/${encodeURIComponent(
       conversationId,
     )}/messages/stream`,
-    {
-      method: "POST",
-      headers: {
-        Accept: "text/event-stream",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ message }),
-      signal: handlers.signal,
-    },
+    { message },
+    handlers,
   );
+}
+
+async function streamQuestionEvents(
+  path: string,
+  body: object,
+  handlers: StreamQuestionMessageHandlers,
+) {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: {
+      Accept: "text/event-stream",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+    signal: handlers.signal,
+  });
 
   if (!response.ok) {
     throw new Error(await getStreamErrorMessage(response));

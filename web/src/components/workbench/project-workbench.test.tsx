@@ -140,6 +140,15 @@ afterEach(() => {
 });
 
 describe("ProjectWorkbench draft guard", () => {
+  it("shows the concrete project route instead of the placeholder segment", async () => {
+    renderProjectWorkbench();
+
+    await waitForText("/projects/project-1");
+
+    expect(container?.textContent).toContain("/projects/project-1");
+    expect(container?.textContent).not.toContain("/projects/[projectId]");
+  });
+
   it("shows only the active workbench tabs once ready", async () => {
     vi.mocked(fetchProjectDetail).mockResolvedValue({
       id: "project-1",

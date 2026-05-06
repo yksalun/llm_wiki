@@ -535,7 +535,14 @@ export function ProjectWorkbench({ projectId }: ProjectWorkbenchProps) {
       eyebrow="项目工作台"
       title={title}
       description={description}
-      aside={<WorkbenchAside loadState={loadState} saving={saving} onReload={requestReloadProject} />}
+      aside={
+        <WorkbenchAside
+          projectId={projectId}
+          loadState={loadState}
+          saving={saving}
+          onReload={requestReloadProject}
+        />
+      }
     >
       {loadState.status === "loading" ? <WorkbenchLoading /> : null}
       {loadState.status === "error" ? (
@@ -697,10 +704,12 @@ function WorkbenchDraftGuardAlert({
 }
 
 function WorkbenchAside({
+  projectId,
   loadState,
   saving,
   onReload,
 }: {
+  projectId: string;
   loadState: LoadState;
   saving: boolean;
   onReload: () => void;
@@ -720,7 +729,7 @@ function WorkbenchAside({
               项目路由
             </p>
             <p className="mt-1 text-sm font-medium text-[color:var(--ink-strong)]">
-              /projects/[projectId]
+              {`/projects/${projectId}`}
             </p>
           </div>
           <div className="rounded-full border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)]/70 p-2 text-[color:var(--ink-soft)]">

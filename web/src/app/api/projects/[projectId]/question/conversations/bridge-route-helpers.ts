@@ -1,5 +1,8 @@
 import { AppError } from "@/lib/server/app-error";
-import { fetchDesktopBridgeJson } from "@/lib/server/desktop-bridge-client";
+import {
+  fetchDesktopBridgeJson,
+  fetchDesktopBridgeStream,
+} from "@/lib/server/desktop-bridge-client";
 import { getProjectRootsFromEnv } from "@/lib/server/env";
 import { resolveProjectById } from "@/lib/server/project-registry";
 import { errorJson, okJson } from "@/lib/server/route-helpers";
@@ -142,6 +145,40 @@ export async function proxyMessageAction(
     );
 
     return okJson(response);
+  } catch (error) {
+    return errorJson(error);
+  }
+}
+
+export async function proxyMessageActionStream(
+  request: Request,
+  context: MessageActionRouteContext,
+  action: "regenerate",
+) {
+  try {
+    const { projectId, conversationId, messageId } = await context.params;
+    const project = await resolveRouteProject(projectId);
+    const payload = requireMessageActionPayload(await parseJsonRequestBody(request));
+    const bridgeResponse = await fetchDesktopBridgeStream(
+      `${buildMessageActionBridgePath({ projectId, conversationId, messageId, action })}/stream`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          projectPath: project.rootDir,
+          ...payload,
+        }),
+        signal: request.signal,
+      },
+    );
+
+    return new Response(bridgeResponse.body, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
   } catch (error) {
     return errorJson(error);
   }

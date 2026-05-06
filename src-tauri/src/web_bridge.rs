@@ -51,8 +51,22 @@ struct IncomingStreamBody {
     message: String,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+struct IncomingMessageActionStreamBody {
+    project_path: String,
+    body: Value,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct MessageActionRoute<'a> {
+    kind: &'static str,
+    project_id: &'a str,
+    conversation_id: &'a str,
+    message_id: &'a str,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MessageActionStreamRoute<'a> {
     kind: &'static str,
     project_id: &'a str,
     conversation_id: &'a str,
@@ -317,6 +331,31 @@ fn handle_request(mut request: tiny_http::Request, app: &AppHandle) {
                 _message_id,
                 "actions",
                 _action,
+                "stream",
+            ],
+        ) => {
+            if let Some(route) = parse_message_action_stream_route(&method, &segments) {
+                handle_message_action_stream_bridge_request(request, app, route, origin.as_deref());
+            } else {
+                respond_json(
+                    request,
+                    404,
+                    json!({ "ok": false, "error": "Not found" }),
+                    origin.as_deref(),
+                );
+            }
+        }
+        (
+            Method::Post,
+            [
+                "projects",
+                _project_id,
+                "conversations",
+                _conversation_id,
+                "messages",
+                _message_id,
+                "actions",
+                _action,
             ],
         ) => {
             if let Some(route) = parse_message_action_route(&method, &segments) {
@@ -498,6 +537,65 @@ fn handle_stream_bridge_request(
     }
 }
 
+fn handle_message_action_stream_bridge_request(
+    mut request: tiny_http::Request,
+    app: &AppHandle,
+    route: MessageActionStreamRoute<'_>,
+    origin: Option<&str>,
+) {
+    let body = match read_body(&mut request).and_then(parse_message_action_stream_body) {
+        Ok(body) => body,
+        Err(error) => {
+            respond_json(request, 400, json!({ "ok": false, "error": error }), origin);
+            return;
+        }
+    };
+
+    let request_id = next_request_id();
+    let (sender, receiver) = mpsc::channel();
+    if let Err(error) = register_stream_request(request_id.clone(), sender) {
+        respond_json(request, 500, json!({ "ok": false, "error": error }), origin);
+        return;
+    }
+
+    let payload = json!({
+        "requestId": request_id,
+        "kind": route.kind,
+        "projectId": route.project_id,
+        "conversationId": route.conversation_id,
+        "messageId": route.message_id,
+        "projectPath": body.project_path,
+        "body": body.body,
+    });
+
+    if let Err(error) = app.emit("web-bridge:chat-request", payload) {
+        remove_stream_request(&request_id);
+        respond_json(
+            request,
+            500,
+            json!({ "ok": false, "error": format!("Failed to emit web bridge chat request: {error}") }),
+            origin,
+        );
+        return;
+    }
+
+    let mut response = Response::new(
+        StatusCode(200),
+        sse_headers(),
+        SseReceiverReader::new(receiver),
+        None,
+        None,
+    );
+    for header in cors_headers("text/event-stream", origin) {
+        response.add_header(header);
+    }
+    let respond_result = request.respond(response);
+    cancel_stream_request_if_active(app, &request_id);
+    if let Err(error) = respond_result {
+        eprintln!("[Web Bridge] Stream response failed for request {request_id}: {error}");
+    }
+}
+
 fn read_body(request: &mut tiny_http::Request) -> Result<Value, String> {
     let mut body = String::new();
     if let Err(error) = request.as_reader().read_to_string(&mut body) {
@@ -534,6 +632,24 @@ fn parse_stream_body(body: Value) -> Result<IncomingStreamBody, String> {
     })
 }
 
+fn parse_message_action_stream_body(body: Value) -> Result<IncomingMessageActionStreamBody, String> {
+    let object = body
+        .as_object()
+        .ok_or_else(|| "JSON body must be an object".to_string())?;
+
+    let project_path = object
+        .get("projectPath")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "projectPath must be a non-empty string".to_string())?
+        .to_string();
+
+    Ok(IncomingMessageActionStreamBody {
+        project_path,
+        body,
+    })
+}
+
 fn message_action_kind(action: &str) -> Option<&'static str> {
     match action {
         "copy" => Some("copy_answer"),
@@ -567,6 +683,37 @@ fn parse_message_action_route<'a>(
 
     Some(MessageActionRoute {
         kind: message_action_kind(action)?,
+        project_id,
+        conversation_id,
+        message_id,
+    })
+}
+
+fn parse_message_action_stream_route<'a>(
+    method: &Method,
+    segments: &'a [&str],
+) -> Option<MessageActionStreamRoute<'a>> {
+    let [
+        "projects",
+        project_id,
+        "conversations",
+        conversation_id,
+        "messages",
+        message_id,
+        "actions",
+        action,
+        "stream",
+    ] = segments
+    else {
+        return None;
+    };
+
+    if method != &Method::Post || *action != "regenerate" {
+        return None;
+    }
+
+    Some(MessageActionStreamRoute {
+        kind: "regenerate_answer_stream",
         project_id,
         conversation_id,
         message_id,
@@ -940,6 +1087,26 @@ mod tests {
     }
 
     #[test]
+    fn parse_message_action_stream_body_accepts_non_empty_project_path() {
+        let body = parse_message_action_stream_body(json!({
+            "projectPath": "F:\\wiki",
+            "content": "old answer",
+            "references": [],
+        }))
+        .expect("valid action stream body should parse");
+
+        assert_eq!(body.project_path, "F:\\wiki");
+        assert_eq!(
+            body.body,
+            json!({
+                "projectPath": "F:\\wiki",
+                "content": "old answer",
+                "references": [],
+            })
+        );
+    }
+
+    #[test]
     fn message_action_kind_maps_supported_action_segments() {
         assert_eq!(message_action_kind("copy"), Some("copy_answer"));
         assert_eq!(
@@ -1020,6 +1187,46 @@ mod tests {
         )
         .is_none());
         assert!(parse_message_action_route(&Method::Get, &segments).is_none());
+    }
+
+    #[test]
+    fn parse_message_action_stream_route_only_accepts_regenerate_stream_post_path() {
+        let segments = [
+            "projects",
+            "project_1",
+            "conversations",
+            "conv_1",
+            "messages",
+            "msg_1",
+            "actions",
+            "regenerate",
+            "stream",
+        ];
+
+        let route = parse_message_action_stream_route(&Method::Post, &segments)
+            .expect("regenerate stream route should parse");
+
+        assert_eq!(route.kind, "regenerate_answer_stream");
+        assert_eq!(route.project_id, "project_1");
+        assert_eq!(route.conversation_id, "conv_1");
+        assert_eq!(route.message_id, "msg_1");
+
+        assert!(parse_message_action_stream_route(
+            &Method::Post,
+            &[
+                "projects",
+                "project_1",
+                "conversations",
+                "conv_1",
+                "messages",
+                "msg_1",
+                "actions",
+                "copy",
+                "stream",
+            ],
+        )
+        .is_none());
+        assert!(parse_message_action_stream_route(&Method::Get, &segments).is_none());
     }
 
     #[test]

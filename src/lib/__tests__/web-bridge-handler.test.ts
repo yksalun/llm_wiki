@@ -33,7 +33,9 @@ type BridgeChatRequest = {
   projectId: string
   projectPath: string
   conversationId: string
-  message: string
+  message?: string
+  messageId?: string
+  body?: unknown
 }
 
 type BridgeJsonRequest = {
@@ -576,6 +578,61 @@ describe("web bridge JSON requests", () => {
         ],
       },
     })
+  })
+
+  it("streams regenerated tokens and final message from the preceding user message", async () => {
+    let capturedRequest!: ChatRequest
+    let capturedCallbacks!: ChatCallbacks
+
+    const { startWebBridgeHandler, useWikiStore, useChatStore } = await importTestModules()
+    mocks.sendProjectChatMessage.mockImplementation(async (request: ChatRequest, callbacks: ChatCallbacks) => {
+      capturedRequest = request
+      capturedCallbacks = callbacks
+      callbacks.onToken("new ")
+      callbacks.onDone({
+        id: "assistant-streamed",
+        role: "assistant",
+        content: "new answer",
+        timestamp: 4,
+        conversationId: "conv-1",
+        references: [{ title: "Doc", path: "wiki/doc.md" }],
+      })
+    })
+    resetStores(useWikiStore, useChatStore)
+    useWikiStore.setState({ project })
+    useChatStore.setState({
+      activeConversationId: "conv-1",
+      conversations: [{ id: "conv-1", title: "Question", createdAt: 1, updatedAt: 1 }],
+      messages: [
+        { id: "user-old", role: "user", content: "old question", timestamp: 1, conversationId: "conv-1" },
+        { id: "assistant-old", role: "assistant", content: "old answer", timestamp: 2, conversationId: "conv-1" },
+      ],
+    })
+    await startWebBridgeHandler()
+
+    await emitChat({
+      requestId: "stream-regenerate-answer",
+      projectId: project.id,
+      projectPath: project.path,
+      conversationId: "conv-1",
+      messageId: "assistant-old",
+      body: { content: "old answer", references: [] },
+    })
+    await flushPromises()
+
+    expect(capturedRequest).toMatchObject({
+      projectId: project.id,
+      projectPath: project.path,
+      conversationId: "conv-1",
+      message: "old question",
+    })
+    expect(capturedCallbacks).toBeDefined()
+    expect(mocks.invoke.mock.calls.map(([command]) => command)).toContain("web_bridge_emit_token")
+    expect(mocks.invoke.mock.calls.map(([command]) => command)).toContain("web_bridge_emit_done")
+    expect(mocks.invoke).not.toHaveBeenCalledWith(
+      "web_bridge_respond_json",
+      expect.objectContaining({ requestId: "stream-regenerate-answer" }),
+    )
   })
 
   it("rejects regenerate while the same conversation has an active chat request", async () => {

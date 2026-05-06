@@ -42,6 +42,7 @@ export function QuestionReferences({
 }: QuestionReferencesProps) {
   const [expanded, setExpanded] = useState(false);
   const [open, setOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedReference, setSelectedReference] =
     useState<DesktopBridgeReference | null>(null);
   const [file, setFile] = useState<FileReadResult | null>(null);
@@ -55,6 +56,7 @@ export function QuestionReferences({
     abortRef.current?.abort();
     abortRef.current = null;
     setOpen(false);
+    setSheetOpen(false);
     setSelectedReference(null);
     setFile(null);
     setStatus("idle");
@@ -74,6 +76,7 @@ export function QuestionReferences({
       setStatus("loading");
       setErrorMessage(null);
       setOpen(true);
+      setSheetOpen(true);
 
       void fetchProjectFile(projectId, reference.path, controller.signal)
         .then((nextFile) => {
@@ -112,7 +115,14 @@ export function QuestionReferences({
     hasOverflowReferences && !expanded ? references.slice(0, 3) : references;
 
   return (
-    <>
+    <Sheet
+      open={sheetOpen}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          setSheetOpen(false);
+        }
+      }}
+    >
       <Card
         data-reference-panel="true"
         size="sm"
@@ -155,15 +165,43 @@ export function QuestionReferences({
         </CardContent>
       </Card>
 
-      <Sheet
-        open={open}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) {
-            closePreview();
-          }
-        }}
-      >
-        <SheetContent className="flex w-[min(42rem,calc(100vw-2rem))] flex-col overflow-hidden sm:max-w-2xl">
+      {open ? (
+        <div className="mt-2 rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]">
+          <div className="border-b border-[color:var(--paper-border)] px-3 py-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-[color:var(--ink-strong)]">
+                  {selectedReference ? getReferenceFileName(selectedReference) : "寮曠敤鏂囦欢"}
+                </p>
+                <p className="break-all text-xs text-muted-foreground">
+                  {selectedReference?.path ?? "鏈€夋嫨鏂囦欢"}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs text-muted-foreground"
+                onClick={closePreview}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+          <div
+            data-reference-preview-body="true"
+            className="max-h-96 overflow-y-auto p-3"
+          >
+            <ReferencePreviewBody
+              status={status}
+              file={file}
+              errorMessage={errorMessage}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <SheetContent className="flex w-[min(42rem,calc(100vw-2rem))] flex-col overflow-hidden sm:max-w-2xl">
           <SheetHeader>
             <SheetTitle className="truncate">
               {selectedReference
@@ -184,9 +222,8 @@ export function QuestionReferences({
               errorMessage={errorMessage}
             />
           </div>
-        </SheetContent>
-      </Sheet>
-    </>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -208,7 +245,11 @@ function ReferenceButton({
       variant="ghost"
       size="sm"
       className="h-5 w-full min-w-0 cursor-pointer justify-start truncate bg-transparent px-1 py-0.5 text-left text-[11px] font-normal leading-4 text-muted-foreground/85 hover:bg-muted/20 hover:text-foreground"
-      onClick={onOpen}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onOpen();
+      }}
       title={fileName}
     >
       <span className="mr-1 shrink-0 text-muted-foreground/75">

@@ -14,10 +14,13 @@ import { useWikiStore } from "@/stores/wiki-store"
 
 interface BridgeChatRequest {
   requestId: string
+  kind?: string
   projectId: string
   projectPath: string
   conversationId: string
-  message: string
+  message?: string
+  messageId?: string | null
+  body?: unknown
 }
 
 interface BridgeJsonRequest {
@@ -135,6 +138,11 @@ export function stopWebBridgeHandler(): void {
 }
 
 async function handleChatRequest(request: BridgeChatRequest): Promise<void> {
+  if (request.messageId?.trim()) {
+    await handleRegenerateAnswerStreamRequest(request)
+    return
+  }
+
   const validation = validateOpenProject(request.projectId)
   if (!validation.ok) {
     await emitBridgeError(request.requestId, validation.code, validation.error)
@@ -147,6 +155,11 @@ async function handleChatRequest(request: BridgeChatRequest): Promise<void> {
       PROJECT_MISMATCH,
       "\u5f53\u524d\u6253\u5f00\u9879\u76ee\u4e0e\u8bf7\u6c42\u9879\u76ee\u8def\u5f84\u4e0d\u4e00\u81f4\u3002",
     )
+    return
+  }
+
+  if (typeof request.message !== "string" || !request.message.trim()) {
+    await emitBridgeError(request.requestId, INVALID_MESSAGE_ACTION_REQUEST, "Message must be a non-empty string.")
     return
   }
 
@@ -321,6 +334,40 @@ class MessageActionRequestError extends Error {
   }
 }
 
+function requireMessageActionPayload(
+  body: unknown,
+  projectPath: string,
+): MessageActionPayload {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new MessageActionRequestError("Request body must be an object.")
+  }
+
+  const candidate = body as {
+    projectPath?: unknown
+    content?: unknown
+    references?: unknown
+  }
+  if (typeof candidate.content !== "string") {
+    throw new MessageActionRequestError("Content must be a string.")
+  }
+  if (!Array.isArray(candidate.references) || !candidate.references.every(isBridgeReference)) {
+    throw new MessageActionRequestError("References must include title and path.")
+  }
+  if (
+    typeof candidate.projectPath === "string" &&
+    candidate.projectPath.trim() &&
+    normalizePath(candidate.projectPath) !== normalizePath(projectPath)
+  ) {
+    throw new MessageActionRequestError("Project path does not match the open project.")
+  }
+
+  return {
+    projectPath: typeof candidate.projectPath === "string" ? candidate.projectPath : undefined,
+    content: candidate.content,
+    references: candidate.references,
+  }
+}
+
 function requireMessageActionRequest(
   request: BridgeJsonRequest,
   projectPath: string,
@@ -331,37 +378,29 @@ function requireMessageActionRequest(
   if (!request.messageId?.trim()) {
     throw new MessageActionRequestError("Missing messageId.")
   }
-  if (!request.body || typeof request.body !== "object" || Array.isArray(request.body)) {
-    throw new MessageActionRequestError("Request body must be an object.")
-  }
 
-  const body = request.body as {
-    projectPath?: unknown
-    content?: unknown
-    references?: unknown
+  return {
+    conversationId: request.conversationId,
+    messageId: request.messageId,
+    payload: requireMessageActionPayload(request.body, projectPath),
   }
-  if (typeof body.content !== "string") {
-    throw new MessageActionRequestError("Content must be a string.")
+}
+
+function requireMessageActionStreamRequest(
+  request: BridgeChatRequest,
+  projectPath: string,
+): { conversationId: string; messageId: string; payload: MessageActionPayload } {
+  if (!request.conversationId?.trim()) {
+    throw new MessageActionRequestError("Missing conversationId.")
   }
-  if (!Array.isArray(body.references) || !body.references.every(isBridgeReference)) {
-    throw new MessageActionRequestError("References must include title and path.")
-  }
-  if (
-    typeof body.projectPath === "string" &&
-    body.projectPath.trim() &&
-    normalizePath(body.projectPath) !== normalizePath(projectPath)
-  ) {
-    throw new MessageActionRequestError("Project path does not match the open project.")
+  if (!request.messageId?.trim()) {
+    throw new MessageActionRequestError("Missing messageId.")
   }
 
   return {
     conversationId: request.conversationId,
     messageId: request.messageId,
-    payload: {
-      projectPath: typeof body.projectPath === "string" ? body.projectPath : undefined,
-      content: body.content,
-      references: body.references,
-    },
+    payload: requireMessageActionPayload(request.body, projectPath),
   }
 }
 
@@ -572,6 +611,131 @@ async function handleRegenerateAnswerRequest(
     }
     activeChatControllers.delete(request.requestId)
     activeConversationIds.delete(actionRequest.conversationId)
+  }
+}
+
+async function handleRegenerateAnswerStreamRequest(
+  request: BridgeChatRequest,
+): Promise<void> {
+  const validation = validateOpenProject(request.projectId)
+  if (!validation.ok) {
+    await emitBridgeError(request.requestId, validation.code, validation.error)
+    return
+  }
+
+  if (normalizePath(validation.projectPath) !== normalizePath(request.projectPath)) {
+    await emitBridgeError(
+      request.requestId,
+      PROJECT_MISMATCH,
+      "当前打开项目与请求项目路径不一致。",
+    )
+    return
+  }
+
+  let actionRequest: ReturnType<typeof requireMessageActionStreamRequest>
+  try {
+    actionRequest = requireMessageActionStreamRequest(request, validation.projectPath)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await emitBridgeError(request.requestId, INVALID_MESSAGE_ACTION_REQUEST, message)
+    return
+  }
+
+  const chatState = useChatStore.getState()
+  if (
+    activeConversationIds.has(actionRequest.conversationId) ||
+    (chatState.isStreaming && chatState.activeConversationId === actionRequest.conversationId)
+  ) {
+    await emitBridgeError(
+      request.requestId,
+      CONVERSATION_BUSY,
+      CONVERSATION_BUSY_MESSAGE,
+    )
+    return
+  }
+
+  const conversationMessages = chatState.messages.filter(
+    (message) => message.conversationId === actionRequest.conversationId,
+  )
+  const assistantIndex = conversationMessages.findIndex(
+    (message) => message.id === actionRequest.messageId && message.role === "assistant",
+  )
+  if (assistantIndex < 0) {
+    await emitBridgeError(
+      request.requestId,
+      INVALID_MESSAGE_ACTION_REQUEST,
+      "Assistant message not found.",
+    )
+    return
+  }
+
+  const userMessage = [...conversationMessages.slice(0, assistantIndex)]
+    .reverse()
+    .find((message) => message.role === "user")
+  if (!userMessage) {
+    await emitBridgeError(
+      request.requestId,
+      INVALID_MESSAGE_ACTION_REQUEST,
+      "Preceding user message not found.",
+    )
+    return
+  }
+
+  activeConversationIds.add(actionRequest.conversationId)
+  const controller = new AbortController()
+  activeChatControllers.set(request.requestId, controller)
+  const emitter = createBridgeEmitter(request.requestId)
+  const unsubscribeProject = subscribeProjectGuard(request, controller, emitter)
+
+  const removedIds = new Set([actionRequest.messageId, userMessage.id])
+  const previousMessages = useChatStore.getState().messages
+  const previousConversations = useChatStore.getState().conversations
+  let succeeded = false
+
+  try {
+    useChatStore.setState((state) => ({
+      activeConversationId: actionRequest.conversationId,
+      messages: state.messages.filter((message) => !removedIds.has(message.id)),
+    }))
+
+    await sendProjectChatMessage(
+      {
+        projectId: request.projectId,
+        projectPath: request.projectPath,
+        conversationId: actionRequest.conversationId,
+        message: userMessage.content,
+        signal: controller.signal,
+      },
+      {
+        onToken: (token) => {
+          emitter.token(token)
+        },
+        onReferences: (references) => {
+          emitter.references(references)
+        },
+        onDone: (message) => {
+          emitter.done(message)
+          succeeded = true
+        },
+        onError: (error) => {
+          emitter.error(PROJECT_CHAT_ERROR, error.message)
+        },
+      },
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    emitter.error(PROJECT_CHAT_ERROR, message)
+  } finally {
+    if (!succeeded) {
+      useChatStore.setState({
+        messages: previousMessages,
+        conversations: previousConversations,
+      })
+    }
+    unsubscribeProject()
+    activeChatControllers.delete(request.requestId)
+    activeConversationIds.delete(actionRequest.conversationId)
+    await emitter.wait()
   }
 }
 

@@ -1,18 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LoaderCircle, MessageSquare, Plus, StopCircle } from "lucide-react";
 import {
-  AssistantRuntimeProvider,
-  ComposerPrimitive,
-  MessagePrimitive,
-  ThreadPrimitive,
-  useExternalStoreRuntime,
-  type AppendMessage,
-  type MessageState,
-  type ThreadMessageLike,
-} from "@assistant-ui/react";
-import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
+  BookmarkPlus,
+  Check,
+  Copy,
+  LoaderCircle,
+  MessageSquare,
+  Plus,
+  RefreshCw,
+  StopCircle,
+  TriangleAlert,
+} from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -22,6 +21,8 @@ import {
   createQuestionConversation,
   listQuestionConversations,
   listQuestionMessages,
+  saveQuestionAnswerToWiki,
+  streamRegenerateQuestionAnswer,
   streamQuestionMessage,
 } from "@/lib/client/desktop-question-api";
 import type {
@@ -36,6 +37,21 @@ interface ProjectQuestionPanelProps {
 }
 
 type QuestionStatus = "loading" | "ready" | "streaming" | "error";
+type AnswerActionKind = "copy" | "save" | "regenerate";
+const STREAM_TYPE_INTERVAL_MS = 8;
+
+interface AnswerActionRequest {
+  conversationId: string;
+  messageId: string;
+  content: string;
+  references: DesktopBridgeReference[];
+  signal?: AbortSignal;
+}
+
+type AnswerActionHandler = (
+  action: AnswerActionKind,
+  request: AnswerActionRequest,
+) => Promise<void>;
 
 export function ProjectQuestionPanel({ projectId }: ProjectQuestionPanelProps) {
   return <ProjectQuestionPanelSession key={projectId} projectId={projectId} />;
@@ -45,14 +61,30 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
   const [conversations, setConversations] = useState<DesktopBridgeConversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<DesktopBridgeMessage[]>([]);
+  const [draft, setDraft] = useState("");
   const [streamingText, setStreamingText] = useState("");
   const [streamingReferences, setStreamingReferences] = useState<DesktopBridgeReference[]>([]);
+  const [hiddenMessageId, setHiddenMessageId] = useState<string | null>(null);
   const [status, setStatus] = useState<QuestionStatus>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
+  const activeConversationIdRef = useRef<string | null>(null);
+  const isComposingRef = useRef(false);
+  const previousDraftConversationIdRef = useRef<string | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const visibleStreamingTextRef = useRef("");
+  const pendingStreamingTextRef = useRef("");
+  const streamTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const streamFinalizerRef = useRef<(() => void) | null>(null);
   const isStreaming = status === "streaming";
-  const canSendMessage = status === "ready" && activeConversationId !== null;
+  const trimmedDraft = draft.trim();
+  const canSendMessage =
+    status === "ready" && activeConversationId !== null && trimmedDraft.length > 0;
+
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId;
+  }, [activeConversationId]);
 
   function replaceAbortController() {
     abortControllerRef.current?.abort();
@@ -68,6 +100,86 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
 
   function isCurrentRequest(controller: AbortController, requestId: number) {
     return !controller.signal.aborted && requestId === requestIdRef.current;
+  }
+
+  function resetStreamingState() {
+    if (streamTypingTimerRef.current) {
+      clearTimeout(streamTypingTimerRef.current);
+      streamTypingTimerRef.current = null;
+    }
+
+    visibleStreamingTextRef.current = "";
+    pendingStreamingTextRef.current = "";
+    streamFinalizerRef.current = null;
+    setStreamingText("");
+    setStreamingReferences([]);
+  }
+
+  function scheduleStreamingTextReveal(controller: AbortController, requestId: number) {
+    if (streamTypingTimerRef.current) {
+      return;
+    }
+
+    streamTypingTimerRef.current = setTimeout(() => {
+      streamTypingTimerRef.current = null;
+
+      if (!isCurrentRequest(controller, requestId)) {
+        return;
+      }
+
+      const pendingText = pendingStreamingTextRef.current;
+      if (pendingText.length > 0) {
+        const take = getStreamCharacterBatchSize(pendingText.length);
+        const nextText = pendingText.slice(0, take);
+        pendingStreamingTextRef.current = pendingText.slice(take);
+        visibleStreamingTextRef.current += nextText;
+        setStreamingText(visibleStreamingTextRef.current);
+        scheduleStreamingTextReveal(controller, requestId);
+        return;
+      }
+
+      const finalizer = streamFinalizerRef.current;
+      if (finalizer) {
+        streamFinalizerRef.current = null;
+        finalizer();
+      }
+    }, STREAM_TYPE_INTERVAL_MS);
+  }
+
+  function enqueueStreamingText(
+    text: string,
+    controller: AbortController,
+    requestId: number,
+  ) {
+    if (text.length === 0) {
+      return;
+    }
+
+    pendingStreamingTextRef.current += text;
+    scheduleStreamingTextReveal(controller, requestId);
+  }
+
+  function finishStreamingText(
+    message: DesktopBridgeMessage,
+    finalize: () => void,
+    controller: AbortController,
+    requestId: number,
+  ) {
+    const finalText = stripHiddenHtmlComments(message.content);
+    const queuedText = visibleStreamingTextRef.current + pendingStreamingTextRef.current;
+
+    if (finalText.startsWith(queuedText)) {
+      pendingStreamingTextRef.current += finalText.slice(queuedText.length);
+    } else if (queuedText.length === 0) {
+      pendingStreamingTextRef.current += finalText;
+    }
+
+    streamFinalizerRef.current = () => {
+      finalize();
+      resetStreamingState();
+      setStatus("ready");
+    };
+    scheduleStreamingTextReveal(controller, requestId);
   }
 
   useEffect(() => {
@@ -102,9 +214,16 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
           return;
         }
 
-        setConversations(nextConversations);
+        setConversations(
+          deriveConversationTitlesFromMessages(
+            nextConversations,
+            activeConversation.id,
+            loadedMessages,
+          ),
+        );
         setActiveConversationId(activeConversation.id);
         setMessages(loadedMessages);
+        setHiddenMessageId(null);
         setStatus("ready");
       } catch (error: unknown) {
         if (isAbortError(error) || controller.signal.aborted) {
@@ -144,6 +263,7 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
 
     setStatus("loading");
     setErrorMessage(null);
+    setHiddenMessageId(null);
     setStreamingText("");
     setStreamingReferences([]);
 
@@ -155,9 +275,16 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
         return;
       }
 
-      setConversations((current) => [conversation, ...current]);
+      setConversations((current) =>
+        deriveConversationTitlesFromMessages(
+          [conversation, ...current],
+          conversation.id,
+          loadedMessages,
+        ),
+      );
       setActiveConversationId(conversation.id);
       setMessages(loadedMessages);
+      setHiddenMessageId(null);
       setStatus("ready");
     } catch (error: unknown) {
       if (isAbortError(error) || controller.signal.aborted) {
@@ -187,6 +314,7 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
 
     setStatus("loading");
     setErrorMessage(null);
+    setHiddenMessageId(null);
     setStreamingText("");
     setStreamingReferences([]);
 
@@ -199,6 +327,10 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
 
       setActiveConversationId(conversationId);
       setMessages(loadedMessages);
+      setConversations((current) =>
+        deriveConversationTitlesFromMessages(current, conversationId, loadedMessages),
+      );
+      setHiddenMessageId(null);
       setStatus("ready");
     } catch (error: unknown) {
       if (isAbortError(error) || controller.signal.aborted) {
@@ -234,12 +366,22 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
         conversationId: activeConversationId,
       };
 
+      setHiddenMessageId(null);
+      setConversations((current) =>
+        renamePlaceholderConversationFromQuestion(
+          current,
+          activeConversationId,
+          messages,
+          submittedMessage,
+        ),
+      );
       setMessages((current) => [...current, optimisticMessage]);
-      setStreamingText("");
-      setStreamingReferences([]);
+      setDraft("");
+      resetStreamingState();
       setErrorMessage(null);
       setStatus("streaming");
 
+      let terminalReceived = false;
       void streamQuestionMessage(projectId, activeConversationId, submittedMessage, {
         signal: controller.signal,
         onToken: (text) => {
@@ -247,7 +389,7 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
             return;
           }
 
-          setStreamingText((current) => `${current}${text}`);
+          enqueueStreamingText(text, controller, requestId);
         },
         onReferences: (references) => {
           if (!isCurrentRequest(controller, requestId)) {
@@ -261,16 +403,23 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
             return;
           }
 
-          setMessages((current) => [...current, message]);
-          setStreamingText("");
-          setStreamingReferences([]);
-          setStatus("ready");
+          terminalReceived = true;
+          finishStreamingText(
+            message,
+            () => {
+              setMessages((current) => [...current, message]);
+            },
+            controller,
+            requestId,
+          );
         },
         onError: (_code, message) => {
           if (!isCurrentRequest(controller, requestId)) {
             return;
           }
 
+          terminalReceived = true;
+          resetStreamingState();
           setErrorMessage(message || "桌面端问答服务不可用");
           setStatus("error");
         },
@@ -284,6 +433,8 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
             return;
           }
 
+          terminalReceived = true;
+          resetStreamingState();
           setErrorMessage(getErrorMessage(error));
           setStatus("error");
         })
@@ -295,13 +446,9 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
           if (abortControllerRef.current === controller) {
             abortControllerRef.current = null;
           }
-
-          setStreamingText("");
-          setStreamingReferences([]);
-          setStatus((current) => (current === "streaming" ? "ready" : current));
         });
     },
-    [activeConversationId, projectId, status],
+    [activeConversationId, messages, projectId, status],
   );
 
   const handleStop = useCallback(() => {
@@ -312,10 +459,121 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
     requestIdRef.current += 1;
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
-    setStreamingText("");
-    setStreamingReferences([]);
+    setHiddenMessageId(null);
+    resetStreamingState();
     setStatus("ready");
   }, [isStreaming]);
+
+  const handleAnswerAction = useCallback<AnswerActionHandler>(
+    async (action, request) => {
+      if (action === "save") {
+        await saveQuestionAnswerToWiki(
+          projectId,
+          request.conversationId,
+          request.messageId,
+          {
+            content: request.content,
+            references: request.references,
+          },
+          request.signal,
+        );
+        return;
+      }
+
+      if (status !== "ready" || activeConversationIdRef.current !== request.conversationId) {
+        return;
+      }
+
+      const controller = replaceAbortController();
+      const requestId = nextRequestId();
+      setHiddenMessageId(request.messageId);
+      resetStreamingState();
+      setErrorMessage(null);
+      setStatus("streaming");
+
+      let terminalReceived = false;
+      try {
+        await streamRegenerateQuestionAnswer(
+          projectId,
+          request.conversationId,
+          request.messageId,
+          {
+            content: request.content,
+            references: request.references,
+          },
+          {
+            signal: controller.signal,
+            onToken: (text) => {
+              if (!isCurrentRequest(controller, requestId)) {
+                return;
+              }
+
+              enqueueStreamingText(text, controller, requestId);
+            },
+            onReferences: (references) => {
+              if (!isCurrentRequest(controller, requestId)) {
+                return;
+              }
+
+              setStreamingReferences(references);
+            },
+            onDone: (message) => {
+              if (!isCurrentRequest(controller, requestId)) {
+                return;
+              }
+
+              terminalReceived = true;
+              finishStreamingText(
+                message,
+                () => {
+                  setMessages((current) =>
+                    current.map((candidate) =>
+                      candidate.id === request.messageId ? message : candidate,
+                    ),
+                  );
+                  setHiddenMessageId(null);
+                },
+                controller,
+                requestId,
+              );
+            },
+            onError: (_code, message) => {
+              if (!isCurrentRequest(controller, requestId)) {
+                return;
+              }
+
+              terminalReceived = true;
+              setHiddenMessageId(null);
+              resetStreamingState();
+              setErrorMessage(message || "桌面端问答服务不可用");
+              setStatus("ready");
+            },
+          },
+        );
+      } catch (error: unknown) {
+        if (isAbortError(error) || controller.signal.aborted) {
+          setHiddenMessageId(null);
+          return;
+        }
+
+        if (!isCurrentRequest(controller, requestId)) {
+          return;
+        }
+
+        terminalReceived = true;
+        setHiddenMessageId(null);
+        resetStreamingState();
+        setErrorMessage(getErrorMessage(error));
+        setStatus("ready");
+        throw error;
+      } finally {
+        if (abortControllerRef.current === controller) {
+          abortControllerRef.current = null;
+        }
+      }
+    },
+    [projectId, status],
+  );
 
   const activeConversation = conversations.find(
     (conversation) => conversation.id === activeConversationId,
@@ -323,7 +581,7 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
   const renderedMessages = useMemo(
     () => [
       ...messages,
-      ...(streamingText || streamingReferences.length > 0
+      ...(isStreaming
         ? [
             {
               id: "streaming",
@@ -336,38 +594,59 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
           ]
         : []),
     ],
-    [activeConversationId, messages, streamingReferences, streamingText],
+    [
+      activeConversationId,
+      hiddenMessageId,
+      isStreaming,
+      messages,
+      streamingReferences,
+      streamingText,
+    ],
   );
-  const runtime = useExternalStoreRuntime<DesktopBridgeMessage>({
-    messages: renderedMessages,
-    isRunning: isStreaming,
-    isLoading: status === "loading",
-    isDisabled: status === "loading" || activeConversationId === null || status === "error",
-    convertMessage: toThreadMessageLike,
-    onNew: async (message) => {
-      const text = getAppendMessageText(message);
-
-      if (text) {
-        await handleSendMessage(text);
-      }
-    },
-    onCancel: async () => {
-      handleStop();
-    },
-  });
-  const previousComposerConversationIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (previousComposerConversationIdRef.current === activeConversationId) {
+    const viewport = viewportRef.current;
+
+    if (!viewport) {
       return;
     }
 
-    previousComposerConversationIdRef.current = activeConversationId;
-    void runtime.thread.composer.reset();
-  }, [activeConversationId, runtime]);
+    viewport.scrollTo({ top: viewport.scrollHeight });
+  }, [renderedMessages.length, status, streamingText]);
+
+  useEffect(() => {
+    if (!activeConversationId) {
+      return;
+    }
+
+    if (previousDraftConversationIdRef.current === activeConversationId) {
+      return;
+    }
+
+    previousDraftConversationIdRef.current = activeConversationId;
+    setDraft("");
+  }, [activeConversationId]);
+
+  function handleDraftKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey) {
+      return;
+    }
+
+    if (event.nativeEvent.isComposing || isComposingRef.current) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (!canSendMessage) {
+      return;
+    }
+
+    void handleSendMessage(trimmedDraft);
+  }
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
+    <>
       <section className="rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)] p-3">
         <div className="grid gap-3 lg:grid-cols-[17rem_minmax(0,1fr)]">
           <aside className="space-y-3 rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-3">
@@ -421,7 +700,9 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
             </div>
           </aside>
 
-          <ThreadPrimitive.Root className="flex min-h-[28rem] flex-col rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]">
+          <div
+            className="flex min-h-[28rem] flex-col rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]"
+          >
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--paper-border)] px-4 py-3">
               <div className="flex items-center gap-2">
                 <MessageSquare className="size-4 text-muted-foreground" aria-hidden="true" />
@@ -432,21 +713,26 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
               ) : null}
             </div>
 
-            <ThreadPrimitive.Viewport
+            <div
+              ref={viewportRef}
               className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4"
-              autoScroll
             >
-              <ThreadPrimitive.Empty>
-                {status !== "loading" ? (
-                  <p className="rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 text-sm text-muted-foreground">
-                    暂无消息
-                  </p>
-                ) : null}
-              </ThreadPrimitive.Empty>
-              <ThreadPrimitive.Messages>
-                {({ message }) => <ChatMessage projectId={projectId} message={message} />}
-              </ThreadPrimitive.Messages>
-            </ThreadPrimitive.Viewport>
+              {renderedMessages.length === 0 && status !== "loading" ? (
+                <p className="rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 text-sm text-muted-foreground">
+                  暂无消息
+                </p>
+              ) : null}
+              {renderedMessages.map((message, index) => (
+                  <ChatMessage
+                    key={message.id}
+                    projectId={projectId}
+                    message={message}
+                    hiddenMessageId={hiddenMessageId}
+                    isLast={index === renderedMessages.length - 1}
+                    onAnswerAction={handleAnswerAction}
+                  />
+              ))}
+            </div>
 
             {status === "loading" ? (
               <div className="mx-4 mb-3 flex items-center gap-2 rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 text-sm text-muted-foreground">
@@ -455,23 +741,46 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
               </div>
             ) : null}
 
-            {status === "error" ? (
+            {errorMessage ? (
               <Alert
                 variant="destructive"
                 className="mx-4 mb-3 border-destructive/20 bg-destructive/5"
               >
                 <MessageSquare className="size-4" />
                 <AlertTitle>问答失败</AlertTitle>
-                <AlertDescription>{errorMessage ?? "桌面端问答服务不可用"}</AlertDescription>
+                <AlertDescription>{errorMessage}</AlertDescription>
               </Alert>
             ) : null}
 
-            <ComposerPrimitive.Root className="border-t border-[color:var(--paper-border)] p-3">
-              <ComposerPrimitive.Input
+            <form
+              className="border-t border-[color:var(--paper-border)] p-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+
+                if (!canSendMessage) {
+                  return;
+                }
+
+                void handleSendMessage(trimmedDraft);
+              }}
+            >
+              <textarea
                 aria-label="项目问答输入"
                 placeholder="询问这个项目"
-                submitMode="enter"
-                className="min-h-20 w-full resize-none rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 text-sm leading-6 text-[color:var(--ink-strong)] outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                value={draft}
+                disabled={status === "loading"}
+                onChange={(event) => {
+                  setDraft(event.target.value);
+                }}
+                onKeyDown={handleDraftKeyDown}
+                onCompositionStart={() => {
+                  isComposingRef.current = true;
+                }}
+                onCompositionEnd={(event) => {
+                  isComposingRef.current = false;
+                  setDraft(event.currentTarget.value);
+                }}
+                className="min-h-20 w-full resize-none rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 text-sm leading-6 text-[color:var(--ink-strong)] outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
               />
               <div className="mt-2 flex items-center justify-between gap-3">
                 <p className="text-xs text-muted-foreground">
@@ -479,151 +788,571 @@ function ProjectQuestionPanelSession({ projectId }: { projectId: string }) {
                 </p>
                 <div className="flex items-center gap-2">
                   {isStreaming ? (
-                    <ComposerPrimitive.Cancel className="inline-flex h-8 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleStop}
+                    >
                       <StopCircle className="size-4" aria-hidden="true" />
                       停止
-                    </ComposerPrimitive.Cancel>
+                    </Button>
                   ) : null}
-                  {canSendMessage ? (
-                    <ComposerPrimitive.Send className="inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50">
+                  <Button type="submit" size="sm" disabled={!canSendMessage}>
+                    {isStreaming ? (
+                      <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                    ) : (
                       <MessageSquare className="size-4" aria-hidden="true" />
-                      发送
-                    </ComposerPrimitive.Send>
-                  ) : (
-                    <button
-                      type="button"
-                      className="inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground opacity-50"
-                      disabled
-                    >
-                      {isStreaming ? (
-                        <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-                      ) : (
-                        <MessageSquare className="size-4" aria-hidden="true" />
-                      )}
-                      发送
-                    </button>
-                  )}
+                    )}
+                    发送
+                  </Button>
                 </div>
               </div>
-            </ComposerPrimitive.Root>
-          </ThreadPrimitive.Root>
+            </form>
+          </div>
         </div>
       </section>
-    </AssistantRuntimeProvider>
+    </>
   );
 }
 
 function ChatMessage({
   projectId,
   message,
+  hiddenMessageId,
+  isLast,
+  onAnswerAction,
 }: {
   projectId: string;
-  message: MessageState;
+  message: DesktopBridgeMessage;
+  hiddenMessageId: string | null;
+  isLast: boolean;
+  onAnswerAction: AnswerActionHandler;
 }) {
-  const label =
-    message.role === "user" ? "用户" : message.role === "assistant" ? "助手" : "系统";
+  if (hiddenMessageId === message.id) {
+    return null;
+  }
 
   const isUserMessage = message.role === "user";
-  const references = getMessageReferences(message);
+  const references = getMessageReferences(message.references);
+  const isAssistantMessage = message.role === "assistant";
 
   return (
-    <MessagePrimitive.Root
+    <div
       data-message-role={message.role}
       data-message-align={isUserMessage ? "right" : "left"}
       className={cn("flex w-full", isUserMessage ? "justify-end" : "justify-start")}
     >
-      <div
-        className={cn(
-          "max-w-[78%] rounded-md border p-3",
-          isUserMessage
-            ? "border-primary/25 bg-primary text-primary-foreground"
-            : "border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] text-[color:var(--ink-strong)]",
-        )}
-      >
-        <p
+      {isAssistantMessage ? (
+        <AssistantAnswerMessage
+          projectId={projectId}
+          message={message}
+          references={references}
+          isLast={isLast}
+          onAnswerAction={onAnswerAction}
+        />
+      ) : (
+        <div
           className={cn(
-            "text-xs font-medium",
-            isUserMessage ? "text-primary-foreground/80" : "text-muted-foreground",
+            "max-w-[78%] rounded-md border p-3",
+            isUserMessage
+              ? "border-primary/25 bg-primary text-primary-foreground"
+              : "border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] text-[color:var(--ink-strong)]",
           )}
         >
-          {label}
-        </p>
-        <div className="mt-1">
-          <MessagePrimitive.Parts components={{ Text: MarkdownTextPart }} />
+          <MessageContent content={message.content} />
         </div>
-        {references.length > 0 ? (
-          <QuestionReferences projectId={projectId} references={references} />
-        ) : null}
-      </div>
-    </MessagePrimitive.Root>
+      )}
+    </div>
   );
 }
 
-function MarkdownTextPart() {
+function AssistantAnswerMessage({
+  projectId,
+  message,
+  references,
+  isLast,
+  onAnswerAction,
+}: {
+  projectId: string;
+  message: DesktopBridgeMessage;
+  references: DesktopBridgeReference[];
+  isLast: boolean;
+  onAnswerAction: AnswerActionHandler;
+}) {
   return (
-    <MarkdownTextPrimitive
-      className="space-y-2 text-sm leading-6 text-inherit"
-      components={{
-        h1: ({ children }) => (
-          <h1 className="text-lg font-semibold text-inherit">{children}</h1>
-        ),
-        h2: ({ children }) => (
-          <h2 className="text-base font-semibold text-inherit">{children}</h2>
-        ),
-        ul: ({ children }) => <ul className="ml-5 list-disc space-y-1">{children}</ul>,
-        ol: ({ children }) => <ol className="ml-5 list-decimal space-y-1">{children}</ol>,
-        code: ({ children }) => (
-          <code className="rounded bg-[color:var(--paper-elevated)] px-1 py-0.5 font-mono text-[0.85em]">
-            {children}
-          </code>
-        ),
-      }}
-    />
+    <div
+      data-answer-message="true"
+      className="group max-w-[78%] rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-3 text-[color:var(--ink-strong)]"
+    >
+      <AnswerContent message={message} />
+      {references.length > 0 ? (
+        <div data-answer-references="true">
+          <QuestionReferences projectId={projectId} references={references} />
+        </div>
+      ) : null}
+      <AnswerActions
+        message={message}
+        references={references}
+        isLast={isLast}
+        onAnswerAction={onAnswerAction}
+      />
+    </div>
   );
+}
+
+function AnswerContent({ message }: { message: DesktopBridgeMessage }) {
+  const isThinking = isStreamingMessageId(message.id) && getMessageText(message.content).length === 0;
+
+  return (
+    <div data-answer-content="true">
+      {isThinking ? <ThinkingIndicator /> : <MarkdownContent content={message.content} />}
+    </div>
+  );
+}
+
+function MessageContent({ content }: { content: string }) {
+  return (
+    <div>
+      <MarkdownContent content={content} />
+    </div>
+  );
+}
+
+function ThinkingIndicator() {
+  return (
+    <div
+      data-thinking-indicator="true"
+      className="inline-flex items-center gap-2 text-sm text-muted-foreground"
+    >
+      <span>思考中</span>
+      <span className="inline-flex items-center gap-1" aria-hidden="true">
+        <span className="size-1.5 rounded-full bg-current opacity-60 animate-[pulse_1s_ease-in-out_infinite]" />
+        <span className="size-1.5 rounded-full bg-current opacity-60 animate-[pulse_1s_ease-in-out_0.15s_infinite]" />
+        <span className="size-1.5 rounded-full bg-current opacity-60 animate-[pulse_1s_ease-in-out_0.3s_infinite]" />
+      </span>
+    </div>
+  );
+}
+
+function AnswerActions({
+  message,
+  references,
+  isLast,
+  onAnswerAction,
+}: {
+  message: DesktopBridgeMessage;
+  references: DesktopBridgeReference[];
+  isLast: boolean;
+  onAnswerAction: AnswerActionHandler;
+}) {
+  const [pendingAction, setPendingAction] = useState<AnswerActionKind | null>(null);
+  const [completedAction, setCompletedAction] = useState<AnswerActionKind | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const conversationId = message.conversationId;
+  const canRunActions =
+    !isStreamingMessageId(message.id) &&
+    conversationId.length > 0;
+  const canRegenerate = canRunActions && isLast;
+
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+    },
+    [],
+  );
+
+  if (!canRunActions) {
+    return null;
+  }
+
+  async function runAction(action: AnswerActionKind) {
+    if (pendingAction) {
+      return;
+    }
+
+    const controller = new AbortController();
+    abortRef.current?.abort();
+    abortRef.current = controller;
+    setPendingAction(action);
+    setCompletedAction(null);
+    setErrorMessage(null);
+
+    try {
+      const content = getMessageText(message.content);
+
+      if (action === "copy") {
+        await navigator.clipboard.writeText(content);
+
+        if (!controller.signal.aborted) {
+          setCompletedAction(action);
+        }
+
+        return;
+      }
+
+      await onAnswerAction(action, {
+        conversationId,
+        messageId: message.id,
+        content,
+        references,
+        signal: controller.signal,
+      });
+
+      if (!controller.signal.aborted) {
+        setCompletedAction(action);
+      }
+    } catch (error: unknown) {
+      if (!controller.signal.aborted) {
+        setErrorMessage(getErrorMessage(error));
+      }
+    } finally {
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
+
+      if (!controller.signal.aborted) {
+        setPendingAction(null);
+      }
+    }
+  }
+
+  return (
+    <div
+      data-answer-actions="true"
+      className="mt-2 flex flex-col items-end gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+    >
+      <div className="flex flex-wrap items-center justify-end gap-1">
+        <AnswerActionButton
+          action="copy"
+          label="复制"
+          icon={Copy}
+          pendingAction={pendingAction}
+          completedAction={completedAction}
+          onClick={runAction}
+        />
+        <AnswerActionButton
+          action="save"
+          label="保存到 Wiki"
+          icon={BookmarkPlus}
+          pendingAction={pendingAction}
+          completedAction={completedAction}
+          onClick={runAction}
+        />
+        {canRegenerate ? (
+          <AnswerActionButton
+            action="regenerate"
+            label="重新生成"
+            icon={RefreshCw}
+            pendingAction={pendingAction}
+            completedAction={completedAction}
+            onClick={runAction}
+          />
+        ) : null}
+      </div>
+      {errorMessage ? (
+        <p
+          data-answer-action-error="true"
+          className="inline-flex items-center gap-1 rounded-md bg-destructive/10 px-2 py-1 text-xs text-destructive"
+        >
+          <TriangleAlert className="size-3" aria-hidden="true" />
+          {errorMessage}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function AnswerActionButton({
+  action,
+  label,
+  icon: Icon,
+  pendingAction,
+  completedAction,
+  onClick,
+}: {
+  action: AnswerActionKind;
+  label: string;
+  icon: typeof Copy;
+  pendingAction: AnswerActionKind | null;
+  completedAction: AnswerActionKind | null;
+  onClick: (action: AnswerActionKind) => void;
+}) {
+  const isPending = pendingAction === action;
+  const isCompleted = completedAction === action;
+  const ButtonIcon = isCompleted ? Check : Icon;
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:bg-muted/30 hover:text-foreground"
+      disabled={pendingAction !== null}
+      onClick={() => {
+        onClick(action);
+      }}
+    >
+      <ButtonIcon
+        className={cn("size-3.5", isPending && "animate-spin")}
+        aria-hidden="true"
+      />
+      {label}
+    </Button>
+  );
+}
+
+function MarkdownContent({ content }: { content: string }) {
+  const blocks = parseMarkdownBlocks(stripHiddenHtmlComments(content));
+
+  return (
+    <div className="space-y-2 text-sm leading-6 text-inherit">
+      {blocks.map((block, index) => {
+        if (block.type === "h1") {
+          return (
+            <h1 key={index} className="text-lg font-semibold text-inherit">
+              {renderInlineMarkdown(block.text)}
+            </h1>
+          );
+        }
+
+        if (block.type === "h2") {
+          return (
+            <h2 key={index} className="text-base font-semibold text-inherit">
+              {renderInlineMarkdown(block.text)}
+            </h2>
+          );
+        }
+
+        if (block.type === "ul") {
+          return (
+            <ul key={index} className="ml-5 list-disc space-y-1">
+              {block.items.map((item, itemIndex) => (
+                <li key={itemIndex}>{renderInlineMarkdown(item)}</li>
+              ))}
+            </ul>
+          );
+        }
+
+        if (block.type === "ol") {
+          return (
+            <ol key={index} className="ml-5 list-decimal space-y-1">
+              {block.items.map((item, itemIndex) => (
+                <li key={itemIndex}>{renderInlineMarkdown(item)}</li>
+              ))}
+            </ol>
+          );
+        }
+
+        if (block.type === "p") {
+          return <p key={index}>{renderInlineMarkdown(block.text)}</p>;
+        }
+
+        return null;
+      })}
+    </div>
+  );
+}
+
+type MarkdownBlock =
+  | { type: "h1" | "h2" | "p"; text: string }
+  | { type: "ul" | "ol"; items: string[] };
+
+function parseMarkdownBlocks(content: string): MarkdownBlock[] {
+  const lines = content.split(/\r?\n/);
+  const blocks: MarkdownBlock[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index] ?? "";
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      index += 1;
+      continue;
+    }
+
+    if (trimmed.startsWith("# ")) {
+      blocks.push({ type: "h1", text: trimmed.slice(2).trim() });
+      index += 1;
+      continue;
+    }
+
+    if (trimmed.startsWith("## ")) {
+      blocks.push({ type: "h2", text: trimmed.slice(3).trim() });
+      index += 1;
+      continue;
+    }
+
+    if (trimmed.startsWith("- ")) {
+      const items: string[] = [];
+      while (index < lines.length && (lines[index] ?? "").trim().startsWith("- ")) {
+        items.push((lines[index] ?? "").trim().slice(2).trim());
+        index += 1;
+      }
+      blocks.push({ type: "ul", items });
+      continue;
+    }
+
+    if (/^\d+\.\s+/.test(trimmed)) {
+      const items: string[] = [];
+      while (index < lines.length && /^\d+\.\s+/.test((lines[index] ?? "").trim())) {
+        items.push((lines[index] ?? "").trim().replace(/^\d+\.\s+/, ""));
+        index += 1;
+      }
+      blocks.push({ type: "ol", items });
+      continue;
+    }
+
+    const paragraph: string[] = [];
+    while (index < lines.length) {
+      const paragraphLine = (lines[index] ?? "").trim();
+      if (
+        !paragraphLine ||
+        paragraphLine.startsWith("# ") ||
+        paragraphLine.startsWith("## ") ||
+        paragraphLine.startsWith("- ") ||
+        /^\d+\.\s+/.test(paragraphLine)
+      ) {
+        break;
+      }
+
+      paragraph.push(paragraphLine);
+      index += 1;
+    }
+    blocks.push({ type: "p", text: paragraph.join(" ") });
+  }
+
+  return blocks;
+}
+
+function renderInlineMarkdown(text: string) {
+  return text.split(/(`[^`]+`|\*\*[^*]+?\*\*)/g).map((part, index) => {
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code
+          key={index}
+          className="rounded bg-[color:var(--paper-elevated)] px-1 py-0.5 font-mono text-[0.85em]"
+        >
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={index} className="font-semibold">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+
+    return part;
+  });
+}
+
+function getStreamCharacterBatchSize(pendingLength: number) {
+  if (pendingLength > 600) {
+    return 8;
+  }
+
+  if (pendingLength > 240) {
+    return 4;
+  }
+
+  if (pendingLength > 80) {
+    return 2;
+  }
+
+  return 1;
+}
+
+function deriveConversationTitlesFromMessages(
+  conversations: DesktopBridgeConversation[],
+  conversationId: string,
+  messages: DesktopBridgeMessage[],
+) {
+  const title = getFirstUserMessageTitle(messages, conversationId);
+
+  if (!title) {
+    return conversations;
+  }
+
+  return conversations.map((conversation) =>
+    conversation.id === conversationId && isPlaceholderConversationTitle(conversation.title)
+      ? { ...conversation, title }
+      : conversation,
+  );
+}
+
+function renamePlaceholderConversationFromQuestion(
+  conversations: DesktopBridgeConversation[],
+  conversationId: string,
+  messages: DesktopBridgeMessage[],
+  question: string,
+) {
+  const hasPriorUserMessage = messages.some(
+    (message) => message.conversationId === conversationId && message.role === "user",
+  );
+
+  if (hasPriorUserMessage) {
+    return conversations;
+  }
+
+  const title = makeConversationTitle(question);
+
+  if (!title) {
+    return conversations;
+  }
+
+  return conversations.map((conversation) =>
+    conversation.id === conversationId && isPlaceholderConversationTitle(conversation.title)
+      ? { ...conversation, title, updatedAt: Date.now() }
+      : conversation,
+  );
+}
+
+function getFirstUserMessageTitle(
+  messages: DesktopBridgeMessage[],
+  conversationId: string,
+) {
+  const firstUserMessage = messages.find(
+    (message) => message.conversationId === conversationId && message.role === "user",
+  );
+
+  return firstUserMessage ? makeConversationTitle(firstUserMessage.content) : "";
+}
+
+function makeConversationTitle(content: string) {
+  return content.trim().replace(/\s+/g, " ").slice(0, 50);
+}
+
+function isPlaceholderConversationTitle(title: string) {
+  const trimmedTitle = title.trim();
+  return trimmedTitle.length === 0 || trimmedTitle === "New Conversation";
 }
 
 function stripHiddenHtmlComments(content: string) {
   return content.replace(/<!--[\s\S]*?-->/g, "").trimEnd();
 }
 
-function toThreadMessageLike(message: DesktopBridgeMessage): ThreadMessageLike {
-  const running = message.id === "streaming";
-
-  return {
-    id: message.id,
-    role: message.role,
-    content: stripHiddenHtmlComments(message.content),
-    createdAt: new Date(message.timestamp),
-    status:
-      message.role === "assistant"
-        ? running
-          ? { type: "running" }
-          : { type: "complete", reason: "stop" }
-        : undefined,
-    metadata: {
-      custom: {
-        references: message.references ?? [],
-      },
-    },
-  };
-}
-
-function getAppendMessageText(message: AppendMessage) {
-  return message.content
-    .filter((part) => part.type === "text")
-    .map((part) => part.text)
-    .join("\n\n")
-    .trim();
-}
-
-function getMessageReferences(message: MessageState): DesktopBridgeReference[] {
-  const references = message.metadata.custom.references;
-
+function getMessageReferences(
+  references: DesktopBridgeMessage["references"],
+): DesktopBridgeReference[] {
   if (!Array.isArray(references)) {
     return [];
   }
 
   return references.filter(isDesktopBridgeReference);
+}
+
+function isStreamingMessageId(messageId: string) {
+  return messageId === "streaming";
+}
+
+function getMessageText(content: string) {
+  return stripHiddenHtmlComments(content).trim();
 }
 
 function isDesktopBridgeReference(reference: unknown): reference is DesktopBridgeReference {
