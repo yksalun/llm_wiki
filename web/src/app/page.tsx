@@ -1,5 +1,5 @@
-import { ProjectListPage } from "@/components/projects/project-list-page";
+import { ChatHomePage } from "@/components/chat/chat-home-page";
 
 export default function Home() {
-  return <ProjectListPage />;
+  return <ChatHomePage />;
 }
