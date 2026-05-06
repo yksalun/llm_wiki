@@ -1,8 +1,11 @@
 import { AppError } from "@/lib/server/app-error";
+import { fetchDesktopBridgeJson } from "@/lib/server/desktop-bridge-client";
 import { getProjectRootsFromEnv } from "@/lib/server/env";
 import { resolveProjectById } from "@/lib/server/project-registry";
+import { errorJson, okJson } from "@/lib/server/route-helpers";
 import type {
   DesktopBridgeMessageActionPayload,
+  DesktopBridgeMessageActionResponse,
   DesktopBridgeReference,
 } from "@/lib/types";
 
@@ -115,4 +118,31 @@ function isDesktopBridgeReference(reference: unknown): reference is DesktopBridg
 
   const candidate = reference as Partial<DesktopBridgeReference>;
   return typeof candidate.title === "string" && typeof candidate.path === "string";
+}
+
+export async function proxyMessageAction(
+  request: Request,
+  context: MessageActionRouteContext,
+  action: "copy" | "save-to-wiki" | "regenerate",
+) {
+  try {
+    const { projectId, conversationId, messageId } = await context.params;
+    const project = await resolveRouteProject(projectId);
+    const payload = requireMessageActionPayload(await parseJsonRequestBody(request));
+    const response = await fetchDesktopBridgeJson<DesktopBridgeMessageActionResponse>(
+      buildMessageActionBridgePath({ projectId, conversationId, messageId, action }),
+      {
+        method: "POST",
+        body: JSON.stringify({
+          projectPath: project.rootDir,
+          ...payload,
+        }),
+        signal: request.signal,
+      },
+    );
+
+    return okJson(response);
+  } catch (error) {
+    return errorJson(error);
+  }
 }

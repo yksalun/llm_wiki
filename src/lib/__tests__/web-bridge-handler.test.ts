@@ -4,6 +4,9 @@ import { sendProjectChatMessage } from "@/lib/project-chat-service"
 const mocks = vi.hoisted(() => ({
   listen: vi.fn(),
   invoke: vi.fn(),
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
+  listDirectory: vi.fn(),
   sendProjectChatMessage: vi.fn(),
 }))
 
@@ -17,6 +20,12 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 vi.mock("@/lib/project-chat-service", () => ({
   sendProjectChatMessage: mocks.sendProjectChatMessage,
+}))
+
+vi.mock("@/commands/fs", () => ({
+  readFile: mocks.readFile,
+  writeFile: mocks.writeFile,
+  listDirectory: mocks.listDirectory,
 }))
 
 type BridgeChatRequest = {
@@ -33,6 +42,7 @@ type BridgeJsonRequest = {
   projectId: string
   projectPath?: string
   conversationId?: string | null
+  messageId?: string
   body?: unknown
 }
 
@@ -148,8 +158,14 @@ let handlersForTest: Map<string, (event: { payload: unknown }) => void>
 beforeEach(() => {
   mocks.listen.mockReset()
   mocks.invoke.mockReset()
+  mocks.readFile.mockReset()
+  mocks.writeFile.mockReset()
+  mocks.listDirectory.mockReset()
   mocks.sendProjectChatMessage.mockReset()
   mocks.invoke.mockResolvedValue(undefined)
+  mocks.readFile.mockRejectedValue(new Error("missing file"))
+  mocks.writeFile.mockResolvedValue(undefined)
+  mocks.listDirectory.mockResolvedValue([])
   const setup = setupListeners()
   handlersForTest = setup.handlers
 })
@@ -157,6 +173,7 @@ beforeEach(() => {
 afterEach(async () => {
   const mod = await import("@/lib/web-bridge-handler").catch(() => null)
   mod?.stopWebBridgeHandler()
+  vi.unstubAllGlobals()
 })
 
 describe("startWebBridgeHandler", () => {
@@ -386,6 +403,223 @@ describe("web bridge chat requests", () => {
 })
 
 describe("web bridge JSON requests", () => {
+  it("rejects answer actions missing messageId or body with 400", async () => {
+    const { startWebBridgeHandler, useWikiStore, useChatStore } = await importTestModules()
+    resetStores(useWikiStore, useChatStore)
+    useWikiStore.setState({ project })
+    await startWebBridgeHandler()
+
+    await emitJson({
+      requestId: "json-action-no-message",
+      kind: "copy_answer",
+      projectId: project.id,
+      conversationId: "conv-1",
+      body: { content: "answer", references: [] },
+    })
+    await emitJson({
+      requestId: "json-action-no-body",
+      kind: "copy_answer",
+      projectId: project.id,
+      conversationId: "conv-1",
+      messageId: "msg-1",
+    })
+    await flushPromises()
+
+    expect(mocks.invoke).toHaveBeenCalledWith("web_bridge_respond_json", {
+      requestId: "json-action-no-message",
+      status: 400,
+      body: {
+        ok: false,
+        code: "INVALID_MESSAGE_ACTION_REQUEST",
+        error: expect.any(String),
+      },
+    })
+    expect(mocks.invoke).toHaveBeenCalledWith("web_bridge_respond_json", {
+      requestId: "json-action-no-body",
+      status: 400,
+      body: {
+        ok: false,
+        code: "INVALID_MESSAGE_ACTION_REQUEST",
+        error: expect.any(String),
+      },
+    })
+  })
+
+  it("copies a cleaned answer to the clipboard and responds success", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal("navigator", { clipboard: { writeText } })
+
+    const { startWebBridgeHandler, useWikiStore, useChatStore } = await importTestModules()
+    resetStores(useWikiStore, useChatStore)
+    useWikiStore.setState({ project })
+    await startWebBridgeHandler()
+
+    await emitJson({
+      requestId: "json-copy-answer",
+      kind: "copy_answer",
+      projectId: project.id,
+      conversationId: "conv-1",
+      messageId: "msg-1",
+      body: {
+        content: "Answer<!-- sources: hidden --><think>private</think>",
+        references: [],
+      },
+    })
+    await flushPromises()
+
+    expect(writeText).toHaveBeenCalledWith("Answer")
+    expect(mocks.invoke).toHaveBeenCalledWith("web_bridge_respond_json", {
+      requestId: "json-copy-answer",
+      status: 200,
+      body: { ok: true },
+    })
+  })
+
+  it("regenerates an answer from the preceding user message and returns updated conversation messages", async () => {
+    let capturedRequest!: ChatRequest
+    let capturedCallbacks!: ChatCallbacks
+
+    const { startWebBridgeHandler, useWikiStore, useChatStore } = await importTestModules()
+    mocks.sendProjectChatMessage.mockImplementation(async (request: ChatRequest, callbacks: ChatCallbacks) => {
+      capturedRequest = request
+      capturedCallbacks = callbacks
+      useChatStore.setState((state) => ({
+        messages: [
+          ...state.messages,
+          {
+            id: "user-new",
+            role: "user",
+            content: request.message,
+            timestamp: 3,
+            conversationId: request.conversationId,
+          },
+        ],
+      }))
+      callbacks.onDone({
+        id: "assistant-new",
+        role: "assistant",
+        content: "new answer",
+        timestamp: 4,
+        conversationId: "conv-1",
+        references: [{ title: "Doc", path: "wiki/doc.md" }],
+      })
+    })
+    resetStores(useWikiStore, useChatStore)
+    useWikiStore.setState({ project })
+    useChatStore.setState({
+      activeConversationId: "conv-1",
+      conversations: [{ id: "conv-1", title: "Question", createdAt: 1, updatedAt: 1 }],
+      messages: [
+        { id: "user-old", role: "user", content: "old question", timestamp: 1, conversationId: "conv-1" },
+        { id: "assistant-old", role: "assistant", content: "old answer", timestamp: 2, conversationId: "conv-1" },
+      ],
+    })
+    await startWebBridgeHandler()
+
+    await emitJson({
+      requestId: "json-regenerate-answer",
+      kind: "regenerate_answer",
+      projectId: project.id,
+      conversationId: "conv-1",
+      messageId: "assistant-old",
+      body: { content: "old answer", references: [] },
+    })
+    await flushPromises()
+
+    expect(capturedRequest).toMatchObject({
+      projectId: project.id,
+      projectPath: project.path,
+      conversationId: "conv-1",
+      message: "old question",
+    })
+    expect(capturedRequest.signal).toBeInstanceOf(AbortSignal)
+    expect(capturedCallbacks).toBeDefined()
+    expect(useChatStore.getState().messages).toEqual([
+      {
+        id: "user-new",
+        role: "user",
+        content: "old question",
+        timestamp: 3,
+        conversationId: "conv-1",
+      },
+      {
+        id: "assistant-new",
+        role: "assistant",
+        content: "new answer",
+        timestamp: 4,
+        conversationId: "conv-1",
+        references: [{ title: "Doc", path: "wiki/doc.md" }],
+      },
+    ])
+    expect(mocks.invoke).toHaveBeenCalledWith("web_bridge_respond_json", {
+      requestId: "json-regenerate-answer",
+      status: 200,
+      body: {
+        ok: true,
+        messages: [
+          {
+            id: "user-new",
+            role: "user",
+            content: "old question",
+            timestamp: 3,
+            conversationId: "conv-1",
+            references: [],
+          },
+          {
+            id: "assistant-new",
+            role: "assistant",
+            content: "new answer",
+            timestamp: 4,
+            conversationId: "conv-1",
+            references: [{ title: "Doc", path: "wiki/doc.md" }],
+          },
+        ],
+      },
+    })
+  })
+
+  it("saves an answer to wiki queries and responds with the saved path", async () => {
+    mocks.readFile.mockImplementation(async (path: string) => {
+      if (path.endsWith("/wiki/index.md")) return "# Wiki Index\n\n## Queries\n"
+      if (path.endsWith("/wiki/log.md")) return "# Wiki Log\n\n"
+      throw new Error(`unexpected read: ${path}`)
+    })
+
+    const { startWebBridgeHandler, useWikiStore, useChatStore } = await importTestModules()
+    resetStores(useWikiStore, useChatStore)
+    useWikiStore.setState({ project })
+    await startWebBridgeHandler()
+
+    await emitJson({
+      requestId: "json-save-answer",
+      kind: "save_answer_to_wiki",
+      projectId: project.id,
+      conversationId: "conv-1",
+      messageId: "assistant-save",
+      body: {
+        content: "# Saved Answer\n\nBody<!-- sources: hidden --><think>private</think>",
+        references: [],
+      },
+    })
+    await flushPromises()
+
+    const queryWrite = mocks.writeFile.mock.calls.find(([path]) =>
+      String(path).startsWith("C:/demo/project/wiki/queries/saved-answer-"),
+    )
+    expect(queryWrite).toBeDefined()
+    expect(String(queryWrite?.[1])).toContain('title: "Saved Answer"')
+    expect(String(queryWrite?.[1])).toContain("Body")
+    expect(String(queryWrite?.[1])).not.toContain("sources: hidden")
+    expect(mocks.invoke).toHaveBeenCalledWith("web_bridge_respond_json", {
+      requestId: "json-save-answer",
+      status: 200,
+      body: {
+        ok: true,
+        savedPath: expect.stringMatching(/^wiki\/queries\/saved-answer-\d{4}-\d{2}-\d{2}-\d{6}\.md$/),
+      },
+    })
+  })
+
   it("rejects create_conversation with a mismatched projectPath without modifying conversations", async () => {
     const { startWebBridgeHandler, useWikiStore, useChatStore } = await importTestModules()
     resetStores(useWikiStore, useChatStore)

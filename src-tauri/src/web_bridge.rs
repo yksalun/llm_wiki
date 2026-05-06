@@ -269,6 +269,7 @@ fn handle_request(mut request: tiny_http::Request, app: &AppHandle) {
                 project_id,
                 None,
                 None,
+                None,
                 origin.as_deref(),
             );
         }
@@ -279,6 +280,7 @@ fn handle_request(mut request: tiny_http::Request, app: &AppHandle) {
                 app,
                 "create_conversation",
                 project_id,
+                None,
                 None,
                 body,
                 origin.as_deref(),
@@ -292,8 +294,43 @@ fn handle_request(mut request: tiny_http::Request, app: &AppHandle) {
                 project_id,
                 Some(conversation_id),
                 None,
+                None,
                 origin.as_deref(),
             );
+        }
+        (
+            Method::Post,
+            [
+                "projects",
+                project_id,
+                "conversations",
+                conversation_id,
+                "messages",
+                message_id,
+                "actions",
+                action,
+            ],
+        ) => {
+            if let Some(kind) = message_action_kind(action) {
+                let body = Some(read_body(&mut request));
+                handle_json_bridge_request(
+                    request,
+                    app,
+                    kind,
+                    project_id,
+                    Some(conversation_id),
+                    Some(message_id),
+                    body,
+                    origin.as_deref(),
+                );
+            } else {
+                respond_json(
+                    request,
+                    404,
+                    json!({ "ok": false, "error": "Not found" }),
+                    origin.as_deref(),
+                );
+            }
         }
         (
             Method::Post,
@@ -331,6 +368,7 @@ fn handle_json_bridge_request(
     kind: &str,
     project_id: &str,
     conversation_id: Option<&str>,
+    message_id: Option<&str>,
     body: Option<Result<Value, String>>,
     origin: Option<&str>,
 ) {
@@ -355,6 +393,7 @@ fn handle_json_bridge_request(
         "kind": kind,
         "projectId": project_id,
         "conversationId": conversation_id,
+        "messageId": message_id,
         "body": body,
     });
 
@@ -485,6 +524,15 @@ fn parse_stream_body(body: Value) -> Result<IncomingStreamBody, String> {
         project_path,
         message,
     })
+}
+
+fn message_action_kind(action: &str) -> Option<&'static str> {
+    match action {
+        "copy" => Some("copy_answer"),
+        "save-to-wiki" => Some("save_answer_to_wiki"),
+        "regenerate" => Some("regenerate_answer"),
+        _ => None,
+    }
 }
 
 fn register_stream_request(
@@ -851,6 +899,17 @@ mod tests {
         let err = parse_stream_body(Value::Null).expect_err("null body should fail");
 
         assert!(err.contains("JSON body must be an object"));
+    }
+
+    #[test]
+    fn message_action_kind_maps_supported_action_segments() {
+        assert_eq!(message_action_kind("copy"), Some("copy_answer"));
+        assert_eq!(
+            message_action_kind("save-to-wiki"),
+            Some("save_answer_to_wiki")
+        );
+        assert_eq!(message_action_kind("regenerate"), Some("regenerate_answer"));
+        assert_eq!(message_action_kind("delete"), None);
     }
 
     #[test]

@@ -1,7 +1,9 @@
 import { invoke } from "@tauri-apps/api/core"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
+import { listDirectory, readFile, writeFile } from "@/commands/fs"
 import { normalizePath } from "@/lib/path-utils"
 import { sendProjectChatMessage } from "@/lib/project-chat-service"
+import { makeQueryFileName } from "@/lib/wiki-filename"
 import {
   useChatStore,
   type Conversation,
@@ -20,10 +22,18 @@ interface BridgeChatRequest {
 
 interface BridgeJsonRequest {
   requestId: string
-  kind: "list_conversations" | "create_conversation" | "list_messages" | string
+  kind:
+    | "list_conversations"
+    | "create_conversation"
+    | "list_messages"
+    | "copy_answer"
+    | "save_answer_to_wiki"
+    | "regenerate_answer"
+    | string
   projectId: string
   projectPath?: string
   conversationId?: string | null
+  messageId?: string | null
   body?: unknown
 }
 
@@ -49,6 +59,7 @@ const PROJECT_NOT_OPEN = "PROJECT_NOT_OPEN"
 const PROJECT_MISMATCH = "PROJECT_MISMATCH"
 const PROJECT_CHAT_ERROR = "PROJECT_CHAT_ERROR"
 const CONVERSATION_BUSY = "CONVERSATION_BUSY"
+const INVALID_MESSAGE_ACTION_REQUEST = "INVALID_MESSAGE_ACTION_REQUEST"
 
 let unlistenFns: UnlistenFn[] = []
 let pendingUnlistenFns: UnlistenFn[] = []
@@ -267,6 +278,18 @@ async function handleJsonRequest(request: BridgeJsonRequest): Promise<void> {
         return
       }
 
+      case "copy_answer":
+        await handleCopyAnswerRequest(request, validation.projectPath)
+        return
+
+      case "save_answer_to_wiki":
+        await handleSaveAnswerRequest(request, validation.projectPath)
+        return
+
+      case "regenerate_answer":
+        await handleRegenerateAnswerRequest(request, validation.projectPath)
+        return
+
       default:
         await respondJson(request.requestId, 400, {
           ok: false,
@@ -282,6 +305,252 @@ async function handleJsonRequest(request: BridgeJsonRequest): Promise<void> {
       error: message,
     })
   }
+}
+
+interface MessageActionPayload {
+  projectPath?: string
+  content: string
+  references: BridgeReference[]
+}
+
+class MessageActionRequestError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "MessageActionRequestError"
+  }
+}
+
+function requireMessageActionRequest(
+  request: BridgeJsonRequest,
+  projectPath: string,
+): { conversationId: string; messageId: string; payload: MessageActionPayload } {
+  if (!request.conversationId?.trim()) {
+    throw new MessageActionRequestError("Missing conversationId.")
+  }
+  if (!request.messageId?.trim()) {
+    throw new MessageActionRequestError("Missing messageId.")
+  }
+  if (!request.body || typeof request.body !== "object" || Array.isArray(request.body)) {
+    throw new MessageActionRequestError("Request body must be an object.")
+  }
+
+  const body = request.body as {
+    projectPath?: unknown
+    content?: unknown
+    references?: unknown
+  }
+  if (typeof body.content !== "string") {
+    throw new MessageActionRequestError("Content must be a string.")
+  }
+  if (!Array.isArray(body.references) || !body.references.every(isBridgeReference)) {
+    throw new MessageActionRequestError("References must include title and path.")
+  }
+  if (
+    typeof body.projectPath === "string" &&
+    body.projectPath.trim() &&
+    normalizePath(body.projectPath) !== normalizePath(projectPath)
+  ) {
+    throw new MessageActionRequestError("Project path does not match the open project.")
+  }
+
+  return {
+    conversationId: request.conversationId,
+    messageId: request.messageId,
+    payload: {
+      projectPath: typeof body.projectPath === "string" ? body.projectPath : undefined,
+      content: body.content,
+      references: body.references,
+    },
+  }
+}
+
+function isBridgeReference(reference: unknown): reference is BridgeReference {
+  if (!reference || typeof reference !== "object") return false
+  const candidate = reference as Partial<BridgeReference>
+  return typeof candidate.title === "string" && typeof candidate.path === "string"
+}
+
+async function respondInvalidMessageAction(requestId: string, error: unknown): Promise<void> {
+  await respondJson(requestId, 400, {
+    ok: false,
+    code: INVALID_MESSAGE_ACTION_REQUEST,
+    error: error instanceof Error ? error.message : String(error),
+  })
+}
+
+async function handleCopyAnswerRequest(
+  request: BridgeJsonRequest,
+  projectPath: string,
+): Promise<void> {
+  let actionRequest: ReturnType<typeof requireMessageActionRequest>
+  try {
+    actionRequest = requireMessageActionRequest(request, projectPath)
+  } catch (error) {
+    await respondInvalidMessageAction(request.requestId, error)
+    return
+  }
+
+  await globalThis.navigator?.clipboard?.writeText(cleanAnswerContent(actionRequest.payload.content))
+  await respondJson(request.requestId, 200, { ok: true })
+}
+
+async function handleSaveAnswerRequest(
+  request: BridgeJsonRequest,
+  projectPath: string,
+): Promise<void> {
+  let actionRequest: ReturnType<typeof requireMessageActionRequest>
+  try {
+    actionRequest = requireMessageActionRequest(request, projectPath)
+  } catch (error) {
+    await respondInvalidMessageAction(request.requestId, error)
+    return
+  }
+
+  const normalizedProjectPath = normalizePath(projectPath)
+  const content = actionRequest.payload.content
+  const firstLine = content.split("\n")[0].replace(/^#+\s*/, "").trim()
+  const title = firstLine.slice(0, 60) || "Saved Query"
+  const { date, fileName } = makeQueryFileName(title)
+  const relativePath = `wiki/queries/${fileName}`
+  const filePath = `${normalizedProjectPath}/${relativePath}`
+  const cleanContent = cleanAnswerContent(content, { trimEnd: true })
+  const frontmatter = [
+    "---",
+    "type: query",
+    `title: "${title.replace(/"/g, '\\"')}"`,
+    `created: ${date}`,
+    "tags: []",
+    "---",
+    "",
+  ].join("\n")
+
+  await writeFile(filePath, frontmatter + cleanContent)
+
+  const indexPath = `${normalizedProjectPath}/wiki/index.md`
+  let indexContent = ""
+  try {
+    indexContent = await readFile(indexPath)
+  } catch {
+    indexContent = "# Wiki Index\n\n## Queries\n"
+  }
+  const linkTarget = fileName.replace(/\.md$/, "")
+  const entry = `- [[queries/${linkTarget}|${title}]]`
+  if (indexContent.includes("## Queries")) {
+    indexContent = indexContent.replace(/(## Queries\n)/, `$1${entry}\n`)
+  } else {
+    indexContent = `${indexContent.trimEnd()}\n\n## Queries\n${entry}\n`
+  }
+  await writeFile(indexPath, indexContent)
+
+  const logPath = `${normalizedProjectPath}/wiki/log.md`
+  let logContent = ""
+  try {
+    logContent = await readFile(logPath)
+  } catch {
+    logContent = "# Wiki Log\n\n"
+  }
+  await writeFile(logPath, `${logContent.trimEnd()}\n- ${date}: Saved query page \`${fileName}\`\n`)
+
+  const tree = await listDirectory(normalizedProjectPath)
+  useWikiStore.getState().setFileTree(tree)
+  useWikiStore.getState().bumpDataVersion()
+
+  await respondJson(request.requestId, 200, { ok: true, savedPath: relativePath })
+}
+
+async function handleRegenerateAnswerRequest(
+  request: BridgeJsonRequest,
+  projectPath: string,
+): Promise<void> {
+  let actionRequest: ReturnType<typeof requireMessageActionRequest>
+  try {
+    actionRequest = requireMessageActionRequest(request, projectPath)
+  } catch (error) {
+    await respondInvalidMessageAction(request.requestId, error)
+    return
+  }
+
+  const chatState = useChatStore.getState()
+  const conversationMessages = chatState.messages.filter(
+    (message) => message.conversationId === actionRequest.conversationId,
+  )
+  const assistantIndex = conversationMessages.findIndex(
+    (message) => message.id === actionRequest.messageId && message.role === "assistant",
+  )
+  if (assistantIndex < 0) {
+    await respondInvalidMessageAction(request.requestId, new Error("Assistant message not found."))
+    return
+  }
+
+  const userMessage = [...conversationMessages.slice(0, assistantIndex)]
+    .reverse()
+    .find((message) => message.role === "user")
+  if (!userMessage) {
+    await respondInvalidMessageAction(request.requestId, new Error("Preceding user message not found."))
+    return
+  }
+
+  const removedIds = new Set([actionRequest.messageId, userMessage.id])
+  useChatStore.setState((state) => ({
+    activeConversationId: actionRequest.conversationId,
+    messages: state.messages.filter((message) => !removedIds.has(message.id)),
+  }))
+
+  const controller = new AbortController()
+  let doneMessage: DisplayMessage | null = null
+  let actionError: Error | null = null
+  await sendProjectChatMessage(
+    {
+      projectId: request.projectId,
+      projectPath,
+      conversationId: actionRequest.conversationId,
+      message: userMessage.content,
+      signal: controller.signal,
+    },
+    {
+      onToken: () => undefined,
+      onReferences: () => undefined,
+      onDone: (message) => {
+        doneMessage = message
+        const exists = useChatStore
+          .getState()
+          .messages.some((stateMessage) => stateMessage.id === message.id)
+        if (!exists) {
+          useChatStore.setState((state) => ({
+            messages: [...state.messages, message],
+          }))
+        }
+      },
+      onError: (error) => {
+        actionError = error
+      },
+    },
+  )
+
+  if (actionError) {
+    throw actionError
+  }
+
+  const messages = useChatStore
+    .getState()
+    .messages.filter((message) => message.conversationId === actionRequest.conversationId)
+    .map(toBridgeMessage)
+
+  if (!doneMessage && messages.length === 0) {
+    await respondInvalidMessageAction(request.requestId, new Error("Regenerate produced no messages."))
+    return
+  }
+
+  await respondJson(request.requestId, 200, { ok: true, messages })
+}
+
+function cleanAnswerContent(content: string, options: { trimEnd?: boolean } = {}): string {
+  const cleaned = content
+    .replace(/<!--.*?-->/gs, "")
+    .replace(/<think(?:ing)?>\s*[\s\S]*?<\/think(?:ing)?>\s*/gi, "")
+    .replace(/<think(?:ing)?>\s*[\s\S]*$/gi, "")
+
+  return options.trimEnd ? cleaned.trimEnd() : cleaned.trim()
 }
 
 function validateOpenProject(projectId: string):
