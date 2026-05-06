@@ -51,6 +51,14 @@ struct IncomingStreamBody {
     message: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MessageActionRoute<'a> {
+    kind: &'static str,
+    project_id: &'a str,
+    conversation_id: &'a str,
+    message_id: &'a str,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct BridgeJsonResponse {
     pub status: u16,
@@ -260,7 +268,7 @@ fn handle_request(mut request: tiny_http::Request, app: &AppHandle) {
         return;
     }
 
-    match (method, segments.as_slice()) {
+    match (method.clone(), segments.as_slice()) {
         (Method::Get, ["projects", project_id, "conversations"]) => {
             handle_json_bridge_request(
                 request,
@@ -302,24 +310,24 @@ fn handle_request(mut request: tiny_http::Request, app: &AppHandle) {
             Method::Post,
             [
                 "projects",
-                project_id,
+                _project_id,
                 "conversations",
-                conversation_id,
+                _conversation_id,
                 "messages",
-                message_id,
+                _message_id,
                 "actions",
-                action,
+                _action,
             ],
         ) => {
-            if let Some(kind) = message_action_kind(action) {
+            if let Some(route) = parse_message_action_route(&method, &segments) {
                 let body = Some(read_body(&mut request));
                 handle_json_bridge_request(
                     request,
                     app,
-                    kind,
-                    project_id,
-                    Some(conversation_id),
-                    Some(message_id),
+                    route.kind,
+                    route.project_id,
+                    Some(route.conversation_id),
+                    Some(route.message_id),
                     body,
                     origin.as_deref(),
                 );
@@ -533,6 +541,36 @@ fn message_action_kind(action: &str) -> Option<&'static str> {
         "regenerate" => Some("regenerate_answer"),
         _ => None,
     }
+}
+
+fn parse_message_action_route<'a>(
+    method: &Method,
+    segments: &'a [&str],
+) -> Option<MessageActionRoute<'a>> {
+    let [
+        "projects",
+        project_id,
+        "conversations",
+        conversation_id,
+        "messages",
+        message_id,
+        "actions",
+        action,
+    ] = segments
+    else {
+        return None;
+    };
+
+    if method != &Method::Post {
+        return None;
+    }
+
+    Some(MessageActionRoute {
+        kind: message_action_kind(action)?,
+        project_id,
+        conversation_id,
+        message_id,
+    })
 }
 
 fn register_stream_request(
@@ -910,6 +948,78 @@ mod tests {
         );
         assert_eq!(message_action_kind("regenerate"), Some("regenerate_answer"));
         assert_eq!(message_action_kind("delete"), None);
+    }
+
+    #[test]
+    fn parse_message_action_route_maps_full_post_path_to_json_request_fields() {
+        let segments = [
+            "projects",
+            "project_1",
+            "conversations",
+            "conv_1",
+            "messages",
+            "msg_1",
+            "actions",
+            "copy",
+        ];
+
+        let route = parse_message_action_route(&Method::Post, &segments)
+            .expect("copy action route should parse");
+
+        assert_eq!(route.kind, "copy_answer");
+        assert_eq!(route.project_id, "project_1");
+        assert_eq!(route.conversation_id, "conv_1");
+        assert_eq!(route.message_id, "msg_1");
+
+        assert_eq!(
+            parse_message_action_route(
+                &Method::Post,
+                &[
+                    "projects",
+                    "project_1",
+                    "conversations",
+                    "conv_1",
+                    "messages",
+                    "msg_1",
+                    "actions",
+                    "save-to-wiki",
+                ],
+            )
+            .map(|route| route.kind),
+            Some("save_answer_to_wiki"),
+        );
+        assert_eq!(
+            parse_message_action_route(
+                &Method::Post,
+                &[
+                    "projects",
+                    "project_1",
+                    "conversations",
+                    "conv_1",
+                    "messages",
+                    "msg_1",
+                    "actions",
+                    "regenerate",
+                ],
+            )
+            .map(|route| route.kind),
+            Some("regenerate_answer"),
+        );
+        assert!(parse_message_action_route(
+            &Method::Post,
+            &[
+                "projects",
+                "project_1",
+                "conversations",
+                "conv_1",
+                "messages",
+                "msg_1",
+                "actions",
+                "delete",
+            ],
+        )
+        .is_none());
+        assert!(parse_message_action_route(&Method::Get, &segments).is_none());
     }
 
     #[test]
