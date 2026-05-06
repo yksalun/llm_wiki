@@ -60,6 +60,7 @@ const PROJECT_MISMATCH = "PROJECT_MISMATCH"
 const PROJECT_CHAT_ERROR = "PROJECT_CHAT_ERROR"
 const CONVERSATION_BUSY = "CONVERSATION_BUSY"
 const INVALID_MESSAGE_ACTION_REQUEST = "INVALID_MESSAGE_ACTION_REQUEST"
+const CONVERSATION_BUSY_MESSAGE = "该会话正在生成回复，请等待当前请求完成后再发送。"
 
 let unlistenFns: UnlistenFn[] = []
 let pendingUnlistenFns: UnlistenFn[] = []
@@ -157,7 +158,7 @@ async function handleChatRequest(request: BridgeChatRequest): Promise<void> {
     await emitBridgeError(
       request.requestId,
       CONVERSATION_BUSY,
-      "该会话正在生成回复，请等待当前请求完成后再发送。",
+      CONVERSATION_BUSY_MESSAGE,
     )
     return
   }
@@ -471,6 +472,18 @@ async function handleRegenerateAnswerRequest(
   }
 
   const chatState = useChatStore.getState()
+  if (
+    activeConversationIds.has(actionRequest.conversationId) ||
+    (chatState.isStreaming && chatState.activeConversationId === actionRequest.conversationId)
+  ) {
+    await respondJson(request.requestId, 409, {
+      ok: false,
+      code: CONVERSATION_BUSY,
+      error: CONVERSATION_BUSY_MESSAGE,
+    })
+    return
+  }
+
   const conversationMessages = chatState.messages.filter(
     (message) => message.conversationId === actionRequest.conversationId,
   )
@@ -490,58 +503,66 @@ async function handleRegenerateAnswerRequest(
     return
   }
 
-  const removedIds = new Set([actionRequest.messageId, userMessage.id])
-  useChatStore.setState((state) => ({
-    activeConversationId: actionRequest.conversationId,
-    messages: state.messages.filter((message) => !removedIds.has(message.id)),
-  }))
-
+  activeConversationIds.add(actionRequest.conversationId)
   const controller = new AbortController()
-  let doneMessage: DisplayMessage | null = null
-  let actionError: Error | null = null
-  await sendProjectChatMessage(
-    {
-      projectId: request.projectId,
-      projectPath,
-      conversationId: actionRequest.conversationId,
-      message: userMessage.content,
-      signal: controller.signal,
-    },
-    {
-      onToken: () => undefined,
-      onReferences: () => undefined,
-      onDone: (message) => {
-        doneMessage = message
-        const exists = useChatStore
-          .getState()
-          .messages.some((stateMessage) => stateMessage.id === message.id)
-        if (!exists) {
-          useChatStore.setState((state) => ({
-            messages: [...state.messages, message],
-          }))
-        }
+  activeChatControllers.set(request.requestId, controller)
+
+  const removedIds = new Set([actionRequest.messageId, userMessage.id])
+  try {
+    useChatStore.setState((state) => ({
+      activeConversationId: actionRequest.conversationId,
+      messages: state.messages.filter((message) => !removedIds.has(message.id)),
+    }))
+
+    let doneMessage: DisplayMessage | null = null
+    let actionError: Error | null = null
+    await sendProjectChatMessage(
+      {
+        projectId: request.projectId,
+        projectPath,
+        conversationId: actionRequest.conversationId,
+        message: userMessage.content,
+        signal: controller.signal,
       },
-      onError: (error) => {
-        actionError = error
+      {
+        onToken: () => undefined,
+        onReferences: () => undefined,
+        onDone: (message) => {
+          doneMessage = message
+          const exists = useChatStore
+            .getState()
+            .messages.some((stateMessage) => stateMessage.id === message.id)
+          if (!exists) {
+            useChatStore.setState((state) => ({
+              messages: [...state.messages, message],
+            }))
+          }
+        },
+        onError: (error) => {
+          actionError = error
+        },
       },
-    },
-  )
+    )
 
-  if (actionError) {
-    throw actionError
+    if (actionError) {
+      throw actionError
+    }
+
+    const messages = useChatStore
+      .getState()
+      .messages.filter((message) => message.conversationId === actionRequest.conversationId)
+      .map(toBridgeMessage)
+
+    if (!doneMessage && messages.length === 0) {
+      await respondInvalidMessageAction(request.requestId, new Error("Regenerate produced no messages."))
+      return
+    }
+
+    await respondJson(request.requestId, 200, { ok: true, messages })
+  } finally {
+    activeChatControllers.delete(request.requestId)
+    activeConversationIds.delete(actionRequest.conversationId)
   }
-
-  const messages = useChatStore
-    .getState()
-    .messages.filter((message) => message.conversationId === actionRequest.conversationId)
-    .map(toBridgeMessage)
-
-  if (!doneMessage && messages.length === 0) {
-    await respondInvalidMessageAction(request.requestId, new Error("Regenerate produced no messages."))
-    return
-  }
-
-  await respondJson(request.requestId, 200, { ok: true, messages })
 }
 
 function cleanAnswerContent(content: string, options: { trimEnd?: boolean } = {}): string {

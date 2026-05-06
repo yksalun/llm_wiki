@@ -578,6 +578,91 @@ describe("web bridge JSON requests", () => {
     })
   })
 
+  it("rejects regenerate while the same conversation has an active chat request", async () => {
+    const pending = createDeferred()
+    mocks.sendProjectChatMessage.mockReturnValue(pending.promise)
+
+    const { startWebBridgeHandler, useWikiStore, useChatStore } = await importTestModules()
+    resetStores(useWikiStore, useChatStore)
+    useWikiStore.setState({ project })
+    useChatStore.setState({
+      activeConversationId: "conv-1",
+      conversations: [{ id: "conv-1", title: "Question", createdAt: 1, updatedAt: 1 }],
+      messages: [
+        { id: "user-old", role: "user", content: "old question", timestamp: 1, conversationId: "conv-1" },
+        { id: "assistant-old", role: "assistant", content: "old answer", timestamp: 2, conversationId: "conv-1" },
+      ],
+    })
+    await startWebBridgeHandler()
+
+    await emitChat(baseRequest)
+    await emitJson({
+      requestId: "json-regenerate-busy",
+      kind: "regenerate_answer",
+      projectId: project.id,
+      conversationId: "conv-1",
+      messageId: "assistant-old",
+      body: { content: "old answer", references: [] },
+    })
+    await flushPromises()
+
+    expect(mocks.sendProjectChatMessage).toHaveBeenCalledTimes(1)
+    expect(mocks.invoke).toHaveBeenCalledWith("web_bridge_respond_json", {
+      requestId: "json-regenerate-busy",
+      status: 409,
+      body: {
+        ok: false,
+        code: "CONVERSATION_BUSY",
+        error: expect.stringContaining("正在"),
+      },
+    })
+
+    pending.resolve()
+    await pending.promise
+  })
+
+  it("aborts an in-flight regenerate request when the bridge handler stops", async () => {
+    let capturedRequest!: ChatRequest
+    const pending = createDeferred()
+    mocks.sendProjectChatMessage.mockImplementation((request: ChatRequest) => {
+      capturedRequest = request
+      return pending.promise
+    })
+
+    const { startWebBridgeHandler, stopWebBridgeHandler, useWikiStore, useChatStore } =
+      await importTestModules()
+    resetStores(useWikiStore, useChatStore)
+    useWikiStore.setState({ project })
+    useChatStore.setState({
+      activeConversationId: "conv-1",
+      conversations: [{ id: "conv-1", title: "Question", createdAt: 1, updatedAt: 1 }],
+      messages: [
+        { id: "user-old", role: "user", content: "old question", timestamp: 1, conversationId: "conv-1" },
+        { id: "assistant-old", role: "assistant", content: "old answer", timestamp: 2, conversationId: "conv-1" },
+      ],
+    })
+    await startWebBridgeHandler()
+
+    await emitJson({
+      requestId: "json-regenerate-abort",
+      kind: "regenerate_answer",
+      projectId: project.id,
+      conversationId: "conv-1",
+      messageId: "assistant-old",
+      body: { content: "old answer", references: [] },
+    })
+    await flushPromises()
+
+    expect(capturedRequest.signal?.aborted).toBe(false)
+
+    stopWebBridgeHandler()
+
+    expect(capturedRequest.signal?.aborted).toBe(true)
+
+    pending.resolve()
+    await pending.promise
+  })
+
   it("saves an answer to wiki queries and responds with the saved path", async () => {
     mocks.readFile.mockImplementation(async (path: string) => {
       if (path.endsWith("/wiki/index.md")) return "# Wiki Index\n\n## Queries\n"
