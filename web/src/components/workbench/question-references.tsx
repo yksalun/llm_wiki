@@ -209,7 +209,7 @@ function ReferenceButton({
       size="sm"
       className="h-5 w-full min-w-0 cursor-pointer justify-start truncate bg-transparent px-1 py-0.5 text-left text-[11px] font-normal leading-4 text-muted-foreground/85 hover:bg-muted/20 hover:text-foreground"
       onClick={onOpen}
-      title={reference.path}
+      title={fileName}
     >
       <span className="mr-1 shrink-0 text-muted-foreground/75">
         [{index + 1}]

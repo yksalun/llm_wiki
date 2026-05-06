@@ -527,6 +527,7 @@ describe("ProjectQuestionPanel", () => {
     expect(referenceItems[0]?.textContent).toContain("ref-1.md");
     expect(referenceItems[0]?.textContent).not.toContain("引用 1");
     expect(referenceItems[0]?.textContent).not.toContain("wiki/ref-1.md");
+    expect(referenceItems[0]?.getAttribute("title")).toBe("ref-1.md");
     expect(referenceItems[1]?.textContent).toContain("[2]");
     expect(referenceItems[1]?.textContent).toContain("ref-2.md");
     expect(referenceItems[1]?.textContent).not.toContain("wiki/ref-2.md");
