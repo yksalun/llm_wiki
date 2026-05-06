@@ -128,6 +128,108 @@ describe("/api/projects/[projectId]/question/conversations routes", () => {
     );
   });
 
+  it("POST copy action proxies message identity and payload to the desktop bridge", async () => {
+    const controller = new AbortController();
+    const request = new Request("http://localhost/api", {
+      method: "POST",
+      body: JSON.stringify({
+        content: "answer body",
+        references: [{ title: "schema.md", path: "wiki/schema.md" }],
+      }),
+      signal: controller.signal,
+    });
+    bridgeMocks.fetchDesktopBridgeJson.mockResolvedValue({ ok: true });
+
+    const { POST } = await import("../[conversationId]/messages/[messageId]/actions/copy/route");
+    const response = await POST(
+      request,
+      {
+        params: Promise.resolve({
+          projectId: "project_1",
+          conversationId: "conv_1",
+          messageId: "msg_1",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true });
+    expect(bridgeMocks.fetchDesktopBridgeJson).toHaveBeenCalledWith(
+      "/projects/project_1/conversations/conv_1/messages/msg_1/actions/copy",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          projectPath: "F:/project",
+          content: "answer body",
+          references: [{ title: "schema.md", path: "wiki/schema.md" }],
+        }),
+        signal: request.signal,
+      },
+    );
+  });
+
+  it("POST save-to-wiki action proxies to the desktop bridge", async () => {
+    const request = new Request("http://localhost/api", {
+      method: "POST",
+      body: JSON.stringify({ content: "answer body", references: [] }),
+    });
+    bridgeMocks.fetchDesktopBridgeJson.mockResolvedValue({ ok: true, savedPath: "wiki/queries/a.md" });
+
+    const { POST } = await import(
+      "../[conversationId]/messages/[messageId]/actions/save-to-wiki/route"
+    );
+    const response = await POST(
+      request,
+      {
+        params: Promise.resolve({
+          projectId: "project_1",
+          conversationId: "conv_1",
+          messageId: "msg_1",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true, savedPath: "wiki/queries/a.md" });
+    expect(bridgeMocks.fetchDesktopBridgeJson).toHaveBeenCalledWith(
+      "/projects/project_1/conversations/conv_1/messages/msg_1/actions/save-to-wiki",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("POST regenerate action proxies to the desktop bridge", async () => {
+    const request = new Request("http://localhost/api", {
+      method: "POST",
+      body: JSON.stringify({ content: "old answer", references: [] }),
+    });
+    bridgeMocks.fetchDesktopBridgeJson.mockResolvedValue({
+      messages: [{ id: "msg-new", role: "assistant", content: "new answer" }],
+    });
+
+    const { POST } = await import(
+      "../[conversationId]/messages/[messageId]/actions/regenerate/route"
+    );
+    const response = await POST(
+      request,
+      {
+        params: Promise.resolve({
+          projectId: "project_1",
+          conversationId: "conv_1",
+          messageId: "msg_old",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      messages: [{ id: "msg-new", role: "assistant", content: "new answer" }],
+    });
+    expect(bridgeMocks.fetchDesktopBridgeJson).toHaveBeenCalledWith(
+      "/projects/project_1/conversations/conv_1/messages/msg_old/actions/regenerate",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
   it.each([
     ["malformed JSON", "{"],
     ["empty message", JSON.stringify({ message: "   " })],

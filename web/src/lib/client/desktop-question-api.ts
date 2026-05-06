@@ -4,6 +4,8 @@ import { requestJson } from "@/lib/client/api";
 import type {
   DesktopBridgeConversation,
   DesktopBridgeMessage,
+  DesktopBridgeMessageActionPayload,
+  DesktopBridgeMessageActionResponse,
   DesktopBridgeReference,
   DesktopBridgeStreamEvent,
 } from "@/lib/types";
@@ -25,6 +27,8 @@ interface ApiErrorPayload {
     message?: string;
   };
 }
+
+type QuestionMessageAction = "copy" | "save-to-wiki" | "regenerate";
 
 export interface StreamQuestionMessageHandlers {
   signal?: AbortSignal;
@@ -79,6 +83,50 @@ export async function listQuestionMessages(
   return payload.messages;
 }
 
+export async function copyQuestionAnswer(
+  projectId: string,
+  conversationId: string,
+  messageId: string,
+  payload: DesktopBridgeMessageActionPayload,
+  signal?: AbortSignal,
+) {
+  return postQuestionMessageAction(projectId, conversationId, messageId, "copy", payload, signal);
+}
+
+export async function saveQuestionAnswerToWiki(
+  projectId: string,
+  conversationId: string,
+  messageId: string,
+  payload: DesktopBridgeMessageActionPayload,
+  signal?: AbortSignal,
+) {
+  return postQuestionMessageAction(
+    projectId,
+    conversationId,
+    messageId,
+    "save-to-wiki",
+    payload,
+    signal,
+  );
+}
+
+export async function regenerateQuestionAnswer(
+  projectId: string,
+  conversationId: string,
+  messageId: string,
+  payload: DesktopBridgeMessageActionPayload,
+  signal?: AbortSignal,
+) {
+  return postQuestionMessageAction(
+    projectId,
+    conversationId,
+    messageId,
+    "regenerate",
+    payload,
+    signal,
+  );
+}
+
 export async function streamQuestionMessage(
   projectId: string,
   conversationId: string,
@@ -125,6 +173,27 @@ export async function streamQuestionMessage(
 
   buffer += decoder.decode();
   consumeSseBuffer(buffer, handlers, true);
+}
+
+async function postQuestionMessageAction(
+  projectId: string,
+  conversationId: string,
+  messageId: string,
+  action: QuestionMessageAction,
+  payload: DesktopBridgeMessageActionPayload,
+  signal?: AbortSignal,
+) {
+  return requestJson<DesktopBridgeMessageActionResponse>(
+    `/api/projects/${encodeURIComponent(projectId)}/question/conversations/${encodeURIComponent(
+      conversationId,
+    )}/messages/${encodeURIComponent(messageId)}/actions/${action}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal,
+    },
+  );
 }
 
 export function parseSseBlock(block: string): DesktopBridgeStreamEvent | null {

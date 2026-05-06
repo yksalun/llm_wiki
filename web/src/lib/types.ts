@@ -105,6 +105,18 @@ export interface DesktopBridgeMessage {
   references?: DesktopBridgeReference[];
 }
 
+export interface DesktopBridgeMessageActionPayload {
+  content: string;
+  references: DesktopBridgeReference[];
+}
+
+export interface DesktopBridgeMessageActionResponse {
+  ok?: boolean;
+  message?: DesktopBridgeMessage;
+  messages?: DesktopBridgeMessage[];
+  savedPath?: string;
+}
+
 export type DesktopBridgeStreamEvent =
   | { type: "token"; text: string }
   | { type: "references"; references: DesktopBridgeReference[] }
