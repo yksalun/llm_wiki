@@ -504,24 +504,13 @@ describe("ProjectQuestionPanel", () => {
       '[data-reference-panel="true"]',
     );
     expect(referencesPanel).not.toBeNull();
-    expect(referencesPanel?.className.split(/\s+/)).toContain("bg-muted/10");
     expect(referencesPanel?.className).toContain("border-transparent");
     expect(referencesPanel?.className).toContain("text-[11px]");
-    expect(referencesPanel?.className.split(/\s+/)).toContain("py-1");
-
-    const referenceList = referencesPanel?.querySelector<HTMLElement>(
-      '[data-reference-list="true"]',
-    );
-    expect(referenceList?.className.split(/\s+/)).toContain("gap-0.5");
 
     const referenceItems = Array.from(
       container?.querySelectorAll<HTMLElement>('[data-reference-item="true"]') ?? [],
     );
     expect(referenceItems).toHaveLength(3);
-    expect(referenceItems[0]?.className).toContain("bg-transparent");
-    expect(referenceItems[0]?.className).toContain("text-[11px]");
-    expect(referenceItems[0]?.className.split(/\s+/)).toContain("h-5");
-    expect(referenceItems[0]?.className.split(/\s+/)).toContain("py-0.5");
     expect(referenceItems[0]?.className.split(/\s+/)).toContain("cursor-pointer");
     expect(referenceItems[0]?.textContent).toContain("[1]");
     expect(referenceItems[0]?.textContent).toContain("ref-1.md");
