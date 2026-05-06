@@ -508,6 +508,9 @@ async function handleRegenerateAnswerRequest(
   activeChatControllers.set(request.requestId, controller)
 
   const removedIds = new Set([actionRequest.messageId, userMessage.id])
+  const previousMessages = useChatStore.getState().messages
+  const previousConversations = useChatStore.getState().conversations
+  let succeeded = false
   try {
     useChatStore.setState((state) => ({
       activeConversationId: actionRequest.conversationId,
@@ -559,7 +562,14 @@ async function handleRegenerateAnswerRequest(
     }
 
     await respondJson(request.requestId, 200, { ok: true, messages })
+    succeeded = true
   } finally {
+    if (!succeeded) {
+      useChatStore.setState({
+        messages: previousMessages,
+        conversations: previousConversations,
+      })
+    }
     activeChatControllers.delete(request.requestId)
     activeConversationIds.delete(actionRequest.conversationId)
   }

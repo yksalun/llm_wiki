@@ -624,6 +624,10 @@ describe("web bridge JSON requests", () => {
   it("aborts an in-flight regenerate request when the bridge handler stops", async () => {
     let capturedRequest!: ChatRequest
     const pending = createDeferred()
+    const originalMessages = [
+      { id: "user-old", role: "user" as const, content: "old question", timestamp: 1, conversationId: "conv-1" },
+      { id: "assistant-old", role: "assistant" as const, content: "old answer", timestamp: 2, conversationId: "conv-1" },
+    ]
     mocks.sendProjectChatMessage.mockImplementation((request: ChatRequest) => {
       capturedRequest = request
       return pending.promise
@@ -636,10 +640,7 @@ describe("web bridge JSON requests", () => {
     useChatStore.setState({
       activeConversationId: "conv-1",
       conversations: [{ id: "conv-1", title: "Question", createdAt: 1, updatedAt: 1 }],
-      messages: [
-        { id: "user-old", role: "user", content: "old question", timestamp: 1, conversationId: "conv-1" },
-        { id: "assistant-old", role: "assistant", content: "old answer", timestamp: 2, conversationId: "conv-1" },
-      ],
+      messages: originalMessages,
     })
     await startWebBridgeHandler()
 
@@ -661,6 +662,69 @@ describe("web bridge JSON requests", () => {
 
     pending.resolve()
     await pending.promise
+    await flushPromises()
+
+    expect(useChatStore.getState().messages).toEqual(originalMessages)
+  })
+
+  it("restores original messages and responds error when regenerate fails after mutation", async () => {
+    const originalMessages = [
+      { id: "user-old", role: "user" as const, content: "old question", timestamp: 1, conversationId: "conv-1" },
+      { id: "assistant-old", role: "assistant" as const, content: "old answer", timestamp: 2, conversationId: "conv-1" },
+    ]
+    mocks.sendProjectChatMessage.mockImplementation(async (request: ChatRequest) => {
+      useChatStore.setState((state) => ({
+        messages: [
+          ...state.messages,
+          {
+            id: "user-retry",
+            role: "user",
+            content: request.message,
+            timestamp: 3,
+            conversationId: request.conversationId,
+          },
+          {
+            id: "assistant-error",
+            role: "assistant",
+            content: "Error: regenerate failed",
+            timestamp: 4,
+            conversationId: request.conversationId,
+          },
+        ],
+      }))
+      throw new Error("regenerate failed")
+    })
+
+    const { startWebBridgeHandler, useWikiStore, useChatStore } = await importTestModules()
+    resetStores(useWikiStore, useChatStore)
+    useWikiStore.setState({ project })
+    useChatStore.setState({
+      activeConversationId: "conv-1",
+      conversations: [{ id: "conv-1", title: "Question", createdAt: 1, updatedAt: 1 }],
+      messages: originalMessages,
+    })
+    await startWebBridgeHandler()
+
+    await emitJson({
+      requestId: "json-regenerate-error",
+      kind: "regenerate_answer",
+      projectId: project.id,
+      conversationId: "conv-1",
+      messageId: "assistant-old",
+      body: { content: "old answer", references: [] },
+    })
+    await flushPromises()
+
+    expect(useChatStore.getState().messages).toEqual(originalMessages)
+    expect(mocks.invoke).toHaveBeenCalledWith("web_bridge_respond_json", {
+      requestId: "json-regenerate-error",
+      status: 500,
+      body: {
+        ok: false,
+        code: "INTERNAL_ERROR",
+        error: "regenerate failed",
+      },
+    })
   })
 
   it("saves an answer to wiki queries and responds with the saved path", async () => {
