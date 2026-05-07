@@ -1,12 +1,16 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { BookOpen, Check } from "lucide-react";
+import { BookOpen } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { ProjectSummary } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 export interface KnowledgeBaseSelectorProps {
   projects: ProjectSummary[];
@@ -26,6 +30,10 @@ export function KnowledgeBaseSelector({
   onSelectProject,
 }: KnowledgeBaseSelectorProps) {
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
+  const selectItems = projects.map((project) => ({
+    label: project.name,
+    value: project.id,
+  }));
 
   return (
     <div
@@ -42,37 +50,30 @@ export function KnowledgeBaseSelector({
           {emptyAction}
         </div>
       ) : (
-        <ScrollArea className="max-h-44">
-          <div className="space-y-1 pr-2">
-            {projects.map((project) => {
-              const selected = project.id === selectedProject?.id;
-
-              return (
-                <Button
-                  key={project.id}
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  aria-current={selected ? "true" : undefined}
-                  disabled={disabled}
-                  className={cn(
-                    "h-auto w-full justify-start gap-2 whitespace-normal px-2 py-2 text-left",
-                    selected
-                      ? "bg-[color:var(--paper-muted)] text-[color:var(--ink-strong)]"
-                      : "text-muted-foreground",
-                  )}
-                  onClick={() => onSelectProject(project.id)}
-                >
-                  <Check
-                    className={cn("size-3.5", selected ? "opacity-100" : "opacity-0")}
-                    aria-hidden="true"
-                  />
-                  <span className="min-w-0 flex-1 truncate">{project.name}</span>
-                </Button>
-              );
-            })}
-          </div>
-        </ScrollArea>
+        <Select
+          items={selectItems}
+          value={selectedProject?.id ?? null}
+          disabled={disabled}
+          onValueChange={(value) => {
+            if (typeof value === "string") {
+              onSelectProject(value);
+            }
+          }}
+        >
+          <SelectTrigger
+            aria-label="选择知识库"
+            className="w-full border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] text-[color:var(--ink-strong)]"
+          >
+            <SelectValue placeholder="选择知识库" />
+          </SelectTrigger>
+          <SelectContent align="start" className="max-h-56">
+            {projects.map((project) => (
+              <SelectItem key={project.id} value={project.id}>
+                {project.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       )}
     </div>
   );

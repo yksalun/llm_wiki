@@ -28,20 +28,20 @@ afterEach(() => {
 });
 
 describe("KnowledgeBaseSelector", () => {
-  it("renders projects and marks the selected project", () => {
+  it("renders projects through a shadcn select trigger", () => {
     renderSelector({ selectedProjectId: "project-a" });
 
-    expect(container?.textContent).toContain("Alpha");
-    expect(container?.textContent).toContain("Beta");
-    expect(requiredButton("Alpha").getAttribute("aria-current")).toBe("true");
-    expect(requiredButton("Beta").getAttribute("aria-current")).toBeNull();
+    const trigger = requiredSelectTrigger();
+    expect(trigger.textContent).toContain("Alpha");
+    expect(container?.querySelectorAll('[data-slot="select-trigger"]')).toHaveLength(1);
+    expect(container?.textContent).not.toContain("Beta");
   });
 
-  it("calls onSelectProject with the chosen project id", () => {
+  it("calls onSelectProject with the chosen project id from the dropdown", async () => {
     const onSelectProject = vi.fn();
 
     renderSelector({ onSelectProject });
-    clickButton("Beta");
+    await chooseSelectItem("Beta");
 
     expect(onSelectProject).toHaveBeenCalledWith("project-b");
   });
@@ -80,22 +80,45 @@ function renderSelector({
   });
 }
 
-function clickButton(name: string) {
-  act(() => {
-    requiredButton(name).click();
+async function chooseSelectItem(name: string) {
+  await act(async () => {
+    requiredSelectTrigger().click();
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    pressSelectItem(requiredSelectItem(name));
+    await Promise.resolve();
   });
 }
 
-function requiredButton(name: string) {
-  const button = Array.from(container?.querySelectorAll("button") ?? []).find(
+function requiredSelectTrigger() {
+  const trigger = container?.querySelector<HTMLButtonElement>('[data-slot="select-trigger"]');
+
+  if (!trigger) {
+    throw new Error("Expected knowledge base select trigger.");
+  }
+
+  return trigger;
+}
+
+function requiredSelectItem(name: string) {
+  const item = Array.from(document.body.querySelectorAll<HTMLElement>('[data-slot="select-item"]')).find(
     (candidate) => candidate.textContent?.trim() === name,
   );
 
-  if (!button) {
-    throw new Error(`Expected button named ${name}.`);
+  if (!item) {
+    throw new Error(`Expected select item named ${name}.`);
   }
 
-  return button;
+  return item;
+}
+
+function pressSelectItem(item: HTMLElement) {
+  const pointerDown = new Event("pointerdown", { bubbles: true });
+  Object.defineProperty(pointerDown, "pointerType", { value: "touch" });
+  item.dispatchEvent(pointerDown);
+  item.click();
 }
 
 function createProject(overrides: Partial<ProjectSummary>): ProjectSummary {

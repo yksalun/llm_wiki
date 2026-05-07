@@ -74,6 +74,19 @@ describe("ChatHomePage", () => {
     expect(container?.textContent).toContain("暂无知识库，请先打开知识库配置添加项目。");
   });
 
+  it("centers the home chat in a narrow Gemini-style column", async () => {
+    vi.mocked(fetchProjects).mockResolvedValue({
+      projects: [],
+      warnings: [],
+    });
+
+    await renderChatHomePage();
+
+    const chatExperience = container?.querySelector<HTMLElement>('[data-chat-experience="home"]');
+    expect(chatExperience?.className).toContain("max-w-3xl");
+    expect(chatExperience?.parentElement?.className).toContain("justify-center");
+  });
+
   it("selects a knowledge base and sends through shared streaming API", async () => {
     let handlers: StreamQuestionMessageHandlers | undefined;
     vi.mocked(fetchProjects).mockResolvedValue({
@@ -102,7 +115,7 @@ describe("ChatHomePage", () => {
     );
 
     await renderChatHomePage();
-    await clickButton("Alpha");
+    await selectKnowledgeBase("Alpha");
     await waitForText("询问这个知识库");
     updateQuestion("What is inside?");
     await clickButton("发送");
@@ -226,6 +239,20 @@ async function clickButton(name: string) {
   });
 }
 
+async function selectKnowledgeBase(name: string) {
+  await waitForSelectTrigger();
+
+  await act(async () => {
+    requiredSelectTrigger().click();
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    pressSelectItem(requiredSelectItem(name));
+    await Promise.resolve();
+  });
+}
+
 function requiredButton(name: string) {
   const button = Array.from(container?.querySelectorAll("button") ?? []).find(
     (candidate) => candidate.textContent?.trim() === name,
@@ -236,6 +263,51 @@ function requiredButton(name: string) {
   }
 
   return button;
+}
+
+function requiredSelectTrigger() {
+  const trigger = container?.querySelector<HTMLButtonElement>('[data-slot="select-trigger"]');
+
+  if (!trigger) {
+    throw new Error("Expected knowledge base select trigger.");
+  }
+
+  return trigger;
+}
+
+function requiredSelectItem(name: string) {
+  const item = Array.from(document.body.querySelectorAll<HTMLElement>('[data-slot="select-item"]')).find(
+    (candidate) => candidate.textContent?.trim() === name,
+  );
+
+  if (!item) {
+    throw new Error(`Expected select item named ${name}.`);
+  }
+
+  return item;
+}
+
+function pressSelectItem(item: HTMLElement) {
+  const pointerDown = new Event("pointerdown", { bubbles: true });
+  Object.defineProperty(pointerDown, "pointerType", { value: "touch" });
+  item.dispatchEvent(pointerDown);
+  item.click();
+}
+
+async function waitForSelectTrigger() {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < 2000) {
+    if (container?.querySelector('[data-slot="select-trigger"]')) {
+      return;
+    }
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
+
+  throw new Error("Expected knowledge base select trigger.");
 }
 
 async function waitForText(text: string) {

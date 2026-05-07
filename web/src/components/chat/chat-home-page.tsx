@@ -213,7 +213,7 @@ export function ChatHomePage() {
           <ThemeToggle />
         </header>
 
-        <div className="flex min-h-0 min-w-0 w-full flex-1 p-3 md:p-5">
+        <div className="flex min-h-0 min-w-0 w-full flex-1 justify-center p-3 md:p-5">
           <ChatExperience
             key={selectedProject?.id ?? "no-project"}
             projectId={selectedProject?.id ?? null}
@@ -222,7 +222,7 @@ export function ChatHomePage() {
             showSessionList={false}
             disabledMessage={getComposerDisabledMessage(projectsState, projects.length)}
             composerTopSlot={selector}
-            className="flex min-h-0 min-w-0 flex-1"
+            className="flex min-h-0 min-w-0 w-full max-w-3xl flex-1"
             minHeightClassName="min-h-[calc(100vh-8rem)]"
             onConversationChange={handleConversationChange}
           />
