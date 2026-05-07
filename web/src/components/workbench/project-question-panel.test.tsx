@@ -125,8 +125,8 @@ describe("ProjectQuestionPanel", () => {
     await waitForText("schema 在 wiki/schema.md。");
 
     expect(container?.textContent).toContain("历史会话");
-    expect(container?.textContent).toContain("新会话");
-    expect(container?.textContent).toContain("项目问答");
+    expect(container?.textContent).toContain("New chat");
+    expect(container?.textContent).toContain("Project Ask");
     expect(apiMocks.listQuestionConversations).toHaveBeenCalledWith(
       "project/a",
       expect.any(AbortSignal),
@@ -149,7 +149,7 @@ describe("ProjectQuestionPanel", () => {
     renderProjectQuestionPanel();
     await waitForReady();
 
-    expect(container?.querySelectorAll('textarea[aria-label="项目问答输入"]')).toHaveLength(1);
+    expect(container?.querySelectorAll('textarea[aria-label="Project question input"]')).toHaveLength(1);
     expect(container?.querySelectorAll("textarea")).toHaveLength(1);
   });
 
@@ -311,7 +311,7 @@ describe("ProjectQuestionPanel", () => {
     await waitForReady();
     updateQuestion("Where is the schema?");
 
-    await clickButton("发送");
+    await clickButton("Send");
     await waitForText("Where is the schema?");
     await waitForText("思考中");
 
@@ -351,8 +351,8 @@ describe("ProjectQuestionPanel", () => {
     await waitForReady();
     updateQuestion("How should we deploy this?");
 
-    await clickButton("发送");
-    await waitForText("当前会话：How should we deploy this?");
+    await clickButton("Send");
+    await waitForText("Current conversation: How should we deploy this?");
 
     expect(requiredButton("How should we deploy this?")).not.toBeNull();
 
@@ -396,7 +396,7 @@ describe("ProjectQuestionPanel", () => {
     await waitForText("Loaded answer.");
 
     expect(requiredButton("Loaded question title?")).not.toBeNull();
-    expect(container?.textContent).toContain("当前会话：Loaded question title?");
+    expect(container?.textContent).toContain("Current conversation: Loaded question title?");
   });
 
   it("reveals a streamed assistant chunk incrementally instead of displaying it all at once", async () => {
@@ -416,7 +416,7 @@ describe("ProjectQuestionPanel", () => {
     await waitForReady();
 
     updateQuestion("Stream this smoothly.");
-    await clickButton("发送");
+    await clickButton("Send");
     await waitForText("思考中");
     vi.useFakeTimers();
     try {
@@ -616,7 +616,7 @@ describe("ProjectQuestionPanel", () => {
     renderProjectQuestionPanel();
     await waitForText("初始历史");
 
-    await clickButton("新会话");
+    await clickButton("New chat");
     await waitForText("第二段历史");
 
     expect(apiMocks.createQuestionConversation).toHaveBeenCalledTimes(2);
@@ -656,7 +656,7 @@ describe("ProjectQuestionPanel", () => {
     await waitForReady();
     updateQuestion("schema 在哪里？");
 
-    await clickButton("发送");
+    await clickButton("Send");
     await waitForText("schema 在这里");
 
     expect(apiMocks.streamQuestionMessage).toHaveBeenCalledWith(
@@ -707,7 +707,7 @@ describe("ProjectQuestionPanel", () => {
     renderProjectQuestionPanel({ projectId: "project-wrapper" });
     await waitForReady();
     updateQuestion("Wrapper question?");
-    await clickButton("发送");
+    await clickButton("Send");
 
     expect(apiMocks.streamQuestionMessage).toHaveBeenCalledWith(
       "project-wrapper",
@@ -715,6 +715,18 @@ describe("ProjectQuestionPanel", () => {
       "Wrapper question?",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
+  });
+
+  it("renders the shared chat experience container in project mode", async () => {
+    const conversation = createConversation({ id: "conv-shared", title: "shared" });
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([]);
+
+    renderProjectQuestionPanel();
+    await waitForReady();
+
+    expect(container?.querySelector('[data-chat-experience="project"]')).not.toBeNull();
+    expect(container?.querySelector('[data-chat-session-list="true"]')).not.toBeNull();
   });
 
   it("切换会话时清空 composer 草稿，避免发送到新会话", async () => {
@@ -742,7 +754,7 @@ describe("ProjectQuestionPanel", () => {
 
     expect(questionTextarea().value).toBe("");
 
-    await clickButton("发送");
+    await clickButton("Send");
 
     expect(apiMocks.streamQuestionMessage).not.toHaveBeenCalled();
   });
@@ -759,9 +771,9 @@ describe("ProjectQuestionPanel", () => {
     await waitForReady();
     updateQuestion("加载时保留的草稿");
 
-    await clickButton("新会话");
-    await waitForText("正在加载项目问答");
-    await clickButton("发送");
+    await clickButton("New chat");
+    await waitForText("Loading project chat");
+    await clickButton("Send");
 
     expect(questionTextarea().value).toBe("加载时保留的草稿");
     expect(apiMocks.streamQuestionMessage).not.toHaveBeenCalled();
@@ -793,7 +805,7 @@ describe("ProjectQuestionPanel", () => {
     const { rerender } = renderProjectQuestionPanel({ projectId: "project-a" });
     await waitForReady();
     updateQuestion("项目 A 问题");
-    await clickButton("发送");
+    await clickButton("Send");
 
     const staleHandlers = requireStreamHandlers(firstHandlers);
 
@@ -1068,7 +1080,7 @@ function updateQuestion(value: string) {
 
 function questionTextarea() {
   const textarea = container?.querySelector<HTMLTextAreaElement>(
-    'textarea[aria-label="项目问答输入"]',
+    'textarea[aria-label="Project question input"]',
   );
 
   if (!textarea) {
