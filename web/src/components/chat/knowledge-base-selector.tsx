@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ProjectSummary } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 export interface KnowledgeBaseSelectorProps {
   projects: ProjectSummary[];
@@ -34,17 +35,27 @@ export function KnowledgeBaseSelector({
     label: project.name,
     value: project.id,
   }));
+  const hasProjects = projects.length > 0;
 
   return (
     <div
       data-knowledge-base-selector="true"
-      className="rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)] p-2"
+      className={cn(
+        hasProjects
+          ? "inline-flex max-w-full flex-wrap items-center gap-2"
+          : "rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)] p-2",
+      )}
     >
-      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+      <div
+        className={cn(
+          "flex items-center gap-2 text-xs font-medium text-muted-foreground",
+          hasProjects ? "shrink-0" : "mb-2",
+        )}
+      >
         <BookOpen className="size-3.5" aria-hidden="true" />
         知识库
       </div>
-      {projects.length === 0 ? (
+      {!hasProjects ? (
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">{emptyMessage}</p>
           {emptyAction}
@@ -62,11 +73,11 @@ export function KnowledgeBaseSelector({
         >
           <SelectTrigger
             aria-label="选择知识库"
-            className="w-full border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] text-[color:var(--ink-strong)]"
+            className="w-64 max-w-[calc(100vw-5rem)] border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] text-[color:var(--ink-strong)]"
           >
             <SelectValue placeholder="选择知识库" />
           </SelectTrigger>
-          <SelectContent align="start" className="max-h-56">
+          <SelectContent align="start" className="max-h-56 min-w-64">
             {projects.map((project) => (
               <SelectItem key={project.id} value={project.id}>
                 {project.name}

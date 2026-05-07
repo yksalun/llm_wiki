@@ -74,7 +74,7 @@ describe("ChatHomePage", () => {
     expect(container?.textContent).toContain("暂无知识库，请先打开知识库配置添加项目。");
   });
 
-  it("centers the home chat in a narrow Gemini-style column", async () => {
+  it("renders the home chat as a transparent Gemini-style column with a bottom composer", async () => {
     vi.mocked(fetchProjects).mockResolvedValue({
       projects: [],
       warnings: [],
@@ -84,7 +84,15 @@ describe("ChatHomePage", () => {
 
     const chatExperience = container?.querySelector<HTMLElement>('[data-chat-experience="home"]');
     expect(chatExperience?.className).toContain("max-w-3xl");
+    expect(chatExperience?.className).toContain("h-full");
+    expect(chatExperience?.className).toContain("bg-transparent");
+    expect(chatExperience?.className).not.toContain("bg-[color:var(--paper-panel)]");
     expect(chatExperience?.parentElement?.className).toContain("justify-center");
+    expect(chatExperience?.parentElement?.className).toContain("h-[calc(100vh-3.75rem)]");
+
+    const composer = container?.querySelector<HTMLElement>('[data-chat-composer="home"]');
+    expect(composer?.className).toContain("sticky");
+    expect(composer?.className).toContain("bottom-0");
   });
 
   it("selects a knowledge base and sends through shared streaming API", async () => {

@@ -39,25 +39,53 @@ export function ChatExperience({
   minHeightClassName = "min-h-[28rem]",
   onConversationChange,
 }: ChatExperienceProps) {
+  const isHomeMode = mode === "home";
+
   if (!projectId) {
     return (
       <section
         data-chat-experience={mode}
         className={cn(
-          "flex min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]",
+          isHomeMode
+            ? "flex min-w-0 max-w-full flex-1 flex-col overflow-hidden bg-transparent"
+            : "flex min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]",
           minHeightClassName,
           className,
         )}
       >
-        <div className="flex min-w-0 w-full flex-1 items-center justify-center p-4">
-          <div className="min-w-0 w-full max-w-full rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-4 md:max-w-3xl">
+        <div
+          className={cn(
+            "flex min-w-0 w-full flex-1",
+            isHomeMode ? "flex-col justify-end" : "items-center justify-center p-4",
+          )}
+        >
+          <div
+            data-chat-composer={mode}
+            className={cn(
+              "min-w-0 w-full max-w-full",
+              isHomeMode
+                ? "sticky bottom-0 z-10 mx-auto max-w-3xl bg-[color:var(--paper-base)]/95 px-0 pb-4 pt-3 backdrop-blur"
+                : "rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-4 md:max-w-3xl",
+            )}
+          >
+            <div
+              className={cn(
+                isHomeMode &&
+                  "rounded-2xl border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)] p-3 shadow-lg shadow-black/10",
+              )}
+            >
             {composerTopSlot}
             <div className={cn("mt-3", !composerTopSlot && "mt-0")}>
               <textarea
                 aria-label="知识库问答输入"
                 placeholder="询问这个知识库"
                 disabled
-                className="min-h-20 w-full resize-none rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)] px-3 py-2 text-sm leading-6 text-[color:var(--ink-strong)] outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                className={cn(
+                  "min-h-20 w-full resize-none text-sm leading-6 text-[color:var(--ink-strong)] outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60",
+                  isHomeMode
+                    ? "rounded-md border-0 bg-transparent px-1 py-1 focus-visible:ring-0"
+                    : "rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)] px-3 py-2",
+                )}
               />
               <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
                 <p className="min-w-0 flex-1 break-words text-xs text-muted-foreground">{disabledMessage}</p>
@@ -66,6 +94,7 @@ export function ChatExperience({
                   发送
                 </Button>
               </div>
+            </div>
             </div>
           </div>
         </div>
@@ -103,6 +132,7 @@ function ActiveChatExperience({
   minHeightClassName = "min-h-[28rem]",
   onConversationChange,
 }: ActiveChatExperienceProps) {
+  const isHomeMode = mode === "home";
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const isComposingRef = useRef(false);
   const session = useQuestionSession({ projectId, onConversationChange });
@@ -150,11 +180,14 @@ function ActiveChatExperience({
   const chatPanel = (
     <div
       className={cn(
-        "flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]",
+        isHomeMode
+          ? "flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden bg-transparent"
+          : "flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]",
         minHeightClassName,
       )}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--paper-border)] px-4 py-3">
+      {!isHomeMode ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--paper-border)] px-4 py-3">
         <div className="flex items-center gap-2">
           <MessageSquare className="size-4 text-muted-foreground" aria-hidden="true" />
           <h2 className="text-sm font-medium text-[color:var(--ink-strong)]">{title}</h2>
@@ -164,10 +197,17 @@ function ActiveChatExperience({
             {subtitle ?? `当前会话：${session.activeConversation.title}`}
           </p>
         ) : null}
-      </div>
+        </div>
+      ) : null}
 
-      <div ref={viewportRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-        {session.renderedMessages.length === 0 && session.status !== "loading" ? (
+      <div
+        ref={viewportRef}
+        className={cn(
+          "min-h-0 flex-1 space-y-3 overflow-y-auto",
+          isHomeMode ? "mx-auto w-full max-w-3xl px-0 py-4 pb-6" : "p-4",
+        )}
+      >
+        {!isHomeMode && session.renderedMessages.length === 0 && session.status !== "loading" ? (
           <p className="rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 text-sm text-muted-foreground">
             暂无消息
           </p>
@@ -200,7 +240,12 @@ function ActiveChatExperience({
       ) : null}
 
       <form
-        className="border-t border-[color:var(--paper-border)] p-3"
+        data-chat-composer={mode}
+        className={cn(
+          isHomeMode
+            ? "sticky bottom-0 z-10 mx-auto w-full max-w-3xl bg-[color:var(--paper-base)]/95 px-0 pb-4 pt-3 backdrop-blur"
+            : "border-t border-[color:var(--paper-border)] p-3",
+        )}
         onSubmit={(event) => {
           event.preventDefault();
           if (session.canSendMessage) {
@@ -208,6 +253,12 @@ function ActiveChatExperience({
           }
         }}
       >
+        <div
+          className={cn(
+            isHomeMode &&
+              "rounded-2xl border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)] p-3 shadow-lg shadow-black/10",
+          )}
+        >
         {composerTopSlot ? <div className="mb-2">{composerTopSlot}</div> : null}
         <textarea
           aria-label="知识库问答输入"
@@ -223,7 +274,12 @@ function ActiveChatExperience({
             isComposingRef.current = false;
             session.setDraft(event.currentTarget.value);
           }}
-          className="min-h-20 w-full resize-none rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 text-sm leading-6 text-[color:var(--ink-strong)] outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+          className={cn(
+            "min-h-20 w-full resize-none text-sm leading-6 text-[color:var(--ink-strong)] outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60",
+            isHomeMode
+              ? "rounded-md border-0 bg-transparent px-1 py-1 focus-visible:ring-0"
+              : "rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 focus-visible:ring-2 focus-visible:ring-ring",
+          )}
         />
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <p className="min-w-0 flex-1 break-words text-xs text-muted-foreground">
@@ -245,6 +301,7 @@ function ActiveChatExperience({
               发送
             </Button>
           </div>
+        </div>
         </div>
       </form>
     </div>

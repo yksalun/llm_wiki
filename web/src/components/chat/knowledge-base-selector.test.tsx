@@ -33,6 +33,8 @@ describe("KnowledgeBaseSelector", () => {
 
     const trigger = requiredSelectTrigger();
     expect(trigger.textContent).toContain("Alpha");
+    expect(trigger.className).toContain("w-64");
+    expect(trigger.className).not.toContain("w-full");
     expect(container?.querySelectorAll('[data-slot="select-trigger"]')).toHaveLength(1);
     expect(container?.textContent).not.toContain("Beta");
   });
