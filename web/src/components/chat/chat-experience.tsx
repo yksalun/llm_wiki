@@ -33,7 +33,7 @@ export function ChatExperience({
   title,
   subtitle,
   showSessionList,
-  disabledMessage = "Choose a knowledge base before asking.",
+  disabledMessage = "请先选择知识库再提问。",
   composerTopSlot,
   className,
   minHeightClassName = "min-h-[28rem]",
@@ -54,8 +54,8 @@ export function ChatExperience({
             {composerTopSlot}
             <div className={cn("mt-3", !composerTopSlot && "mt-0")}>
               <textarea
-                aria-label="Project question input"
-                placeholder="Ask this knowledge base"
+                aria-label="知识库问答输入"
+                placeholder="询问这个知识库"
                 disabled
                 className="min-h-20 w-full resize-none rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)] px-3 py-2 text-sm leading-6 text-[color:var(--ink-strong)] outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
               />
@@ -63,7 +63,7 @@ export function ChatExperience({
                 <p className="min-w-0 flex-1 break-words text-xs text-muted-foreground">{disabledMessage}</p>
                 <Button type="button" size="sm" disabled className="shrink-0">
                   <MessageSquare className="size-4" aria-hidden="true" />
-                  Send
+                  发送
                 </Button>
               </div>
             </div>
@@ -161,7 +161,7 @@ function ActiveChatExperience({
         </div>
         {session.activeConversation ? (
           <p className="text-xs text-muted-foreground">
-            {subtitle ?? `Current conversation: ${session.activeConversation.title}`}
+            {subtitle ?? `当前会话：${session.activeConversation.title}`}
           </p>
         ) : null}
       </div>
@@ -169,7 +169,7 @@ function ActiveChatExperience({
       <div ref={viewportRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
         {session.renderedMessages.length === 0 && session.status !== "loading" ? (
           <p className="rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 text-sm text-muted-foreground">
-            No messages yet
+            暂无消息
           </p>
         ) : null}
         {session.renderedMessages.map((message, index) => (
@@ -187,14 +187,14 @@ function ActiveChatExperience({
       {session.status === "loading" ? (
         <div className="mx-4 mb-3 flex items-center gap-2 rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-          Loading project chat
+          正在加载项目问答
         </div>
       ) : null}
 
       {session.errorMessage ? (
         <Alert variant="destructive" className="mx-4 mb-3 border-destructive/20 bg-destructive/5">
           <MessageSquare className="size-4" />
-          <AlertTitle>Chat failed</AlertTitle>
+          <AlertTitle>问答失败</AlertTitle>
           <AlertDescription>{session.errorMessage}</AlertDescription>
         </Alert>
       ) : null}
@@ -210,8 +210,8 @@ function ActiveChatExperience({
       >
         {composerTopSlot ? <div className="mb-2">{composerTopSlot}</div> : null}
         <textarea
-          aria-label="Project question input"
-          placeholder="Ask this knowledge base"
+          aria-label="知识库问答输入"
+          placeholder="询问这个知识库"
           value={session.draft}
           disabled={session.status === "loading"}
           onChange={(event) => session.setDraft(event.target.value)}
@@ -227,13 +227,13 @@ function ActiveChatExperience({
         />
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <p className="min-w-0 flex-1 break-words text-xs text-muted-foreground">
-            {session.isStreaming ? "Generating answer" : "Answers use the selected knowledge base."}
+            {session.isStreaming ? "正在生成回答" : "回答将基于所选知识库生成。"}
           </p>
           <div className="flex items-center gap-2">
             {session.isStreaming ? (
               <Button type="button" variant="outline" size="sm" onClick={session.handleStop}>
                 <StopCircle className="size-4" aria-hidden="true" />
-                Stop
+                停止
               </Button>
             ) : null}
             <Button type="submit" size="sm" disabled={!session.canSendMessage}>
@@ -242,7 +242,7 @@ function ActiveChatExperience({
               ) : (
                 <MessageSquare className="size-4" aria-hidden="true" />
               )}
-              Send
+              发送
             </Button>
           </div>
         </div>
@@ -255,12 +255,12 @@ function ActiveChatExperience({
       {showSessionList ? (
         <div className="grid gap-3 lg:grid-cols-[17rem_minmax(0,1fr)]">
           <ChatSessionList
-            title="History"
+            title="历史对话"
             conversations={session.conversations}
             activeConversationId={session.activeConversationId}
             disabled={session.isStreaming || session.status === "loading"}
-            newConversationLabel="New chat"
-            emptyLabel="No conversations"
+            newConversationLabel="新会话"
+            emptyLabel="暂无对话"
             onNewConversation={() => {
               void session.handleNewConversation();
             }}

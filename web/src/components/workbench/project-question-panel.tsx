@@ -14,7 +14,7 @@ export function ProjectQuestionPanel({ projectId }: ProjectQuestionPanelProps) {
         key={projectId}
         projectId={projectId}
         mode="project"
-        title="Project Ask"
+        title="项目问答"
         showSessionList
       />
     </section>

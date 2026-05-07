@@ -49,7 +49,7 @@ describe("KnowledgeBaseSelector", () => {
   it("shows an empty state when there are no projects", () => {
     renderSelector({ projects: [] });
 
-    expect(container?.textContent).toContain("No knowledge bases found.");
+    expect(container?.textContent).toContain("暂无知识库");
   });
 });
 

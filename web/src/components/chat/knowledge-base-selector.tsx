@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { BookOpen, Check } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,8 @@ export interface KnowledgeBaseSelectorProps {
   projects: ProjectSummary[];
   selectedProjectId: string | null;
   disabled?: boolean;
+  emptyMessage?: string;
+  emptyAction?: ReactNode;
   onSelectProject: (projectId: string) => void;
 }
 
@@ -18,6 +21,8 @@ export function KnowledgeBaseSelector({
   projects,
   selectedProjectId,
   disabled = false,
+  emptyMessage = "暂无知识库",
+  emptyAction,
   onSelectProject,
 }: KnowledgeBaseSelectorProps) {
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
@@ -29,10 +34,13 @@ export function KnowledgeBaseSelector({
     >
       <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
         <BookOpen className="size-3.5" aria-hidden="true" />
-        Knowledge base
+        知识库
       </div>
       {projects.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No knowledge bases found.</p>
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+          {emptyAction}
+        </div>
       ) : (
         <ScrollArea className="max-h-44">
           <div className="space-y-1 pr-2">

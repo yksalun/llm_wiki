@@ -56,7 +56,7 @@ export function ChatHomePage() {
         if (!controller.signal.aborted) {
           setProjectsState({
             status: "error",
-            message: error instanceof Error ? error.message : "Unable to load projects.",
+            message: error instanceof Error ? error.message : "无法加载项目列表。",
           });
         }
       });
@@ -99,17 +99,34 @@ export function ChatHomePage() {
         projectId: event.projectId,
         projectName: project?.name ?? event.projectId,
         conversationId: conversation.id,
-        title: conversation.title || "New conversation",
+        title: conversation.title || "新会话",
         updatedAt: conversation.updatedAt || Date.now(),
       }),
     );
   }
+
+  const knowledgeBaseEmptyAction =
+    projectsState.status === "loading" ? null : (
+      <Link
+        href="/projects"
+        className={buttonVariants({
+          variant: "outline",
+          size: "sm",
+          className: "w-full justify-start",
+        })}
+      >
+        <Settings2 className="size-3.5" aria-hidden="true" />
+        打开知识库配置
+      </Link>
+    );
 
   const selector = (
     <KnowledgeBaseSelector
       projects={projects}
       selectedProjectId={selectedProject?.id ?? null}
       disabled={projectsState.status !== "ready"}
+      emptyMessage={getKnowledgeBaseEmptyMessage(projectsState)}
+      emptyAction={knowledgeBaseEmptyAction}
       onSelectProject={handleSelectProject}
     />
   );
@@ -147,7 +164,7 @@ export function ChatHomePage() {
       <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
         <SheetContent side="left" className="w-80 max-w-[85vw]">
           <SheetHeader>
-            <SheetTitle>Chat navigation</SheetTitle>
+            <SheetTitle>会话导航</SheetTitle>
           </SheetHeader>
           <MobileSidebarBody
             projects={projects}
@@ -181,15 +198,15 @@ export function ChatHomePage() {
               size="icon-sm"
               className="md:hidden"
               onClick={() => setMobileSidebarOpen(true)}
-              aria-label="Open chat navigation"
+              aria-label="打开会话导航"
             >
               <Menu className="size-4" aria-hidden="true" />
             </Button>
             <MessageSquare className="hidden size-4 text-muted-foreground sm:block" aria-hidden="true" />
             <div>
-              <h1 className="text-sm font-medium">LLM Wiki Chat</h1>
+              <h1 className="text-sm font-medium">知识库问答</h1>
               <p className="text-xs text-muted-foreground">
-                {selectedProject ? selectedProject.name : "Choose a knowledge base"}
+                {selectedProject ? selectedProject.name : "选择知识库"}
               </p>
             </div>
           </div>
@@ -201,13 +218,9 @@ export function ChatHomePage() {
             key={selectedProject?.id ?? "no-project"}
             projectId={selectedProject?.id ?? null}
             mode="home"
-            title="Knowledge chat"
+            title="知识库问答"
             showSessionList={false}
-            disabledMessage={
-              projects.length === 0
-                ? "No knowledge bases are available. Open knowledge config to add one."
-                : "Choose a knowledge base before asking."
-            }
+            disabledMessage={getComposerDisabledMessage(projectsState, projects.length)}
             composerTopSlot={selector}
             className="flex min-h-0 min-w-0 flex-1"
             minHeightClassName="min-h-[calc(100vh-8rem)]"
@@ -217,6 +230,34 @@ export function ChatHomePage() {
       </section>
     </main>
   );
+}
+
+function getKnowledgeBaseEmptyMessage(projectsState: ProjectsState) {
+  if (projectsState.status === "loading") {
+    return "正在加载知识库...";
+  }
+
+  if (projectsState.status === "error") {
+    return `无法加载知识库：${projectsState.message}`;
+  }
+
+  return "暂无知识库，请先打开知识库配置添加项目。";
+}
+
+function getComposerDisabledMessage(projectsState: ProjectsState, projectCount: number) {
+  if (projectsState.status === "loading") {
+    return "知识库正在加载，请稍候。";
+  }
+
+  if (projectsState.status === "error") {
+    return "知识库列表加载失败，请打开知识库配置检查项目根目录。";
+  }
+
+  if (projectCount === 0) {
+    return "暂无知识库，请先打开知识库配置添加项目。";
+  }
+
+  return "请先选择知识库再提问。";
 }
 
 function DesktopSidebar({
@@ -246,7 +287,7 @@ function DesktopSidebar({
       <div className="space-y-2">
         <Button type="button" variant="outline" className={cn("w-full", collapsed ? "px-0" : "justify-start")}>
           <Plus className="size-4" aria-hidden="true" />
-          {!collapsed ? "New chat" : null}
+          {!collapsed ? "新会话" : null}
         </Button>
         <Link
           href="/projects"
@@ -256,28 +297,28 @@ function DesktopSidebar({
           })}
         >
           <Settings2 className="size-4" aria-hidden="true" />
-          {!collapsed ? "Knowledge config" : null}
+          {!collapsed ? "知识库配置" : null}
         </Link>
         <Button
           type="button"
           variant="ghost"
           className={cn("w-full", collapsed ? "px-0" : "justify-start")}
           onClick={onToggleCollapsed}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
         >
           {collapsed ? (
             <PanelLeftOpen className="size-4" aria-hidden="true" />
           ) : (
             <PanelLeftClose className="size-4" aria-hidden="true" />
           )}
-          {!collapsed ? "Collapse" : null}
+          {!collapsed ? "收起" : null}
         </Button>
       </div>
 
       <div className="mt-4 min-h-0 flex-1 space-y-1 overflow-y-auto">
         {!collapsed && recentConversations.length === 0 ? (
           <p className="rounded-md border border-dashed border-[color:var(--paper-border)] px-3 py-2 text-sm text-muted-foreground">
-            No recent chats
+            暂无最近会话
           </p>
         ) : null}
         {!collapsed
@@ -305,7 +346,7 @@ function DesktopSidebar({
                     <span className="min-w-0">
                       <span className="block truncate">{item.title}</span>
                       {unavailable ? (
-                        <span className="block text-[11px] text-destructive">Unavailable</span>
+                        <span className="block text-[11px] text-destructive">不可用</span>
                       ) : (
                         <span className="block truncate text-[11px] opacity-75">
                           {item.projectName}
@@ -318,7 +359,7 @@ function DesktopSidebar({
                       type="button"
                       variant="ghost"
                       size="icon-xs"
-                      aria-label={`Remove ${item.title}`}
+                      aria-label={`移除 ${item.title}`}
                       onClick={(event) => {
                         event.stopPropagation();
                         onRemoveRecent(item.projectId, item.conversationId);
@@ -335,7 +376,7 @@ function DesktopSidebar({
 
       <Button type="button" variant="ghost" className={cn("mt-3 w-full", collapsed ? "px-0" : "justify-start")}>
         <UserCircle className="size-4" aria-hidden="true" />
-        {!collapsed ? "Profile" : null}
+        {!collapsed ? "个人中心" : null}
       </Button>
     </aside>
   );
@@ -356,12 +397,12 @@ function MobileSidebarBody({
     <div className="space-y-3 px-4 pb-4">
       <Link href="/projects" className={buttonVariants({ variant: "outline", className: "w-full justify-start" })}>
         <Settings2 className="size-4" aria-hidden="true" />
-        Knowledge config
+        知识库配置
       </Link>
       <div className="space-y-1">
         {recentConversations.length === 0 ? (
           <p className="rounded-md border border-dashed border-[color:var(--paper-border)] px-3 py-2 text-sm text-muted-foreground">
-            No recent chats
+            暂无最近会话
           </p>
         ) : (
           recentConversations.map((item) => {
@@ -382,7 +423,7 @@ function MobileSidebarBody({
                   <span className="min-w-0">
                     <span className="block truncate">{item.title}</span>
                     {unavailable ? (
-                      <span className="block text-[11px] text-destructive">Unavailable</span>
+                      <span className="block text-[11px] text-destructive">不可用</span>
                     ) : (
                       <span className="block truncate text-[11px] opacity-75">
                         {item.projectName}
@@ -395,7 +436,7 @@ function MobileSidebarBody({
                     type="button"
                     variant="ghost"
                     size="icon-xs"
-                    aria-label={`Remove ${item.title}`}
+                    aria-label={`移除 ${item.title}`}
                     onClick={(event) => {
                       event.stopPropagation();
                       onRemoveRecent(item.projectId, item.conversationId);

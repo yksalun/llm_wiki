@@ -67,7 +67,7 @@ export function ChatSessionList({
               onClick={() => onSelectConversation(conversation.id)}
               disabled={disabled}
             >
-              {conversation.title || "New conversation"}
+              {conversation.title || "新会话"}
             </Button>
           ))
         ) : (

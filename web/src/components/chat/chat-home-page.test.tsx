@@ -68,9 +68,10 @@ describe("ChatHomePage", () => {
 
     await renderChatHomePage();
 
-    expect(container?.textContent).toContain("New chat");
-    expect(container?.textContent).toContain("Knowledge config");
-    expect(container?.textContent).toContain("Choose a knowledge base");
+    expect(container?.textContent).toContain("新会话");
+    expect(container?.textContent).toContain("知识库配置");
+    expect(container?.textContent).toContain("选择知识库");
+    expect(container?.textContent).toContain("暂无知识库，请先打开知识库配置添加项目。");
   });
 
   it("selects a knowledge base and sends through shared streaming API", async () => {
@@ -102,9 +103,9 @@ describe("ChatHomePage", () => {
 
     await renderChatHomePage();
     await clickButton("Alpha");
-    await waitForText("Ask this knowledge base");
+    await waitForText("询问这个知识库");
     updateQuestion("What is inside?");
-    await clickButton("Send");
+    await clickButton("发送");
 
     expect(desktopMocks.streamQuestionMessage).toHaveBeenCalledWith(
       "project-a",
@@ -144,11 +145,19 @@ describe("ChatHomePage", () => {
     });
 
     await renderChatHomePage();
-    await waitForText("Ask this knowledge base");
+    await waitForText("询问这个知识库");
 
     const textarea = requiredQuestionTextarea();
     expect(textarea.disabled).toBe(true);
-    expect(requiredButton("Send").disabled).toBe(true);
+    expect(requiredButton("发送").disabled).toBe(true);
+  });
+
+  it("shows a Chinese knowledge base load error and config entry", async () => {
+    vi.mocked(fetchProjects).mockRejectedValue(new Error("project roots missing"));
+
+    await renderChatHomePage();
+    await waitForText("无法加载知识库：project roots missing");
+    await waitForText("打开知识库配置");
   });
 
   it("shows unavailable recent chats when the stored project is gone", async () => {
@@ -172,7 +181,7 @@ describe("ChatHomePage", () => {
 
     await renderChatHomePage();
     await waitForText("Old chat");
-    await waitForText("Unavailable");
+    await waitForText("不可用");
   });
 });
 
@@ -200,7 +209,7 @@ function updateQuestion(value: string) {
 
 function requiredQuestionTextarea() {
   const textarea = container?.querySelector<HTMLTextAreaElement>(
-    'textarea[aria-label="Project question input"]',
+    'textarea[aria-label="知识库问答输入"]',
   );
 
   if (!textarea) {
