@@ -171,6 +171,7 @@ describe("ProjectQuestionPanel", () => {
 
     expect(document.body.textContent).not.toContain("<!-- cited:");
     expect(document.body.textContent).not.toContain("cited: 1, 3");
+    expect(container?.querySelector('[data-answer-message="true"]')).not.toBeNull();
   });
 
   it("separates assistant answer content, references, and hover actions", async () => {
