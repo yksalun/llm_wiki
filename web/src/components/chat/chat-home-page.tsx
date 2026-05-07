@@ -1,118 +1,326 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { MessageSquare, Plus, Settings2, UserCircle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Menu,
+  MessageSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  Settings2,
+  UserCircle,
+} from "lucide-react";
 
+import { ChatExperience } from "@/components/chat/chat-experience";
+import {
+  loadChatHomeState,
+  saveChatHomeState,
+  upsertRecentConversation,
+  type ChatHomeState,
+} from "@/components/chat/chat-home-storage";
+import { KnowledgeBaseSelector } from "@/components/chat/knowledge-base-selector";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { fetchProjects } from "@/lib/client/api";
-import type { ProjectsListResponse } from "@/lib/types";
+import type { DesktopBridgeConversation, ProjectsListResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type LoadState =
+type ProjectsState =
   | { status: "loading" }
-  | { status: "ready"; data: ProjectsListResponse }
-  | { status: "error" };
+  | { status: "error"; message: string }
+  | { status: "ready"; data: ProjectsListResponse };
 
 export function ChatHomePage() {
-  const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
+  const [projectsState, setProjectsState] = useState<ProjectsState>({ status: "loading" });
+  const [homeState, setHomeState] = useState<ChatHomeState>(() => loadChatHomeState());
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
-    const abortController = new AbortController();
+    saveChatHomeState(homeState);
+  }, [homeState]);
 
-    fetchProjects(abortController.signal)
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetchProjects(controller.signal)
       .then((data) => {
-        if (abortController.signal.aborted) {
-          return;
+        if (!controller.signal.aborted) {
+          setProjectsState({ status: "ready", data });
         }
-
-        setLoadState({ status: "ready", data });
       })
-      .catch(() => {
-        if (abortController.signal.aborted) {
-          return;
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setProjectsState({
+            status: "error",
+            message: error instanceof Error ? error.message : "Unable to load projects.",
+          });
         }
-
-        setLoadState({ status: "error" });
       });
 
     return () => {
-      abortController.abort();
+      controller.abort();
     };
   }, []);
 
+  const projects = projectsState.status === "ready" ? projectsState.data.projects : [];
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.id === homeState.selectedProjectId) ?? null,
+    [homeState.selectedProjectId, projects],
+  );
+
+  function updateHomeState(updater: (current: ChatHomeState) => ChatHomeState) {
+    setHomeState((current) => updater(current));
+  }
+
+  function handleSelectProject(projectId: string) {
+    updateHomeState((current) => ({
+      ...current,
+      selectedProjectId: projectId,
+    }));
+  }
+
+  function handleConversationChange(event: {
+    projectId: string;
+    conversation: DesktopBridgeConversation | null;
+  }) {
+    const conversation = event.conversation;
+
+    if (!conversation) {
+      return;
+    }
+
+    const project = projects.find((candidate) => candidate.id === event.projectId);
+    updateHomeState((current) =>
+      upsertRecentConversation(current, {
+        projectId: event.projectId,
+        projectName: project?.name ?? event.projectId,
+        conversationId: conversation.id,
+        title: conversation.title || "New conversation",
+        updatedAt: conversation.updatedAt || Date.now(),
+      }),
+    );
+  }
+
+  const selector = (
+    <KnowledgeBaseSelector
+      projects={projects}
+      selectedProjectId={selectedProject?.id ?? null}
+      disabled={projectsState.status !== "ready"}
+      onSelectProject={handleSelectProject}
+    />
+  );
+
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
-      <aside className="hidden w-72 shrink-0 flex-col border-r border-border bg-muted/35 p-3 md:flex">
-        <div className="flex items-center gap-2 px-2 py-1.5">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <MessageSquare className="size-4" />
+    <main className="flex min-h-screen bg-[color:var(--paper-base)] text-[color:var(--ink-strong)]">
+      <DesktopSidebar
+        collapsed={homeState.sidebarCollapsed}
+        recentConversations={homeState.recentConversations}
+        selectedProjectId={selectedProject?.id ?? null}
+        onToggleCollapsed={() =>
+          updateHomeState((current) => ({
+            ...current,
+            sidebarCollapsed: !current.sidebarCollapsed,
+          }))
+        }
+        onSelectRecent={(projectId) =>
+          updateHomeState((current) => ({
+            ...current,
+            selectedProjectId: projectId,
+          }))
+        }
+      />
+
+      <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+        <SheetContent side="left" className="w-80 max-w-[85vw]">
+          <SheetHeader>
+            <SheetTitle>Chat navigation</SheetTitle>
+          </SheetHeader>
+          <MobileSidebarBody
+            recentConversations={homeState.recentConversations}
+            onSelectRecent={(projectId) => {
+              setMobileSidebarOpen(false);
+              updateHomeState((current) => ({
+                ...current,
+                selectedProjectId: projectId,
+              }));
+            }}
+          />
+        </SheetContent>
+      </Sheet>
+
+      <section className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center justify-between border-b border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/80 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="md:hidden"
+              onClick={() => setMobileSidebarOpen(true)}
+              aria-label="Open chat navigation"
+            >
+              <Menu className="size-4" aria-hidden="true" />
+            </Button>
+            <MessageSquare className="hidden size-4 text-muted-foreground sm:block" aria-hidden="true" />
+            <div>
+              <h1 className="text-sm font-medium">LLM Wiki Chat</h1>
+              <p className="text-xs text-muted-foreground">
+                {selectedProject ? selectedProject.name : "Choose a knowledge base"}
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">LLM Wiki Chat</p>
-            <p className="truncate text-xs text-muted-foreground">Knowledge workspace</p>
-          </div>
-        </div>
-
-        <div className="mt-4 space-y-1">
-          <Button className="w-full justify-start" variant="ghost">
-            <Plus className="size-4" />
-            New chat
-          </Button>
-          <Link
-            href="/projects"
-            className={cn(buttonVariants({ variant: "ghost" }), "w-full justify-start")}
-          >
-            <Settings2 className="size-4" />
-            Knowledge config
-          </Link>
-        </div>
-
-        <div className="mt-6 flex-1 px-2">
-          <p className="text-xs font-medium text-muted-foreground">No recent chats</p>
-        </div>
-
-        <div className="border-t border-border pt-3">
-          <Button className="w-full justify-start" variant="ghost">
-            <UserCircle className="size-4" />
-            Profile
-          </Button>
-        </div>
-      </aside>
-
-      <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 items-center justify-between border-b border-border px-4">
-          <div className="flex min-w-0 items-center gap-2">
-            <MessageSquare className="size-5 text-muted-foreground md:hidden" />
-            <h1 className="truncate text-base font-semibold">LLM Wiki Chat</h1>
-          </div>
-          <Link
-            href="/projects"
-            className={buttonVariants({ variant: "outline", size: "sm" })}
-          >
-            <Settings2 className="size-4" />
-            Knowledge config
-          </Link>
+          <ThemeToggle />
         </header>
 
-        <div className="flex flex-1 items-center justify-center p-4">
-          <section className="w-full max-w-xl rounded-lg border border-border bg-card p-6 text-center shadow-sm">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-              <MessageSquare className="size-6" />
-            </div>
-            <h2 className="mt-4 text-xl font-semibold">
-              {loadState.status === "loading"
-                ? "Loading knowledge bases..."
-                : "Choose a knowledge base"}
-            </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {loadState.status === "loading"
-                ? "Preparing your configured project list."
-                : "Choose a knowledge base before asking."}
-            </p>
-          </section>
+        <div className="flex min-h-0 flex-1 p-3 md:p-5">
+          <ChatExperience
+            key={selectedProject?.id ?? "no-project"}
+            projectId={selectedProject?.id ?? null}
+            mode="home"
+            title="Knowledge chat"
+            showSessionList={false}
+            disabledMessage={
+              projects.length === 0
+                ? "No knowledge bases are available. Open knowledge config to add one."
+                : "Choose a knowledge base before asking."
+            }
+            composerTopSlot={selector}
+            className="flex min-h-0 flex-1"
+            minHeightClassName="min-h-[calc(100vh-8rem)]"
+            onConversationChange={handleConversationChange}
+          />
         </div>
-      </main>
+      </section>
+    </main>
+  );
+}
+
+function DesktopSidebar({
+  collapsed,
+  recentConversations,
+  selectedProjectId,
+  onToggleCollapsed,
+  onSelectRecent,
+}: {
+  collapsed: boolean;
+  recentConversations: ChatHomeState["recentConversations"];
+  selectedProjectId: string | null;
+  onToggleCollapsed: () => void;
+  onSelectRecent: (projectId: string) => void;
+}) {
+  return (
+    <aside
+      className={cn(
+        "hidden shrink-0 border-r border-[color:var(--paper-border)] bg-[color:var(--paper-panel)] p-3 transition-[width] md:flex md:flex-col",
+        collapsed ? "w-16" : "w-72",
+      )}
+    >
+      <div className="space-y-2">
+        <Button type="button" variant="outline" className={cn("w-full", collapsed ? "px-0" : "justify-start")}>
+          <Plus className="size-4" aria-hidden="true" />
+          {!collapsed ? "New chat" : null}
+        </Button>
+        <Link
+          href="/projects"
+          className={buttonVariants({
+            variant: "ghost",
+            className: cn("w-full", collapsed ? "px-0" : "justify-start"),
+          })}
+        >
+          <Settings2 className="size-4" aria-hidden="true" />
+          {!collapsed ? "Knowledge config" : null}
+        </Link>
+        <Button
+          type="button"
+          variant="ghost"
+          className={cn("w-full", collapsed ? "px-0" : "justify-start")}
+          onClick={onToggleCollapsed}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? (
+            <PanelLeftOpen className="size-4" aria-hidden="true" />
+          ) : (
+            <PanelLeftClose className="size-4" aria-hidden="true" />
+          )}
+          {!collapsed ? "Collapse" : null}
+        </Button>
+      </div>
+
+      <div className="mt-4 min-h-0 flex-1 space-y-1 overflow-y-auto">
+        {!collapsed && recentConversations.length === 0 ? (
+          <p className="rounded-md border border-dashed border-[color:var(--paper-border)] px-3 py-2 text-sm text-muted-foreground">
+            No recent chats
+          </p>
+        ) : null}
+        {!collapsed
+          ? recentConversations.map((item) => (
+              <Button
+                key={`${item.projectId}:${item.conversationId}`}
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  "h-auto w-full justify-start whitespace-normal px-2 py-2 text-left",
+                  item.projectId === selectedProjectId
+                    ? "bg-[color:var(--paper-muted)] text-[color:var(--ink-strong)]"
+                    : "text-muted-foreground",
+                )}
+                onClick={() => onSelectRecent(item.projectId)}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate">{item.title}</span>
+                  <span className="block truncate text-[11px] opacity-75">{item.projectName}</span>
+                </span>
+              </Button>
+            ))
+          : null}
+      </div>
+
+      <Button type="button" variant="ghost" className={cn("mt-3 w-full", collapsed ? "px-0" : "justify-start")}>
+        <UserCircle className="size-4" aria-hidden="true" />
+        {!collapsed ? "Profile" : null}
+      </Button>
+    </aside>
+  );
+}
+
+function MobileSidebarBody({
+  recentConversations,
+  onSelectRecent,
+}: {
+  recentConversations: ChatHomeState["recentConversations"];
+  onSelectRecent: (projectId: string) => void;
+}) {
+  return (
+    <div className="space-y-3 px-4 pb-4">
+      <Link href="/projects" className={buttonVariants({ variant: "outline", className: "w-full justify-start" })}>
+        <Settings2 className="size-4" aria-hidden="true" />
+        Knowledge config
+      </Link>
+      <div className="space-y-1">
+        {recentConversations.length === 0 ? (
+          <p className="rounded-md border border-dashed border-[color:var(--paper-border)] px-3 py-2 text-sm text-muted-foreground">
+            No recent chats
+          </p>
+        ) : (
+          recentConversations.map((item) => (
+            <Button
+              key={`${item.projectId}:${item.conversationId}`}
+              type="button"
+              variant="ghost"
+              className="h-auto w-full justify-start whitespace-normal px-2 py-2 text-left"
+              onClick={() => onSelectRecent(item.projectId)}
+            >
+              <span className="min-w-0">
+                <span className="block truncate">{item.title}</span>
+                <span className="block truncate text-[11px] opacity-75">{item.projectName}</span>
+              </span>
+            </Button>
+          ))
+        )}
+      </div>
     </div>
   );
 }

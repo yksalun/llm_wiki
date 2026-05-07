@@ -103,7 +103,12 @@ function ActiveChatExperience({
       return;
     }
 
-    viewport.scrollTo({ top: viewport.scrollHeight });
+    if (typeof viewport.scrollTo === "function") {
+      viewport.scrollTo({ top: viewport.scrollHeight });
+      return;
+    }
+
+    viewport.scrollTop = viewport.scrollHeight;
   }, [
     session.renderedMessages.length,
     lastRenderedMessage?.content,
