@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   CHAT_HOME_STORAGE_KEY,
   loadChatHomeState,
+  removeRecentConversation,
   saveChatHomeState,
   upsertRecentConversation,
   type ChatHomeState,
@@ -72,5 +73,17 @@ describe("chat home storage", () => {
     window.localStorage.setItem(CHAT_HOME_STORAGE_KEY, "{bad json");
 
     expect(loadChatHomeState().recentConversations).toEqual([]);
+  });
+
+  it("removes a recent conversation from the local index", () => {
+    const state = upsertRecentConversation(loadChatHomeState(), {
+      projectId: "project-a",
+      projectName: "Alpha",
+      conversationId: "conv-1",
+      title: "First",
+      updatedAt: 1,
+    });
+
+    expect(removeRecentConversation(state, "project-a", "conv-1").recentConversations).toEqual([]);
   });
 });

@@ -125,6 +125,30 @@ describe("ChatHomePage", () => {
 
     await waitForText("Home answer.");
   });
+
+  it("shows unavailable recent chats when the stored project is gone", async () => {
+    window.localStorage.setItem(
+      "llm-wiki-web.chat.home.v1",
+      JSON.stringify({
+        sidebarCollapsed: false,
+        selectedProjectId: "missing-project",
+        recentConversations: [
+          {
+            projectId: "missing-project",
+            projectName: "Missing",
+            conversationId: "conv-missing",
+            title: "Old chat",
+            updatedAt: 1,
+          },
+        ],
+      }),
+    );
+    vi.mocked(fetchProjects).mockResolvedValue({ projects: [], warnings: [] });
+
+    await renderChatHomePage();
+    await waitForText("Old chat");
+    await waitForText("Unavailable");
+  });
 });
 
 async function renderChatHomePage() {

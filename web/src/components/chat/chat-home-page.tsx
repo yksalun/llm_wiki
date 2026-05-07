@@ -10,11 +10,13 @@ import {
   Plus,
   Settings2,
   UserCircle,
+  X,
 } from "lucide-react";
 
 import { ChatExperience } from "@/components/chat/chat-experience";
 import {
   loadChatHomeState,
+  removeRecentConversation,
   saveChatHomeState,
   upsertRecentConversation,
   type ChatHomeState,
@@ -24,7 +26,7 @@ import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { fetchProjects } from "@/lib/client/api";
-import type { DesktopBridgeConversation, ProjectsListResponse } from "@/lib/types";
+import type { DesktopBridgeConversation, ProjectSummary, ProjectsListResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type ProjectsState =
@@ -116,6 +118,7 @@ export function ChatHomePage() {
     <main className="flex min-h-screen bg-[color:var(--paper-base)] text-[color:var(--ink-strong)]">
       <DesktopSidebar
         collapsed={homeState.sidebarCollapsed}
+        projects={projects}
         recentConversations={homeState.recentConversations}
         selectedProjectId={selectedProject?.id ?? null}
         onToggleCollapsed={() =>
@@ -130,6 +133,15 @@ export function ChatHomePage() {
             selectedProjectId: projectId,
           }))
         }
+        onRemoveRecent={(projectId, conversationId) =>
+          updateHomeState((current) => {
+            const nextState = removeRecentConversation(current, projectId, conversationId);
+
+            return nextState.selectedProjectId === projectId
+              ? { ...nextState, selectedProjectId: null }
+              : nextState;
+          })
+        }
       />
 
       <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
@@ -138,6 +150,7 @@ export function ChatHomePage() {
             <SheetTitle>Chat navigation</SheetTitle>
           </SheetHeader>
           <MobileSidebarBody
+            projects={projects}
             recentConversations={homeState.recentConversations}
             onSelectRecent={(projectId) => {
               setMobileSidebarOpen(false);
@@ -146,6 +159,15 @@ export function ChatHomePage() {
                 selectedProjectId: projectId,
               }));
             }}
+            onRemoveRecent={(projectId, conversationId) =>
+              updateHomeState((current) => {
+                const nextState = removeRecentConversation(current, projectId, conversationId);
+
+                return nextState.selectedProjectId === projectId
+                  ? { ...nextState, selectedProjectId: null }
+                  : nextState;
+              })
+            }
           />
         </SheetContent>
       </Sheet>
@@ -199,16 +221,20 @@ export function ChatHomePage() {
 
 function DesktopSidebar({
   collapsed,
+  projects,
   recentConversations,
   selectedProjectId,
   onToggleCollapsed,
   onSelectRecent,
+  onRemoveRecent,
 }: {
   collapsed: boolean;
+  projects: ProjectSummary[];
   recentConversations: ChatHomeState["recentConversations"];
   selectedProjectId: string | null;
   onToggleCollapsed: () => void;
   onSelectRecent: (projectId: string) => void;
+  onRemoveRecent: (projectId: string, conversationId: string) => void;
 }) {
   return (
     <aside
@@ -255,26 +281,55 @@ function DesktopSidebar({
           </p>
         ) : null}
         {!collapsed
-          ? recentConversations.map((item) => (
-              <Button
-                key={`${item.projectId}:${item.conversationId}`}
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  "h-auto w-full justify-start whitespace-normal px-2 py-2 text-left",
-                  item.projectId === selectedProjectId
-                    ? "bg-[color:var(--paper-muted)] text-[color:var(--ink-strong)]"
-                    : "text-muted-foreground",
-                )}
-                onClick={() => onSelectRecent(item.projectId)}
-              >
-                <span className="min-w-0">
-                  <span className="block truncate">{item.title}</span>
-                  <span className="block truncate text-[11px] opacity-75">{item.projectName}</span>
-                </span>
-              </Button>
-            ))
+          ? recentConversations.map((item) => {
+              const unavailable =
+                projects.length > 0
+                  ? !projects.some((project) => project.id === item.projectId)
+                  : true;
+
+              return (
+                <div key={`${item.projectId}:${item.conversationId}`} className="flex items-start gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={unavailable}
+                    className={cn(
+                      "h-auto min-w-0 flex-1 justify-start whitespace-normal px-2 py-2 text-left",
+                      item.projectId === selectedProjectId
+                        ? "bg-[color:var(--paper-muted)] text-[color:var(--ink-strong)]"
+                        : "text-muted-foreground",
+                    )}
+                    onClick={() => onSelectRecent(item.projectId)}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate">{item.title}</span>
+                      {unavailable ? (
+                        <span className="block text-[11px] text-destructive">Unavailable</span>
+                      ) : (
+                        <span className="block truncate text-[11px] opacity-75">
+                          {item.projectName}
+                        </span>
+                      )}
+                    </span>
+                  </Button>
+                  {unavailable ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`Remove ${item.title}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onRemoveRecent(item.projectId, item.conversationId);
+                      }}
+                    >
+                      <X className="size-3" aria-hidden="true" />
+                    </Button>
+                  ) : null}
+                </div>
+              );
+            })
           : null}
       </div>
 
@@ -287,11 +342,15 @@ function DesktopSidebar({
 }
 
 function MobileSidebarBody({
+  projects,
   recentConversations,
   onSelectRecent,
+  onRemoveRecent,
 }: {
+  projects: ProjectSummary[];
   recentConversations: ChatHomeState["recentConversations"];
   onSelectRecent: (projectId: string) => void;
+  onRemoveRecent: (projectId: string, conversationId: string) => void;
 }) {
   return (
     <div className="space-y-3 px-4 pb-4">
@@ -305,20 +364,49 @@ function MobileSidebarBody({
             No recent chats
           </p>
         ) : (
-          recentConversations.map((item) => (
-            <Button
-              key={`${item.projectId}:${item.conversationId}`}
-              type="button"
-              variant="ghost"
-              className="h-auto w-full justify-start whitespace-normal px-2 py-2 text-left"
-              onClick={() => onSelectRecent(item.projectId)}
-            >
-              <span className="min-w-0">
-                <span className="block truncate">{item.title}</span>
-                <span className="block truncate text-[11px] opacity-75">{item.projectName}</span>
-              </span>
-            </Button>
-          ))
+          recentConversations.map((item) => {
+            const unavailable =
+              projects.length > 0
+                ? !projects.some((project) => project.id === item.projectId)
+                : true;
+
+            return (
+              <div key={`${item.projectId}:${item.conversationId}`} className="flex items-start gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={unavailable}
+                  className="h-auto min-w-0 flex-1 justify-start whitespace-normal px-2 py-2 text-left"
+                  onClick={() => onSelectRecent(item.projectId)}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate">{item.title}</span>
+                    {unavailable ? (
+                      <span className="block text-[11px] text-destructive">Unavailable</span>
+                    ) : (
+                      <span className="block truncate text-[11px] opacity-75">
+                        {item.projectName}
+                      </span>
+                    )}
+                  </span>
+                </Button>
+                {unavailable ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={`Remove ${item.title}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onRemoveRecent(item.projectId, item.conversationId);
+                    }}
+                  >
+                    <X className="size-3" aria-hidden="true" />
+                  </Button>
+                ) : null}
+              </div>
+            );
+          })
         )}
       </div>
     </div>
