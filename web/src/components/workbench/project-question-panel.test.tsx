@@ -698,6 +698,25 @@ describe("ProjectQuestionPanel", () => {
     expect(onOpenFile).not.toHaveBeenCalled();
   });
 
+  it("keeps the project ask wrapper on the selected project after extraction", async () => {
+    const conversation = createConversation({ id: "conv-wrapper", title: "wrapper" });
+    apiMocks.listQuestionConversations.mockResolvedValue([conversation]);
+    apiMocks.listQuestionMessages.mockResolvedValue([]);
+    apiMocks.streamQuestionMessage.mockImplementation(async () => undefined);
+
+    renderProjectQuestionPanel({ projectId: "project-wrapper" });
+    await waitForReady();
+    updateQuestion("Wrapper question?");
+    await clickButton("发送");
+
+    expect(apiMocks.streamQuestionMessage).toHaveBeenCalledWith(
+      "project-wrapper",
+      "conv-wrapper",
+      "Wrapper question?",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
   it("切换会话时清空 composer 草稿，避免发送到新会话", async () => {
     const firstConversation = createConversation({ id: "conv-first", title: "第一会话" });
     const secondConversation = createConversation({ id: "conv-second", title: "第二会话" });
