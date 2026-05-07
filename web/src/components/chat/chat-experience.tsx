@@ -44,15 +44,29 @@ export function ChatExperience({
       <section
         data-chat-experience={mode}
         className={cn(
-          "flex flex-1 flex-col rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]",
+          "flex min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]",
           minHeightClassName,
           className,
         )}
       >
-        <div className="flex flex-1 items-center justify-center p-4">
-          <div className="w-full max-w-3xl space-y-3 rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-4">
+        <div className="flex min-w-0 w-full flex-1 items-center justify-center p-4">
+          <div className="min-w-0 w-full max-w-full rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-4 md:max-w-3xl">
             {composerTopSlot}
-            <p className="text-sm text-muted-foreground">{disabledMessage}</p>
+            <div className={cn("mt-3", !composerTopSlot && "mt-0")}>
+              <textarea
+                aria-label="Project question input"
+                placeholder="Ask this knowledge base"
+                disabled
+                className="min-h-20 w-full resize-none rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)] px-3 py-2 text-sm leading-6 text-[color:var(--ink-strong)] outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              />
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                <p className="min-w-0 flex-1 break-words text-xs text-muted-foreground">{disabledMessage}</p>
+                <Button type="button" size="sm" disabled className="shrink-0">
+                  <MessageSquare className="size-4" aria-hidden="true" />
+                  Send
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -136,7 +150,7 @@ function ActiveChatExperience({
   const chatPanel = (
     <div
       className={cn(
-        "flex min-h-0 flex-1 flex-col rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]",
+        "flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]",
         minHeightClassName,
       )}
     >
@@ -211,8 +225,8 @@ function ActiveChatExperience({
           }}
           className="min-h-20 w-full resize-none rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 text-sm leading-6 text-[color:var(--ink-strong)] outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
         />
-        <div className="mt-2 flex items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+          <p className="min-w-0 flex-1 break-words text-xs text-muted-foreground">
             {session.isStreaming ? "Generating answer" : "Answers use the selected knowledge base."}
           </p>
           <div className="flex items-center gap-2">
@@ -237,7 +251,7 @@ function ActiveChatExperience({
   );
 
   return (
-    <section data-chat-experience={mode} className={cn("rounded-lg", className)}>
+    <section data-chat-experience={mode} className={cn("min-w-0 max-w-full rounded-lg", className)}>
       {showSessionList ? (
         <div className="grid gap-3 lg:grid-cols-[17rem_minmax(0,1fr)]">
           <ChatSessionList

@@ -115,7 +115,7 @@ export function ChatHomePage() {
   );
 
   return (
-    <main className="flex min-h-screen bg-[color:var(--paper-base)] text-[color:var(--ink-strong)]">
+    <main className="flex min-h-screen overflow-x-hidden bg-[color:var(--paper-base)] text-[color:var(--ink-strong)]">
       <DesktopSidebar
         collapsed={homeState.sidebarCollapsed}
         projects={projects}
@@ -196,7 +196,7 @@ export function ChatHomePage() {
           <ThemeToggle />
         </header>
 
-        <div className="flex min-h-0 flex-1 p-3 md:p-5">
+        <div className="flex min-h-0 min-w-0 w-full flex-1 p-3 md:p-5">
           <ChatExperience
             key={selectedProject?.id ?? "no-project"}
             projectId={selectedProject?.id ?? null}
@@ -209,7 +209,7 @@ export function ChatHomePage() {
                 : "Choose a knowledge base before asking."
             }
             composerTopSlot={selector}
-            className="flex min-h-0 flex-1"
+            className="flex min-h-0 min-w-0 flex-1"
             minHeightClassName="min-h-[calc(100vh-8rem)]"
             onConversationChange={handleConversationChange}
           />

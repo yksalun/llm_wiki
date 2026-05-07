@@ -126,6 +126,31 @@ describe("ChatHomePage", () => {
     await waitForText("Home answer.");
   });
 
+  it("shows a disabled composer before a knowledge base is selected", async () => {
+    vi.mocked(fetchProjects).mockResolvedValue({
+      projects: [
+        {
+          id: "project-a",
+          name: "Alpha",
+          status: "ready",
+          hasPurpose: true,
+          hasSchema: true,
+          hasWikiDirectory: true,
+          hasRawSourcesDirectory: true,
+          updatedAt: null,
+        },
+      ],
+      warnings: [],
+    });
+
+    await renderChatHomePage();
+    await waitForText("Ask this knowledge base");
+
+    const textarea = requiredQuestionTextarea();
+    expect(textarea.disabled).toBe(true);
+    expect(requiredButton("Send").disabled).toBe(true);
+  });
+
   it("shows unavailable recent chats when the stored project is gone", async () => {
     window.localStorage.setItem(
       "llm-wiki-web.chat.home.v1",
@@ -163,13 +188,7 @@ async function renderChatHomePage() {
 }
 
 function updateQuestion(value: string) {
-  const textarea = container?.querySelector<HTMLTextAreaElement>(
-    'textarea[aria-label="Project question input"]',
-  );
-
-  if (!textarea) {
-    throw new Error("Expected chat textarea.");
-  }
+  const textarea = requiredQuestionTextarea();
 
   act(() => {
     const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")
@@ -179,19 +198,35 @@ function updateQuestion(value: string) {
   });
 }
 
+function requiredQuestionTextarea() {
+  const textarea = container?.querySelector<HTMLTextAreaElement>(
+    'textarea[aria-label="Project question input"]',
+  );
+
+  if (!textarea) {
+    throw new Error("Expected chat textarea.");
+  }
+
+  return textarea;
+}
+
 async function clickButton(name: string) {
   await act(async () => {
-    const button = Array.from(container?.querySelectorAll("button") ?? []).find(
-      (candidate) => candidate.textContent?.trim() === name,
-    );
-
-    if (!button) {
-      throw new Error(`Expected button named ${name}.`);
-    }
-
-    button.click();
+    requiredButton(name).click();
     await Promise.resolve();
   });
+}
+
+function requiredButton(name: string) {
+  const button = Array.from(container?.querySelectorAll("button") ?? []).find(
+    (candidate) => candidate.textContent?.trim() === name,
+  );
+
+  if (!button) {
+    throw new Error(`Expected button named ${name}.`);
+  }
+
+  return button;
 }
 
 async function waitForText(text: string) {
