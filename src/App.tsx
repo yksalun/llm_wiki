@@ -26,11 +26,14 @@ function App() {
 
   // Set up auto-save and clip watcher once on mount
   useEffect(() => {
-    setupAutoSave()
+    const stopAutoSave = setupAutoSave()
     startClipWatcher()
     startWebBridgeHandler().catch((err) =>
       console.error("Failed to start web bridge handler:", err)
     )
+    return () => {
+      stopAutoSave()
+    }
   }, [])
 
   // Dev-only helper for visually testing the update-banner UX.

@@ -175,6 +175,24 @@ describe("chat persistence — round-trip (new format)", () => {
     expect(loaded.messages).toHaveLength(1)
   })
 
+  it("loads conversations.json with a UTF-8 BOM", async () => {
+    const conv = makeConv("c1", "BOM conversation")
+    const msg = makeMsg("m1", "c1", "hi")
+    await writeFileRaw(
+      `${tmp.path}/.llm-wiki/conversations.json`,
+      `\uFEFF${JSON.stringify([conv])}`,
+    )
+    await writeFileRaw(
+      `${tmp.path}/.llm-wiki/chats/c1.json`,
+      JSON.stringify([msg]),
+    )
+
+    const loaded = await loadChatHistory(tmp.path)
+
+    expect(loaded.conversations).toEqual([conv])
+    expect(loaded.messages).toEqual([msg])
+  })
+
   it("preserves Unicode content through round-trip", async () => {
     const convs = [makeConv("c1", "中文对话 🎌")]
     const msgs = [
@@ -242,6 +260,77 @@ describe("chat persistence — legacy format fallback", () => {
 
     const loaded = await loadChatHistory(tmp.path)
     expect(loaded.conversations[0].id).toBe("new")
+  })
+
+  it("recovers orphan chat files when conversations.json was overwritten empty", async () => {
+    await writeFileRaw(`${tmp.path}/.llm-wiki/conversations.json`, "[]")
+    await writeFileRaw(
+      `${tmp.path}/.llm-wiki/chats/recovered.json`,
+      JSON.stringify([
+        {
+          id: "m1",
+          role: "user",
+          content: "Recover this conversation",
+          timestamp: 100,
+          conversationId: "recovered",
+        },
+        {
+          id: "m2",
+          role: "assistant",
+          content: "Recovered",
+          timestamp: 200,
+          conversationId: "recovered",
+        },
+      ]),
+    )
+
+    const loaded = await loadChatHistory(tmp.path)
+
+    expect(loaded.conversations).toEqual([
+      {
+        id: "recovered",
+        title: "Recover this conversation",
+        createdAt: 100,
+        updatedAt: 200,
+      },
+    ])
+    expect(loaded.messages).toHaveLength(2)
+  })
+
+  it("recovers orphan chat files when conversations.json is unreadable", async () => {
+    await writeFileRaw(`${tmp.path}/.llm-wiki/conversations.json`, "{not valid json")
+    await writeFileRaw(
+      `${tmp.path}/.llm-wiki/chats/recovered.json`,
+      JSON.stringify([
+        {
+          id: "m1",
+          role: "user",
+          content: "Recover after bad index",
+          timestamp: 100,
+          conversationId: "stale-id",
+        },
+      ]),
+    )
+
+    const loaded = await loadChatHistory(tmp.path)
+
+    expect(loaded.conversations).toEqual([
+      {
+        id: "recovered",
+        title: "Recover after bad index",
+        createdAt: 100,
+        updatedAt: 100,
+      },
+    ])
+    expect(loaded.messages).toEqual([
+      {
+        id: "m1",
+        role: "user",
+        content: "Recover after bad index",
+        timestamp: 100,
+        conversationId: "recovered",
+      },
+    ])
   })
 })
 

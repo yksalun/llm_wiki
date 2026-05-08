@@ -1,4 +1,4 @@
-import { writeFile, readFile, createDirectory } from "@/commands/fs"
+import { writeFile, readFile, createDirectory, listDirectory } from "@/commands/fs"
 import type { ReviewItem } from "@/stores/review-store"
 import type { DisplayMessage, Conversation } from "@/stores/chat-store"
 import { normalizePath } from "@/lib/path-utils"
@@ -18,7 +18,7 @@ export async function loadReviewItems(projectPath: string): Promise<ReviewItem[]
   const pp = normalizePath(projectPath)
   try {
     const content = await readFile(`${pp}/.llm-wiki/review.json`)
-    return JSON.parse(content) as ReviewItem[]
+    return parseJson<ReviewItem[]>(content)
   } catch {
     return []
   }
@@ -63,50 +63,130 @@ export async function saveChatHistory(
 
 export async function loadChatHistory(projectPath: string): Promise<PersistedChatData> {
   const pp = normalizePath(projectPath)
+  const newFormatData = await loadNewFormatChatHistory(pp)
+  if (newFormatData) return newFormatData
+
+  const recovered = await recoverOrphanChatFiles(pp)
+  if (recovered.conversations.length > 0) return recovered
+
+  return loadLegacyChatHistory(pp)
+}
+
+async function loadNewFormatChatHistory(
+  projectPath: string
+): Promise<PersistedChatData | null> {
   try {
     // Try new format: separate files per conversation
-    const convContent = await readFile(`${pp}/.llm-wiki/conversations.json`)
-    const conversations = JSON.parse(convContent) as Conversation[]
+    const convContent = await readFile(`${projectPath}/.llm-wiki/conversations.json`)
+    const conversations = parseJson<Conversation[]>(convContent)
 
-    const allMessages: DisplayMessage[] = []
-    for (const conv of conversations) {
-      try {
-        const msgContent = await readFile(`${pp}/.llm-wiki/chats/${conv.id}.json`)
-        const msgs = JSON.parse(msgContent) as DisplayMessage[]
-        allMessages.push(...msgs)
-      } catch {
-        // Conversation file missing, skip
-      }
+    const allMessages = await loadMessagesForConversations(projectPath, conversations)
+    if (conversations.length === 0 && allMessages.length === 0) {
+      const recovered = await recoverOrphanChatFiles(projectPath)
+      if (recovered.conversations.length > 0) return recovered
     }
 
     return { conversations, messages: allMessages }
   } catch {
-    // Fall back to old format
-    try {
-      const content = await readFile(`${pp}/.llm-wiki/chat-history.json`)
-      const parsed = JSON.parse(content)
+    return null
+  }
+}
 
-      if (Array.isArray(parsed)) {
-        // Very old format: flat array
-        const legacyMessages = parsed as DisplayMessage[]
-        const defaultConv: Conversation = {
-          id: "default",
-          title: "Previous Conversations",
-          createdAt: legacyMessages[0]?.timestamp ?? Date.now(),
-          updatedAt: legacyMessages[legacyMessages.length - 1]?.timestamp ?? Date.now(),
-        }
-        const migratedMessages = legacyMessages.map((m) => ({
-          ...m,
-          conversationId: "default",
-        }))
-        return { conversations: [defaultConv], messages: migratedMessages }
+async function loadLegacyChatHistory(projectPath: string): Promise<PersistedChatData> {
+  try {
+    const content = await readFile(`${projectPath}/.llm-wiki/chat-history.json`)
+    const parsed = parseJson<PersistedChatData | DisplayMessage[]>(content)
+
+    if (Array.isArray(parsed)) {
+      // Very old format: flat array
+      const legacyMessages = parsed as DisplayMessage[]
+      const defaultConv: Conversation = {
+        id: "default",
+        title: "Previous Conversations",
+        createdAt: legacyMessages[0]?.timestamp ?? Date.now(),
+        updatedAt: legacyMessages[legacyMessages.length - 1]?.timestamp ?? Date.now(),
       }
+      const migratedMessages = legacyMessages.map((m) => ({
+        ...m,
+        conversationId: "default",
+      }))
+      return { conversations: [defaultConv], messages: migratedMessages }
+    }
 
-      // Old combined format
-      const data = parsed as PersistedChatData
-      return data
+    // Old combined format
+    return parsed
+  } catch {
+    return { conversations: [], messages: [] }
+  }
+}
+
+async function loadMessagesForConversations(
+  projectPath: string,
+  conversations: Conversation[]
+): Promise<DisplayMessage[]> {
+  const allMessages: DisplayMessage[] = []
+  for (const conv of conversations) {
+    try {
+      const msgContent = await readFile(`${projectPath}/.llm-wiki/chats/${conv.id}.json`)
+      const msgs = parseJson<DisplayMessage[]>(msgContent)
+      allMessages.push(...msgs)
     } catch {
-      return { conversations: [], messages: [] }
+      // Conversation file missing, skip
     }
   }
+  return allMessages
+}
+
+async function recoverOrphanChatFiles(projectPath: string): Promise<PersistedChatData> {
+  const conversations: Conversation[] = []
+  const messages: DisplayMessage[] = []
+
+  try {
+    const chatFiles = await listDirectory(`${projectPath}/.llm-wiki/chats`)
+    for (const node of chatFiles) {
+      if (node.is_dir || !node.name.endsWith(".json")) continue
+
+      try {
+        const content = await readFile(node.path)
+        const parsed = parseJson<unknown>(content)
+        if (!Array.isArray(parsed) || parsed.length === 0) continue
+
+        const conversationId = node.name.replace(/\.json$/i, "")
+        const recoveredMessages = (parsed as DisplayMessage[]).map((message) => ({
+          ...message,
+          conversationId,
+        }))
+        conversations.push(buildRecoveredConversation(conversationId, recoveredMessages))
+        messages.push(...recoveredMessages)
+      } catch {
+        // Ignore a single unreadable chat file and keep recovering others.
+      }
+    }
+  } catch {
+    return { conversations: [], messages: [] }
+  }
+
+  conversations.sort((left, right) => right.updatedAt - left.updatedAt)
+  return { conversations, messages }
+}
+
+function buildRecoveredConversation(
+  id: string,
+  messages: DisplayMessage[]
+): Conversation {
+  const timestamps = messages.map((message) => message.timestamp).filter(Number.isFinite)
+  const firstUserMessage = messages.find((message) => message.role === "user")
+  const firstMessage = firstUserMessage ?? messages[0]
+  const title = firstMessage?.content.trim().slice(0, 50) || "Recovered Conversation"
+
+  return {
+    id,
+    title,
+    createdAt: timestamps.length > 0 ? Math.min(...timestamps) : Date.now(),
+    updatedAt: timestamps.length > 0 ? Math.max(...timestamps) : Date.now(),
+  }
+}
+
+function parseJson<T>(content: string): T {
+  return JSON.parse(content.replace(/^\uFEFF/, "")) as T
 }
