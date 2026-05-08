@@ -12,39 +12,39 @@
 
 ## File Structure
 
-- Modify: `web/package.json` and `web/package-lock.json`  
+- Modify: `web/package.json` and `web/package-lock.json`
   Add the runtime dependency `mysql2`.
-- Modify: `web/.env.example`  
+- Modify: `web/.env.example`
   Add blank `LAW_DB_*` variables with no real host, user, or password.
-- Modify: `web/src/lib/types.ts`  
+- Modify: `web/src/lib/types.ts`
   Add shared response types for the law database sync API.
-- Modify: `web/src/lib/client/api.ts`  
+- Modify: `web/src/lib/client/api.ts`
   Add `syncLawDatabaseSources(projectId, signal)` for browser code.
-- Create: `web/src/lib/server/law-db/schema.ts`  
+- Create: `web/src/lib/server/law-db/schema.ts`
   Define the external MySQL `law` table with Drizzle `mysqlTable`.
-- Create: `web/src/lib/server/law-db/config.ts`  
+- Create: `web/src/lib/server/law-db/config.ts`
   Read and validate `LAW_DB_*` env vars without exposing secrets.
-- Create: `web/src/lib/server/law-db/client.ts`  
+- Create: `web/src/lib/server/law-db/client.ts`
   Lazily read `LAW_DB_*` env vars and create a MySQL Drizzle database.
-- Create: `web/src/lib/server/law-db/repo.ts`  
+- Create: `web/src/lib/server/law-db/repo.ts`
   Query `content` non-empty law rows and map DB values to stable source records.
-- Create: `web/src/lib/server/__tests__/law-db-repo.test.ts`  
+- Create: `web/src/lib/server/__tests__/law-db-repo.test.ts`
   Verify filtering, mapping, and safe configuration errors without real MySQL.
-- Create: `web/src/lib/server/law-source-sync.ts`  
+- Create: `web/src/lib/server/law-source-sync.ts`
   Sanitize titles, generate Markdown, compute hashes, read/write state, and materialize changed files.
-- Create: `web/src/lib/server/__tests__/law-source-sync.test.ts`  
+- Create: `web/src/lib/server/__tests__/law-source-sync.test.ts`
   Verify filename collision, incremental updates, state, and no `sourceHtml` output.
-- Create: `web/src/app/api/projects/[projectId]/sources/law-db/sync/route.ts`  
+- Create: `web/src/app/api/projects/[projectId]/sources/law-db/sync/route.ts`
   Resolve project, enforce write access, call repo and sync service, return stats.
-- Create: `web/src/app/api/projects/[projectId]/sources/law-db/sync/__tests__/route.test.ts`  
+- Create: `web/src/app/api/projects/[projectId]/sources/law-db/sync/__tests__/route.test.ts`
   Verify success, unknown project, read-only access, and safe DB config errors.
-- Create: `web/src/components/workbench/law-database-sync-card.tsx`  
+- Create: `web/src/components/workbench/law-database-sync-card.tsx`
   Client UI button and result/error display.
-- Create: `web/src/components/workbench/law-database-sync-card.test.tsx`  
+- Create: `web/src/components/workbench/law-database-sync-card.test.tsx`
   Verify loading, success stats, and error state.
-- Modify: `web/src/components/workbench/project-workbench.tsx`  
-  Render the sync card inside Project Info.
-- Modify: `web/README.md`  
+- Modify: `web/src/components/workbench/project-overview.tsx`
+  Render the sync card inside the Overview project information summary.
+- Modify: `web/README.md`
   Document the Web-side law database sync flow and env vars without real credentials.
 
 ---
