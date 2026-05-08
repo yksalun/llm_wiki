@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   BookmarkPlus,
   Check,
@@ -317,152 +319,80 @@ function AnswerActionButton({
 }
 
 function MarkdownContent({ content }: { content: string }) {
-  const blocks = parseMarkdownBlocks(stripHiddenHtmlComments(content));
+  const markdown = stripHiddenHtmlComments(content);
 
   return (
-    <div className="space-y-2 text-sm leading-6 text-inherit">
-      {blocks.map((block, index) => {
-        if (block.type === "h1") {
-          return (
-            <h1 key={index} className="text-lg font-semibold text-inherit">
-              {renderInlineMarkdown(block.text)}
-            </h1>
-          );
-        }
+    <div className="markdown-answer space-y-2 text-sm leading-6 text-inherit">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          h1: ({ children }) => (
+            <h1 className="text-lg font-semibold text-inherit">{children}</h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="text-base font-semibold text-inherit">{children}</h2>
+          ),
+          h3: ({ children }) => (
+            <h3 className="text-[15px] font-semibold text-inherit">{children}</h3>
+          ),
+          h4: ({ children }) => (
+            <h4 className="text-sm font-semibold text-inherit">{children}</h4>
+          ),
+          p: ({ children }) => <p>{children}</p>,
+          ul: ({ children }) => <ul className="ml-5 list-disc space-y-1">{children}</ul>,
+          ol: ({ children }) => <ol className="ml-5 list-decimal space-y-1">{children}</ol>,
+          blockquote: ({ children }) => (
+            <blockquote className="border-l-2 border-[color:var(--paper-border)] pl-3 text-muted-foreground">
+              {children}
+            </blockquote>
+          ),
+          code: ({ children, className }) => {
+            const isBlock = className?.startsWith("language-");
 
-        if (block.type === "h2") {
-          return (
-            <h2 key={index} className="text-base font-semibold text-inherit">
-              {renderInlineMarkdown(block.text)}
-            </h2>
-          );
-        }
-
-        if (block.type === "ul") {
-          return (
-            <ul key={index} className="ml-5 list-disc space-y-1">
-              {block.items.map((item, itemIndex) => (
-                <li key={itemIndex}>{renderInlineMarkdown(item)}</li>
-              ))}
-            </ul>
-          );
-        }
-
-        if (block.type === "ol") {
-          return (
-            <ol key={index} className="ml-5 list-decimal space-y-1">
-              {block.items.map((item, itemIndex) => (
-                <li key={itemIndex}>{renderInlineMarkdown(item)}</li>
-              ))}
-            </ol>
-          );
-        }
-
-        if (block.type === "p") {
-          return <p key={index}>{renderInlineMarkdown(block.text)}</p>;
-        }
-
-        return null;
-      })}
+            return isBlock ? (
+              <code className={cn("font-mono text-[0.85em]", className)}>
+                {children}
+              </code>
+            ) : (
+              <code className="rounded bg-[color:var(--paper-elevated)] px-1 py-0.5 font-mono text-[0.85em]">
+                {children}
+              </code>
+            );
+          },
+          pre: ({ children }) => (
+            <pre className="overflow-x-auto rounded-md bg-[color:var(--paper-elevated)] p-3 leading-6">
+              {children}
+            </pre>
+          ),
+          table: ({ children }) => (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left text-sm">{children}</table>
+            </div>
+          ),
+          th: ({ children }) => (
+            <th className="border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-2 py-1 font-semibold">
+              {children}
+            </th>
+          ),
+          td: ({ children }) => (
+            <td className="border border-[color:var(--paper-border)] px-2 py-1">{children}</td>
+          ),
+          a: ({ children, href }) => (
+            <a
+              href={href}
+              className="font-medium underline underline-offset-2"
+              rel="noreferrer"
+              target="_blank"
+            >
+              {children}
+            </a>
+          ),
+        }}
+      >
+        {markdown}
+      </ReactMarkdown>
     </div>
   );
-}
-
-type MarkdownBlock =
-  | { type: "h1" | "h2" | "p"; text: string }
-  | { type: "ul" | "ol"; items: string[] };
-
-function parseMarkdownBlocks(content: string): MarkdownBlock[] {
-  const lines = content.split(/\r?\n/);
-  const blocks: MarkdownBlock[] = [];
-  let index = 0;
-
-  while (index < lines.length) {
-    const line = lines[index] ?? "";
-    const trimmed = line.trim();
-
-    if (!trimmed) {
-      index += 1;
-      continue;
-    }
-
-    if (trimmed.startsWith("# ")) {
-      blocks.push({ type: "h1", text: trimmed.slice(2).trim() });
-      index += 1;
-      continue;
-    }
-
-    if (trimmed.startsWith("## ")) {
-      blocks.push({ type: "h2", text: trimmed.slice(3).trim() });
-      index += 1;
-      continue;
-    }
-
-    if (trimmed.startsWith("- ")) {
-      const items: string[] = [];
-      while (index < lines.length && (lines[index] ?? "").trim().startsWith("- ")) {
-        items.push((lines[index] ?? "").trim().slice(2).trim());
-        index += 1;
-      }
-      blocks.push({ type: "ul", items });
-      continue;
-    }
-
-    if (/^\d+\.\s+/.test(trimmed)) {
-      const items: string[] = [];
-      while (index < lines.length && /^\d+\.\s+/.test((lines[index] ?? "").trim())) {
-        items.push((lines[index] ?? "").trim().replace(/^\d+\.\s+/, ""));
-        index += 1;
-      }
-      blocks.push({ type: "ol", items });
-      continue;
-    }
-
-    const paragraph: string[] = [];
-    while (index < lines.length) {
-      const paragraphLine = (lines[index] ?? "").trim();
-      if (
-        !paragraphLine ||
-        paragraphLine.startsWith("# ") ||
-        paragraphLine.startsWith("## ") ||
-        paragraphLine.startsWith("- ") ||
-        /^\d+\.\s+/.test(paragraphLine)
-      ) {
-        break;
-      }
-
-      paragraph.push(paragraphLine);
-      index += 1;
-    }
-    blocks.push({ type: "p", text: paragraph.join(" ") });
-  }
-
-  return blocks;
-}
-
-function renderInlineMarkdown(text: string) {
-  return text.split(/(`[^`]+`|\*\*[^*]+?\*\*)/g).map((part, index) => {
-    if (part.startsWith("`") && part.endsWith("`")) {
-      return (
-        <code
-          key={index}
-          className="rounded bg-[color:var(--paper-elevated)] px-1 py-0.5 font-mono text-[0.85em]"
-        >
-          {part.slice(1, -1)}
-        </code>
-      );
-    }
-
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return (
-        <strong key={index} className="font-semibold">
-          {part.slice(2, -2)}
-        </strong>
-      );
-    }
-
-    return part;
-  });
 }
 
 export function stripHiddenHtmlComments(content: string) {

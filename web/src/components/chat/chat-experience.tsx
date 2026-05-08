@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef } from "react";
 import { LoaderCircle, MessageSquare, StopCircle } from "lucide-react";
 
 import { ChatMessage } from "@/components/chat/chat-message";
@@ -148,7 +148,6 @@ function ActiveChatExperience({
   const isComposingRef = useRef(false);
   const lastRequestedConversationIdRef = useRef<string | null>(null);
   const lastNewConversationRequestIdRef = useRef<number | null>(null);
-  const [composerHeight, setComposerHeight] = useState(224);
   const session = useQuestionSession({
     projectId,
     autoStartConversation: !isHomeMode,
@@ -158,28 +157,8 @@ function ActiveChatExperience({
   const lastRenderedMessage =
     session.renderedMessages[session.renderedMessages.length - 1] ?? null;
   const hasHomeConversationContent = isHomeMode && session.renderedMessages.length > 0;
-  const composerHeightStyle = {
-    "--chat-home-composer-height": `${Math.max(composerHeight, 224)}px`,
-  } as CSSProperties;
 
   useEffect(() => {
-    if (isHomeMode) {
-      if (hasHomeConversationContent && typeof window !== "undefined") {
-        const scrollHeight = Math.max(
-          document.documentElement.scrollHeight,
-          document.body.scrollHeight,
-        );
-
-        if (scrollHeight > window.innerHeight) {
-          window.requestAnimationFrame(() => {
-            window.scrollTo({ top: scrollHeight });
-          });
-        }
-      }
-
-      return;
-    }
-
     const viewport = viewportRef.current;
 
     if (!viewport) {
@@ -199,39 +178,6 @@ function ActiveChatExperience({
     lastRenderedMessage?.content,
     session.status,
   ]);
-
-  useLayoutEffect(() => {
-    if (!isHomeMode) {
-      return;
-    }
-
-    const composer = composerRef.current;
-
-    if (!composer) {
-      return;
-    }
-
-    const updateComposerHeight = () => {
-      const nextHeight = Math.ceil(composer.getBoundingClientRect().height);
-
-      if (nextHeight > 0) {
-        setComposerHeight(nextHeight);
-      }
-    };
-
-    updateComposerHeight();
-
-    if (typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    const observer = new ResizeObserver(updateComposerHeight);
-    observer.observe(composer);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [composerTopSlot, hasHomeConversationContent, isHomeMode, session.status]);
 
   useEffect(() => {
     if (!requestedConversationId) {
@@ -257,7 +203,15 @@ function ActiveChatExperience({
 
     lastRequestedConversationIdRef.current = requestedConversationId;
     void session.handleSelectConversation(requestedConversationId);
-  }, [isHomeMode, requestedConversationId, session.activeConversationId, session.status]);
+  }, [
+    isHomeMode,
+    requestedConversationId,
+    session.activeConversationId,
+    session.handleClearConversation,
+    session.handleSelectConversation,
+    session,
+    session.status,
+  ]);
 
   useEffect(() => {
     if (!newConversationRequestId) {
@@ -274,7 +228,7 @@ function ActiveChatExperience({
 
     lastNewConversationRequestIdRef.current = newConversationRequestId;
     void session.handleNewConversation();
-  }, [newConversationRequestId, session.status]);
+  }, [newConversationRequestId, session.handleNewConversation, session.status, session]);
 
   function handleDraftKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey) {
@@ -298,12 +252,11 @@ function ActiveChatExperience({
     <div
       className={cn(
         isHomeMode
-          ? "flex min-h-[calc(100vh-3.75rem)] min-w-0 max-w-full flex-1 flex-col bg-transparent"
+          ? "flex h-full min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden bg-transparent"
           : "flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]",
         isHomeMode && !hasHomeConversationContent && "justify-center",
         minHeightClassName,
       )}
-      style={isHomeMode ? composerHeightStyle : undefined}
     >
       {!isHomeMode ? (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--paper-border)] px-4 py-3">
@@ -321,43 +274,59 @@ function ActiveChatExperience({
 
       <div
         ref={viewportRef}
+        data-chat-message-viewport={mode}
         className={cn(
           isHomeMode
-            ? "mx-auto w-full max-w-3xl space-y-3 px-0 py-4"
+            ? "chat-home-message-scrollbar mr-0 min-h-0 w-full max-w-none flex-1 overflow-y-auto pl-0 pr-0 py-4"
             : "min-h-0 flex-1 space-y-3 overflow-y-auto p-4",
           isHomeMode && !hasHomeConversationContent && "hidden",
         )}
       >
-        {!isHomeMode && session.renderedMessages.length === 0 && session.status !== "loading" ? (
-          <p className="rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 text-sm text-muted-foreground">
-            暂无消息
-          </p>
-        ) : null}
-        {session.renderedMessages.map((message, index) => (
-          <ChatMessage
-            key={message.id}
-            projectId={projectId}
-            message={message}
-            hiddenMessageId={session.hiddenMessageId}
-            isLast={index === session.renderedMessages.length - 1}
-            onAnswerAction={session.handleAnswerAction}
-          />
-        ))}
+        <div
+          data-chat-message-rail={mode}
+          className={cn(isHomeMode ? "mx-auto w-full max-w-3xl space-y-3" : "space-y-3")}
+        >
+          {!isHomeMode && session.renderedMessages.length === 0 && session.status !== "loading" ? (
+            <p className="rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 text-sm text-muted-foreground">
+              暂无消息
+            </p>
+          ) : null}
+          {session.renderedMessages.map((message, index) => (
+            <ChatMessage
+              key={message.id}
+              projectId={projectId}
+              message={message}
+              hiddenMessageId={session.hiddenMessageId}
+              isLast={index === session.renderedMessages.length - 1}
+              onAnswerAction={session.handleAnswerAction}
+            />
+          ))}
+        </div>
       </div>
 
       {session.status === "loading" ? (
-        <div className="mx-4 mb-3 flex items-center gap-2 rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 text-sm text-muted-foreground">
-          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-          正在加载项目问答
+        <div
+          data-chat-status-rail={mode}
+          className={cn(isHomeMode ? "mx-auto w-full max-w-3xl" : "mx-4")}
+        >
+          <div className="mb-3 flex items-center gap-2 rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 text-sm text-muted-foreground">
+            <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+            正在加载项目问答
+          </div>
         </div>
       ) : null}
 
       {session.errorMessage ? (
-        <Alert variant="destructive" className="mx-4 mb-3 border-destructive/20 bg-destructive/5">
-          <MessageSquare className="size-4" />
-          <AlertTitle>问答失败</AlertTitle>
-          <AlertDescription>{session.errorMessage}</AlertDescription>
-        </Alert>
+        <div
+          data-chat-status-rail={mode}
+          className={cn(isHomeMode ? "mx-auto w-full max-w-3xl" : "mx-4")}
+        >
+          <Alert variant="destructive" className="mb-3 border-destructive/20 bg-destructive/5">
+            <MessageSquare className="size-4" />
+            <AlertTitle>问答失败</AlertTitle>
+            <AlertDescription>{session.errorMessage}</AlertDescription>
+          </Alert>
+        </div>
       ) : null}
 
       <form
@@ -367,7 +336,7 @@ function ActiveChatExperience({
         className={cn(
           isHomeMode
             ? hasHomeConversationContent
-              ? "fixed bottom-0 left-0 right-0 z-20 bg-[color:var(--paper-base)]/95 px-3 pb-4 pt-3 backdrop-blur md:left-[var(--chat-home-sidebar-width)] md:px-5"
+              ? "shrink-0 bg-[color:var(--paper-base)]/95 pb-4 pt-3 backdrop-blur"
               : "z-10 mx-auto w-full max-w-3xl bg-[color:var(--paper-base)]/95 px-0 pb-4 pt-3 backdrop-blur"
             : "border-t border-[color:var(--paper-border)] p-3",
         )}
@@ -429,13 +398,6 @@ function ActiveChatExperience({
         </div>
         </div>
       </form>
-      {hasHomeConversationContent ? (
-        <div
-          data-chat-composer-spacer="home"
-          className="h-[var(--chat-home-composer-height)] shrink-0"
-          aria-hidden="true"
-        />
-      ) : null}
     </div>
   );
 

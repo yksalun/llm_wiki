@@ -690,6 +690,7 @@ describe("ProjectQuestionPanel", () => {
 
     await clickButtonContaining("schema.md");
     expect(document.body.textContent).toContain("schema.md");
+    expect(container?.textContent).not.toContain("Desktop bridge reference body.");
     expect(apiMocks.fetchProjectFile).toHaveBeenCalledWith(
       "project-1",
       "wiki/schema.md",

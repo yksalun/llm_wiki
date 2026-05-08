@@ -10,6 +10,7 @@ import {
   Boxes,
   FileSearch,
   FolderArchive,
+  Home,
 } from "lucide-react";
 
 import { AppShell } from "@/components/app/app-shell";
@@ -78,9 +79,9 @@ export function ProjectListPage() {
 
   return (
     <AppShell
-      eyebrow="项目登记册"
-      title="选择要打开的项目档案"
-      description="浏览当前可用项目，查看结构完整度，然后进入工作台继续阅读、编辑和分析。"
+      eyebrow="知识库后台"
+      title="知识库管理"
+      description="集中查看知识库状态、结构完整度和可用入口，选择项目后进入工作台维护内容。"
       aside={<HeaderAside projectCount={projectCount} />}
     >
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
@@ -106,10 +107,10 @@ export function ProjectListPage() {
           <Card className="border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/90 shadow-[0_16px_48px_rgba(61,52,40,0.08)]">
             <CardHeader className="border-b border-[color:var(--paper-border)]">
               <CardTitle className="text-[15px] uppercase tracking-[0.18em] text-[color:var(--ink-soft)]">
-                阅读提示
+                管理提示
               </CardTitle>
               <CardDescription>
-                列表优先呈现项目结构和进入工作台所需的线索。
+                后台页优先呈现知识库完整度和进入维护工作台所需的线索。
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
@@ -141,10 +142,10 @@ function HeaderAside({ projectCount }: { projectCount?: number }) {
     <Card className="border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/95 shadow-[0_18px_60px_rgba(88,67,42,0.10)]">
       <CardHeader className="border-b border-[color:var(--paper-border)]">
         <CardTitle className="text-sm uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">
-          项目入口
+          后台入口
         </CardTitle>
         <CardDescription>
-          进入研究工作台前的项目选择台。
+          管理知识库前的项目总览。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 pt-4">
@@ -164,6 +165,13 @@ function HeaderAside({ projectCount }: { projectCount?: number }) {
         <p className="text-sm leading-6 text-muted-foreground">
           打开结构已经足够完整的项目，或把缺失项作为整理线索。
         </p>
+        <Link
+          href="/"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 text-sm font-medium text-[color:var(--ink-strong)] transition-colors hover:bg-[color:var(--paper-elevated)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]"
+        >
+          <Home className="size-4" aria-hidden="true" />
+          返回首页
+        </Link>
       </CardContent>
     </Card>
   );

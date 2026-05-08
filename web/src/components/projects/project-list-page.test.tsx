@@ -38,6 +38,34 @@ afterEach(() => {
 });
 
 describe("ProjectListPage", () => {
+  it("renders as a knowledge base dashboard with a route back home", async () => {
+    vi.mocked(fetchProjects).mockResolvedValue({
+      projects: [
+        {
+          id: "project-a",
+          name: "Alpha",
+          status: "ready",
+          hasPurpose: true,
+          hasSchema: true,
+          hasWikiDirectory: true,
+          hasRawSourcesDirectory: true,
+          updatedAt: null,
+        },
+      ],
+      warnings: [],
+    } satisfies ProjectsListResponse);
+
+    await renderProjectListPage();
+
+    expect(container?.textContent).toContain("知识库后台");
+    expect(container?.textContent).toContain("返回首页");
+    expect(container?.querySelector<HTMLAnchorElement>('a[href="/"]')?.textContent).toContain(
+      "返回首页",
+    );
+    expect(container?.textContent).toContain("1");
+    expect(container?.textContent).toContain("Alpha");
+  });
+
   it("renders duplicate registry warnings without duplicate key errors", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
 

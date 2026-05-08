@@ -74,7 +74,7 @@ describe("ChatHomePage", () => {
     expect(container?.textContent).toContain("暂无知识库，请先打开知识库配置添加项目。");
   });
 
-  it("centers the empty home composer while only the chat pane can scroll", async () => {
+  it("centers the empty home composer while the page shell owns the viewport", async () => {
     vi.mocked(fetchProjects).mockResolvedValue({
       projects: [],
       warnings: [],
@@ -91,15 +91,17 @@ describe("ChatHomePage", () => {
     expect(sidebar?.className.split(/\s+/)).toContain("h-screen");
 
     const chatScrollArea = container?.querySelector<HTMLElement>('[data-chat-home-scroll-area="true"]');
-    expect(chatScrollArea?.className).toContain("overflow-y-auto");
+    expect(chatScrollArea?.className).toContain("overflow-hidden");
     expect(chatScrollArea?.className).toContain("flex-1");
 
     const chatExperience = container?.querySelector<HTMLElement>('[data-chat-experience="home"]');
-    expect(chatExperience?.className).toContain("max-w-3xl");
-    expect(chatExperience?.className).toContain("min-h-[calc(100vh-3.75rem)]");
+    expect(chatExperience?.className).toContain("max-w-none");
+    expect(chatExperience?.className).toContain("h-full");
     expect(chatExperience?.className).toContain("bg-transparent");
     expect(chatExperience?.className).not.toContain("bg-[color:var(--paper-panel)]");
     expect(chatExperience?.parentElement?.className).toContain("justify-center");
+    expect(chatExperience?.parentElement?.className).toContain("pr-0");
+    expect(chatExperience?.parentElement?.className).toContain("md:pr-0");
 
     const composer = container?.querySelector<HTMLElement>('[data-chat-composer="home"]');
     expect(composer?.getAttribute("data-chat-composer-state")).toBe("empty");
@@ -180,13 +182,25 @@ describe("ChatHomePage", () => {
 
     const composer = container?.querySelector<HTMLElement>('[data-chat-composer="home"]');
     expect(composer?.getAttribute("data-chat-composer-state")).toBe("active");
-    expect(composer?.className).toContain("fixed");
-    expect(composer?.className).toContain("bottom-0");
-    expect(composer?.className).toContain("md:left-[var(--chat-home-sidebar-width)]");
+    expect(composer?.className).toContain("shrink-0");
+    expect(composer?.className).not.toContain("fixed");
+    expect(composer?.className).not.toContain("bottom-0");
+
+    const viewport = container?.querySelector<HTMLElement>('[data-chat-message-viewport="home"]');
+    expect(viewport?.className).toContain("flex-1");
+    expect(viewport?.className).toContain("overflow-y-auto");
+    expect(viewport?.className).toContain("chat-home-message-scrollbar");
+    expect(viewport?.className).toContain("max-w-none");
+    expect(viewport?.className).toContain("mr-0");
+    expect(viewport?.className).toContain("pl-0");
+    expect(viewport?.className).toContain("pr-0");
+
+    const messageRail = container?.querySelector<HTMLElement>('[data-chat-message-rail="home"]');
+    expect(messageRail?.className).toContain("mx-auto");
+    expect(messageRail?.className).toContain("max-w-3xl");
 
     const spacer = container?.querySelector<HTMLElement>('[data-chat-composer-spacer="home"]');
-    expect(spacer).not.toBeNull();
-    expect(spacer?.className).toContain("h-[var(--chat-home-composer-height)]");
+    expect(spacer).toBeNull();
   });
 
   it("starts a new home chat from the sidebar for the selected knowledge base", async () => {
@@ -670,6 +684,37 @@ describe("ChatHomePage", () => {
     await renderChatHomePage();
     await waitForText("无法加载知识库：project roots missing");
     await waitForText("打开知识库配置");
+  });
+
+  it("keeps home question status alerts aligned to the composer width", async () => {
+    vi.mocked(fetchProjects).mockResolvedValue({
+      projects: [
+        {
+          id: "project-a",
+          name: "Alpha",
+          status: "ready",
+          hasPurpose: true,
+          hasSchema: true,
+          hasWikiDirectory: true,
+          hasRawSourcesDirectory: true,
+          updatedAt: null,
+        },
+      ],
+      warnings: [],
+    });
+    desktopMocks.listQuestionConversations.mockRejectedValue(
+      new Error("桌面端 Bridge 暂不可用，请确认桌面应用已启动。"),
+    );
+
+    await renderChatHomePage();
+    await selectKnowledgeBase("Alpha");
+    await waitForText("问答失败");
+
+    const alertRail = container?.querySelector<HTMLElement>('[data-chat-status-rail="home"]');
+    expect(alertRail?.className).toContain("mx-auto");
+    expect(alertRail?.className).toContain("max-w-3xl");
+    expect(alertRail?.className).toContain("w-full");
+    expect(alertRail?.textContent).toContain("桌面端 Bridge 暂不可用");
   });
 
   it("shows unavailable recent chats when the stored project is gone", async () => {

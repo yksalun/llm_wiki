@@ -41,7 +41,6 @@ export function QuestionReferences({
   references,
 }: QuestionReferencesProps) {
   const [expanded, setExpanded] = useState(false);
-  const [open, setOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedReference, setSelectedReference] =
     useState<DesktopBridgeReference | null>(null);
@@ -55,7 +54,6 @@ export function QuestionReferences({
     requestIdRef.current += 1;
     abortRef.current?.abort();
     abortRef.current = null;
-    setOpen(false);
     setSheetOpen(false);
     setSelectedReference(null);
     setFile(null);
@@ -75,7 +73,6 @@ export function QuestionReferences({
       setFile(null);
       setStatus("loading");
       setErrorMessage(null);
-      setOpen(true);
       setSheetOpen(true);
 
       void fetchProjectFile(projectId, reference.path, controller.signal)
@@ -119,7 +116,7 @@ export function QuestionReferences({
       open={sheetOpen}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
-          setSheetOpen(false);
+          closePreview();
         }
       }}
     >
@@ -164,42 +161,6 @@ export function QuestionReferences({
           </div>
         </CardContent>
       </Card>
-
-      {open ? (
-        <div className="mt-2 rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]">
-          <div className="border-b border-[color:var(--paper-border)] px-3 py-2">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-[color:var(--ink-strong)]">
-                  {selectedReference ? getReferenceFileName(selectedReference) : "寮曠敤鏂囦欢"}
-                </p>
-                <p className="break-all text-xs text-muted-foreground">
-                  {selectedReference?.path ?? "鏈€夋嫨鏂囦欢"}
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-xs text-muted-foreground"
-                onClick={closePreview}
-              >
-                Close
-              </Button>
-            </div>
-          </div>
-          <div
-            data-reference-preview-body="true"
-            className="max-h-96 overflow-y-auto p-3"
-          >
-            <ReferencePreviewBody
-              status={status}
-              file={file}
-              errorMessage={errorMessage}
-            />
-          </div>
-        </div>
-      ) : null}
 
       <SheetContent className="flex w-[min(42rem,calc(100vw-2rem))] flex-col overflow-hidden sm:max-w-2xl">
           <SheetHeader>

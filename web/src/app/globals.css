@@ -196,3 +196,30 @@
     text-wrap: pretty;
   }
 }
+
+@layer utilities {
+  .chat-home-message-scrollbar {
+    scrollbar-color: color-mix(in oklab, var(--ink-soft) 22%, transparent) transparent;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+  }
+
+  .chat-home-message-scrollbar::-webkit-scrollbar {
+    width: 7px;
+  }
+
+  .chat-home-message-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .chat-home-message-scrollbar::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+    background-color: color-mix(in oklab, var(--ink-soft) 18%, transparent);
+  }
+
+  .chat-home-message-scrollbar:hover::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--ink-soft) 30%, transparent);
+  }
+}

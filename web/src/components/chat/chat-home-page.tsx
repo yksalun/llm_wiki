@@ -298,7 +298,7 @@ export function ChatHomePage() {
 
         <div
           data-chat-home-scroll-area="true"
-          className="flex min-h-0 min-w-0 w-full flex-1 justify-center overflow-y-auto px-3 pb-0 pt-3 md:px-5 md:pt-5"
+          className="flex min-h-0 min-w-0 w-full flex-1 justify-center overflow-hidden pb-0 pl-3 pr-0 pt-3 md:pl-5 md:pr-0 md:pt-5"
         >
           <ChatExperience
             key={selectedProject?.id ?? "no-project"}
@@ -308,7 +308,7 @@ export function ChatHomePage() {
             showSessionList={false}
             disabledMessage={getComposerDisabledMessage(projectsState, projects.length)}
             composerTopSlot={selector}
-            className="flex min-h-[calc(100vh-3.75rem)] min-w-0 w-full max-w-3xl flex-1"
+            className="flex h-full min-w-0 w-full max-w-none flex-1"
             minHeightClassName="min-h-0"
             requestedConversationId={homeState.selectedConversationId}
             newConversationRequestId={newConversationRequestId}
