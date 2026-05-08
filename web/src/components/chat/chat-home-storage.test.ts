@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   CHAT_HOME_STORAGE_KEY,
   loadChatHomeState,
+  renameRecentConversation,
   removeRecentConversation,
   saveChatHomeState,
   upsertRecentConversation,
@@ -20,14 +21,16 @@ describe("chat home storage", () => {
     expect(loadChatHomeState()).toEqual({
       sidebarCollapsed: false,
       selectedProjectId: null,
+      selectedConversationId: null,
       recentConversations: [],
     });
   });
 
-  it("saves and loads selected project and collapsed sidebar", () => {
+  it("saves and loads selected project, conversation, and collapsed sidebar", () => {
     const state: ChatHomeState = {
       sidebarCollapsed: true,
       selectedProjectId: "project-1",
+      selectedConversationId: "conv-1",
       recentConversations: [],
     };
 
@@ -36,6 +39,7 @@ describe("chat home storage", () => {
     expect(JSON.parse(window.localStorage.getItem(CHAT_HOME_STORAGE_KEY) ?? "{}")).toMatchObject({
       sidebarCollapsed: true,
       selectedProjectId: "project-1",
+      selectedConversationId: "conv-1",
     });
     expect(loadChatHomeState()).toEqual(state);
   });
@@ -85,5 +89,63 @@ describe("chat home storage", () => {
     });
 
     expect(removeRecentConversation(state, "project-a", "conv-1").recentConversations).toEqual([]);
+  });
+
+  it("renames a recent conversation locally", () => {
+    const state = upsertRecentConversation(loadChatHomeState(), {
+      projectId: "project-a",
+      projectName: "Alpha",
+      conversationId: "conv-1",
+      title: "First",
+      updatedAt: 1,
+    });
+
+    expect(
+      renameRecentConversation(state, "project-a", "conv-1", "Renamed chat")
+        .recentConversations,
+    ).toEqual([
+      {
+        projectId: "project-a",
+        projectName: "Alpha",
+        conversationId: "conv-1",
+        title: "Renamed chat",
+        updatedAt: 1,
+        isTitleCustomized: true,
+      },
+    ]);
+  });
+
+  it("keeps a locally renamed title when the conversation syncs again", () => {
+    const renamedState = renameRecentConversation(
+      upsertRecentConversation(loadChatHomeState(), {
+        projectId: "project-a",
+        projectName: "Alpha",
+        conversationId: "conv-1",
+        title: "First",
+        updatedAt: 1,
+      }),
+      "project-a",
+      "conv-1",
+      "Renamed chat",
+    );
+
+    const syncedState = upsertRecentConversation(renamedState, {
+      projectId: "project-a",
+      projectName: "Alpha",
+      conversationId: "conv-1",
+      title: "First from API",
+      updatedAt: 2,
+    });
+
+    expect(syncedState.recentConversations).toEqual([
+      {
+        projectId: "project-a",
+        projectName: "Alpha",
+        conversationId: "conv-1",
+        title: "Renamed chat",
+        updatedAt: 2,
+        isTitleCustomized: true,
+      },
+    ]);
   });
 });

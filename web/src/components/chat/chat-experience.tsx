@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { LoaderCircle, MessageSquare, StopCircle } from "lucide-react";
 
 import { ChatMessage } from "@/components/chat/chat-message";
@@ -21,6 +21,8 @@ export interface ChatExperienceProps {
   composerTopSlot?: React.ReactNode;
   className?: string;
   minHeightClassName?: string;
+  requestedConversationId?: string | null;
+  newConversationRequestId?: number;
   onConversationChange?: (event: {
     projectId: string;
     conversation: DesktopBridgeConversation | null;
@@ -37,9 +39,12 @@ export function ChatExperience({
   composerTopSlot,
   className,
   minHeightClassName = "min-h-[28rem]",
+  requestedConversationId,
+  newConversationRequestId,
   onConversationChange,
 }: ChatExperienceProps) {
   const isHomeMode = mode === "home";
+  const emptyHomeComposerState = isHomeMode ? "empty" : undefined;
 
   if (!projectId) {
     return (
@@ -47,7 +52,7 @@ export function ChatExperience({
         data-chat-experience={mode}
         className={cn(
           isHomeMode
-            ? "flex min-w-0 max-w-full flex-1 flex-col overflow-hidden bg-transparent"
+            ? "flex min-w-0 max-w-full flex-1 flex-col bg-transparent"
             : "flex min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]",
           minHeightClassName,
           className,
@@ -56,15 +61,16 @@ export function ChatExperience({
         <div
           className={cn(
             "flex min-w-0 w-full flex-1",
-            isHomeMode ? "flex-col justify-end" : "items-center justify-center p-4",
+            isHomeMode ? "items-center justify-center" : "items-center justify-center p-4",
           )}
         >
           <div
             data-chat-composer={mode}
+            data-chat-composer-state={emptyHomeComposerState}
             className={cn(
               "min-w-0 w-full max-w-full",
               isHomeMode
-                ? "sticky bottom-0 z-10 mx-auto max-w-3xl bg-[color:var(--paper-base)]/95 px-0 pb-4 pt-3 backdrop-blur"
+                ? "z-10 mx-auto max-w-3xl bg-[color:var(--paper-base)]/95 px-0 pb-4 pt-3 backdrop-blur"
                 : "rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-4 md:max-w-3xl",
             )}
           >
@@ -83,7 +89,7 @@ export function ChatExperience({
                 className={cn(
                   "min-h-20 w-full resize-none text-sm leading-6 text-[color:var(--ink-strong)] outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60",
                   isHomeMode
-                    ? "rounded-md border-0 bg-transparent px-1 py-1 focus-visible:ring-0"
+                    ? "rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 focus-visible:ring-2 focus-visible:ring-ring"
                     : "rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)] px-3 py-2",
                 )}
               />
@@ -112,6 +118,8 @@ export function ChatExperience({
       composerTopSlot={composerTopSlot}
       className={className}
       minHeightClassName={minHeightClassName}
+      requestedConversationId={requestedConversationId}
+      newConversationRequestId={newConversationRequestId}
       onConversationChange={onConversationChange}
     />
   );
@@ -130,17 +138,48 @@ function ActiveChatExperience({
   composerTopSlot,
   className,
   minHeightClassName = "min-h-[28rem]",
+  requestedConversationId,
+  newConversationRequestId,
   onConversationChange,
 }: ActiveChatExperienceProps) {
   const isHomeMode = mode === "home";
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLFormElement | null>(null);
   const isComposingRef = useRef(false);
-  const session = useQuestionSession({ projectId, onConversationChange });
+  const lastRequestedConversationIdRef = useRef<string | null>(null);
+  const lastNewConversationRequestIdRef = useRef<number | null>(null);
+  const [composerHeight, setComposerHeight] = useState(224);
+  const session = useQuestionSession({
+    projectId,
+    autoStartConversation: !isHomeMode,
+    onConversationChange,
+  });
   const trimmedDraft = session.draft.trim();
   const lastRenderedMessage =
     session.renderedMessages[session.renderedMessages.length - 1] ?? null;
+  const hasHomeConversationContent = isHomeMode && session.renderedMessages.length > 0;
+  const composerHeightStyle = {
+    "--chat-home-composer-height": `${Math.max(composerHeight, 224)}px`,
+  } as CSSProperties;
 
   useEffect(() => {
+    if (isHomeMode) {
+      if (hasHomeConversationContent && typeof window !== "undefined") {
+        const scrollHeight = Math.max(
+          document.documentElement.scrollHeight,
+          document.body.scrollHeight,
+        );
+
+        if (scrollHeight > window.innerHeight) {
+          window.requestAnimationFrame(() => {
+            window.scrollTo({ top: scrollHeight });
+          });
+        }
+      }
+
+      return;
+    }
+
     const viewport = viewportRef.current;
 
     if (!viewport) {
@@ -155,9 +194,87 @@ function ActiveChatExperience({
     viewport.scrollTop = viewport.scrollHeight;
   }, [
     session.renderedMessages.length,
+    hasHomeConversationContent,
+    isHomeMode,
     lastRenderedMessage?.content,
     session.status,
   ]);
+
+  useLayoutEffect(() => {
+    if (!isHomeMode) {
+      return;
+    }
+
+    const composer = composerRef.current;
+
+    if (!composer) {
+      return;
+    }
+
+    const updateComposerHeight = () => {
+      const nextHeight = Math.ceil(composer.getBoundingClientRect().height);
+
+      if (nextHeight > 0) {
+        setComposerHeight(nextHeight);
+      }
+    };
+
+    updateComposerHeight();
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const observer = new ResizeObserver(updateComposerHeight);
+    observer.observe(composer);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [composerTopSlot, hasHomeConversationContent, isHomeMode, session.status]);
+
+  useEffect(() => {
+    if (!requestedConversationId) {
+      lastRequestedConversationIdRef.current = null;
+      if (isHomeMode && session.activeConversationId) {
+        session.handleClearConversation();
+      }
+      return;
+    }
+
+    if (session.status !== "ready") {
+      return;
+    }
+
+    if (requestedConversationId === session.activeConversationId) {
+      lastRequestedConversationIdRef.current = requestedConversationId;
+      return;
+    }
+
+    if (lastRequestedConversationIdRef.current === requestedConversationId) {
+      return;
+    }
+
+    lastRequestedConversationIdRef.current = requestedConversationId;
+    void session.handleSelectConversation(requestedConversationId);
+  }, [isHomeMode, requestedConversationId, session.activeConversationId, session.status]);
+
+  useEffect(() => {
+    if (!newConversationRequestId) {
+      return;
+    }
+
+    if (session.status !== "ready") {
+      return;
+    }
+
+    if (lastNewConversationRequestIdRef.current === newConversationRequestId) {
+      return;
+    }
+
+    lastNewConversationRequestIdRef.current = newConversationRequestId;
+    void session.handleNewConversation();
+  }, [newConversationRequestId, session.status]);
 
   function handleDraftKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey) {
@@ -181,10 +298,12 @@ function ActiveChatExperience({
     <div
       className={cn(
         isHomeMode
-          ? "flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden bg-transparent"
+          ? "flex min-h-[calc(100vh-3.75rem)] min-w-0 max-w-full flex-1 flex-col bg-transparent"
           : "flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]",
+        isHomeMode && !hasHomeConversationContent && "justify-center",
         minHeightClassName,
       )}
+      style={isHomeMode ? composerHeightStyle : undefined}
     >
       {!isHomeMode ? (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--paper-border)] px-4 py-3">
@@ -203,8 +322,10 @@ function ActiveChatExperience({
       <div
         ref={viewportRef}
         className={cn(
-          "min-h-0 flex-1 space-y-3 overflow-y-auto",
-          isHomeMode ? "mx-auto w-full max-w-3xl px-0 py-4 pb-6" : "p-4",
+          isHomeMode
+            ? "mx-auto w-full max-w-3xl space-y-3 px-0 py-4"
+            : "min-h-0 flex-1 space-y-3 overflow-y-auto p-4",
+          isHomeMode && !hasHomeConversationContent && "hidden",
         )}
       >
         {!isHomeMode && session.renderedMessages.length === 0 && session.status !== "loading" ? (
@@ -240,10 +361,14 @@ function ActiveChatExperience({
       ) : null}
 
       <form
+        ref={composerRef}
         data-chat-composer={mode}
+        data-chat-composer-state={isHomeMode ? (hasHomeConversationContent ? "active" : "empty") : undefined}
         className={cn(
           isHomeMode
-            ? "sticky bottom-0 z-10 mx-auto w-full max-w-3xl bg-[color:var(--paper-base)]/95 px-0 pb-4 pt-3 backdrop-blur"
+            ? hasHomeConversationContent
+              ? "fixed bottom-0 left-0 right-0 z-20 bg-[color:var(--paper-base)]/95 px-3 pb-4 pt-3 backdrop-blur md:left-[var(--chat-home-sidebar-width)] md:px-5"
+              : "z-10 mx-auto w-full max-w-3xl bg-[color:var(--paper-base)]/95 px-0 pb-4 pt-3 backdrop-blur"
             : "border-t border-[color:var(--paper-border)] p-3",
         )}
         onSubmit={(event) => {
@@ -256,7 +381,7 @@ function ActiveChatExperience({
         <div
           className={cn(
             isHomeMode &&
-              "rounded-2xl border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)] p-3 shadow-lg shadow-black/10",
+              "mx-auto w-full max-w-3xl rounded-2xl border border-[color:var(--paper-border)] bg-[color:var(--paper-panel)] p-3 shadow-lg shadow-black/10",
           )}
         >
         {composerTopSlot ? <div className="mb-2">{composerTopSlot}</div> : null}
@@ -277,7 +402,7 @@ function ActiveChatExperience({
           className={cn(
             "min-h-20 w-full resize-none text-sm leading-6 text-[color:var(--ink-strong)] outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60",
             isHomeMode
-              ? "rounded-md border-0 bg-transparent px-1 py-1 focus-visible:ring-0"
+              ? "rounded-lg border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 focus-visible:ring-2 focus-visible:ring-ring"
               : "rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] px-3 py-2 focus-visible:ring-2 focus-visible:ring-ring",
           )}
         />
@@ -304,6 +429,13 @@ function ActiveChatExperience({
         </div>
         </div>
       </form>
+      {hasHomeConversationContent ? (
+        <div
+          data-chat-composer-spacer="home"
+          className="h-[var(--chat-home-composer-height)] shrink-0"
+          aria-hidden="true"
+        />
+      ) : null}
     </div>
   );
 

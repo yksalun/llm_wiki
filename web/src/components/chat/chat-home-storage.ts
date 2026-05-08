@@ -7,17 +7,20 @@ export interface ChatHomeRecentConversation {
   conversationId: string;
   title: string;
   updatedAt: number;
+  isTitleCustomized?: boolean;
 }
 
 export interface ChatHomeState {
   sidebarCollapsed: boolean;
   selectedProjectId: string | null;
+  selectedConversationId: string | null;
   recentConversations: ChatHomeRecentConversation[];
 }
 
 const defaultState: ChatHomeState = {
   sidebarCollapsed: false,
   selectedProjectId: null,
+  selectedConversationId: null,
   recentConversations: [],
 };
 
@@ -54,22 +57,58 @@ export function upsertRecentConversation(
   item: ChatHomeRecentConversation,
 ): ChatHomeState {
   const normalizedItem = normalizeRecentConversation(item);
+  const normalizedState = normalizeChatHomeState(state);
 
   if (!normalizedItem) {
-    return normalizeChatHomeState(state);
+    return normalizedState;
   }
 
-  const existing = normalizeChatHomeState(state).recentConversations.filter(
+  const existingConversation = normalizedState.recentConversations.find(
     (candidate) =>
-      candidate.projectId !== normalizedItem.projectId ||
-      candidate.conversationId !== normalizedItem.conversationId,
+      candidate.projectId === normalizedItem.projectId &&
+      candidate.conversationId === normalizedItem.conversationId,
+  );
+  const nextItem = existingConversation?.isTitleCustomized
+    ? {
+        ...normalizedItem,
+        title: existingConversation.title,
+        isTitleCustomized: true,
+      }
+    : normalizedItem;
+  const existing = normalizedState.recentConversations.filter(
+    (candidate) =>
+      candidate.projectId !== nextItem.projectId ||
+      candidate.conversationId !== nextItem.conversationId,
   );
 
   return {
-    ...normalizeChatHomeState(state),
-    recentConversations: [normalizedItem, ...existing]
+    ...normalizedState,
+    recentConversations: [nextItem, ...existing]
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, MAX_RECENT_CONVERSATIONS),
+  };
+}
+
+export function renameRecentConversation(
+  state: ChatHomeState,
+  projectId: string,
+  conversationId: string,
+  title: string,
+): ChatHomeState {
+  const normalized = normalizeChatHomeState(state);
+  const nextTitle = title.trim();
+
+  if (!nextTitle) {
+    return normalized;
+  }
+
+  return {
+    ...normalized,
+    recentConversations: normalized.recentConversations.map((candidate) =>
+      candidate.projectId === projectId && candidate.conversationId === conversationId
+        ? { ...candidate, title: nextTitle, isTitleCustomized: true }
+        : candidate,
+    ),
   };
 }
 
@@ -110,6 +149,11 @@ function normalizeChatHomeState(value: unknown): ChatHomeState {
       candidate.selectedProjectId.trim().length > 0
         ? candidate.selectedProjectId
         : null,
+    selectedConversationId:
+      typeof candidate.selectedConversationId === "string" &&
+      candidate.selectedConversationId.trim().length > 0
+        ? candidate.selectedConversationId
+        : null,
     recentConversations,
   };
 }
@@ -148,6 +192,7 @@ function normalizeRecentConversation(value: unknown): ChatHomeRecentConversation
     conversationId,
     title: title || "New conversation",
     updatedAt,
+    ...(candidate.isTitleCustomized === true ? { isTitleCustomized: true } : {}),
   };
 }
 

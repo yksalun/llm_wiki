@@ -96,7 +96,7 @@ function AssistantAnswerMessage({
   return (
     <div
       data-answer-message="true"
-      className="group max-w-[78%] rounded-md border border-[color:var(--paper-border)] bg-[color:var(--paper-muted)] p-3 text-[color:var(--ink-strong)]"
+      className="group max-w-[78%] py-1 text-[color:var(--ink-strong)]"
     >
       <AnswerContent message={message} />
       {references.length > 0 ? (

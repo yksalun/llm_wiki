@@ -38,6 +38,7 @@ export interface QuestionSessionSnapshot {
   isStreaming: boolean;
   canSendMessage: boolean;
   setDraft: (value: string) => void;
+  handleClearConversation: () => void;
   handleNewConversation: () => Promise<void>;
   handleSelectConversation: (conversationId: string) => Promise<void>;
   handleSendMessage: (submittedMessage: string) => Promise<void>;
@@ -47,6 +48,7 @@ export interface QuestionSessionSnapshot {
 
 export interface UseQuestionSessionOptions {
   projectId: string;
+  autoStartConversation?: boolean;
   onConversationChange?: (event: {
     projectId: string;
     conversation: DesktopBridgeConversation | null;
@@ -55,6 +57,7 @@ export interface UseQuestionSessionOptions {
 
 export function useQuestionSession({
   projectId,
+  autoStartConversation = true,
   onConversationChange,
 }: UseQuestionSessionOptions): QuestionSessionSnapshot {
   const [conversations, setConversations] = useState<DesktopBridgeConversation[]>([]);
@@ -78,7 +81,9 @@ export function useQuestionSession({
   const isStreaming = status === "streaming";
   const trimmedDraft = draft.trim();
   const canSendMessage =
-    status === "ready" && activeConversationId !== null && trimmedDraft.length > 0;
+    status === "ready" &&
+    (activeConversationId !== null || !autoStartConversation) &&
+    trimmedDraft.length > 0;
 
   useEffect(() => {
     onConversationChangeRef.current = onConversationChange;
@@ -205,12 +210,26 @@ export function useQuestionSession({
     async function loadInitialConversation() {
       try {
         const loadedConversations = await listQuestionConversations(projectId, controller.signal);
-        let activeConversation = loadedConversations[0] ?? null;
+        let activeConversation = autoStartConversation ? loadedConversations[0] ?? null : null;
         let nextConversations = loadedConversations;
 
-        if (!activeConversation) {
+        if (!activeConversation && autoStartConversation) {
           activeConversation = await createQuestionConversation(projectId, controller.signal);
           nextConversations = [activeConversation];
+        }
+
+        if (!activeConversation) {
+          if (!isCurrentInitialRequest()) {
+            return;
+          }
+
+          setConversations(nextConversations);
+          setActiveConversationId(null);
+          setMessages([]);
+          setHiddenMessageId(null);
+          setStatus("ready");
+          notifyConversationChange(null);
+          return;
         }
 
         const loadedMessages = await listQuestionMessages(
@@ -264,7 +283,25 @@ export function useQuestionSession({
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
     };
-  }, [notifyConversationChange, projectId]);
+  }, [autoStartConversation, notifyConversationChange, projectId]);
+
+  function handleClearConversation() {
+    if (isStreaming) {
+      return;
+    }
+
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    requestIdRef.current += 1;
+    setActiveConversationId(null);
+    setMessages([]);
+    setHiddenMessageId(null);
+    setDraft("");
+    resetStreamingState();
+    setErrorMessage(null);
+    setStatus("ready");
+    notifyConversationChange(null);
+  }
 
   async function handleNewConversation() {
     if (isStreaming) {
@@ -375,39 +412,73 @@ export function useQuestionSession({
 
   const handleSendMessage = useCallback(
     async (submittedMessage: string) => {
-      if (status !== "ready" || !activeConversationId) {
+      if (status !== "ready") {
         return;
       }
 
       const controller = replaceAbortController();
       const requestId = nextRequestId();
+      let conversationId = activeConversationId;
+      let nextConversations = conversations;
+
+      if (!conversationId) {
+        if (autoStartConversation) {
+          return;
+        }
+
+        try {
+          const conversation = await createQuestionConversation(projectId, controller.signal);
+
+          if (!isCurrentRequest(controller, requestId)) {
+            return;
+          }
+
+          conversationId = conversation.id;
+          nextConversations = [conversation, ...conversations];
+        } catch (error: unknown) {
+          if (isAbortError(error) || controller.signal.aborted) {
+            return;
+          }
+
+          if (!isCurrentRequest(controller, requestId)) {
+            return;
+          }
+
+          setErrorMessage(getErrorMessage(error));
+          setStatus("error");
+          return;
+        }
+      }
+
       const optimisticMessage: DesktopBridgeMessage = {
         id: `local-${requestId}`,
         role: "user",
         content: submittedMessage,
         timestamp: 0,
-        conversationId: activeConversationId,
+        conversationId,
       };
       const renamedConversations = renamePlaceholderConversationFromQuestion(
-        conversations,
-        activeConversationId,
-        messages,
+        nextConversations,
+        conversationId,
+        conversationId === activeConversationId ? messages : [],
         submittedMessage,
       );
 
       setHiddenMessageId(null);
       setConversations(renamedConversations);
+      setActiveConversationId(conversationId);
       notifyConversationChange(
-        renamedConversations.find((conversation) => conversation.id === activeConversationId) ??
-          null,
+        renamedConversations.find((conversation) => conversation.id === conversationId) ?? null,
       );
-      setMessages((current) => [...current, optimisticMessage]);
+      setMessages((current) =>
+        conversationId === activeConversationId ? [...current, optimisticMessage] : [optimisticMessage],
+      );
       setDraft("");
       resetStreamingState();
       setErrorMessage(null);
       setStatus("streaming");
 
-      void streamQuestionMessage(projectId, activeConversationId, submittedMessage, {
+      void streamQuestionMessage(projectId, conversationId, submittedMessage, {
         signal: controller.signal,
         onToken: (text) => {
           if (!isCurrentRequest(controller, requestId)) {
@@ -472,6 +543,7 @@ export function useQuestionSession({
     },
     [
       activeConversationId,
+      autoStartConversation,
       conversations,
       messages,
       notifyConversationChange,
@@ -649,6 +721,7 @@ export function useQuestionSession({
     isStreaming,
     canSendMessage,
     setDraft,
+    handleClearConversation,
     handleNewConversation,
     handleSelectConversation,
     handleSendMessage,

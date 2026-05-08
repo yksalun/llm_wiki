@@ -74,7 +74,7 @@ describe("ChatHomePage", () => {
     expect(container?.textContent).toContain("暂无知识库，请先打开知识库配置添加项目。");
   });
 
-  it("renders the home chat as a transparent Gemini-style column with a bottom composer", async () => {
+  it("centers the empty home composer while only the chat pane can scroll", async () => {
     vi.mocked(fetchProjects).mockResolvedValue({
       projects: [],
       warnings: [],
@@ -82,17 +82,33 @@ describe("ChatHomePage", () => {
 
     await renderChatHomePage();
 
+    const shell = container?.querySelector<HTMLElement>("main");
+    expect(shell?.className.split(/\s+/)).toContain("h-screen");
+    expect(shell?.className).toContain("overflow-hidden");
+    expect(shell?.className).not.toContain("min-h-screen");
+
+    const sidebar = container?.querySelector<HTMLElement>("aside");
+    expect(sidebar?.className.split(/\s+/)).toContain("h-screen");
+
+    const chatScrollArea = container?.querySelector<HTMLElement>('[data-chat-home-scroll-area="true"]');
+    expect(chatScrollArea?.className).toContain("overflow-y-auto");
+    expect(chatScrollArea?.className).toContain("flex-1");
+
     const chatExperience = container?.querySelector<HTMLElement>('[data-chat-experience="home"]');
     expect(chatExperience?.className).toContain("max-w-3xl");
-    expect(chatExperience?.className).toContain("h-full");
+    expect(chatExperience?.className).toContain("min-h-[calc(100vh-3.75rem)]");
     expect(chatExperience?.className).toContain("bg-transparent");
     expect(chatExperience?.className).not.toContain("bg-[color:var(--paper-panel)]");
     expect(chatExperience?.parentElement?.className).toContain("justify-center");
-    expect(chatExperience?.parentElement?.className).toContain("h-[calc(100vh-3.75rem)]");
 
     const composer = container?.querySelector<HTMLElement>('[data-chat-composer="home"]');
-    expect(composer?.className).toContain("sticky");
-    expect(composer?.className).toContain("bottom-0");
+    expect(composer?.getAttribute("data-chat-composer-state")).toBe("empty");
+    expect(composer?.className).not.toContain("fixed");
+    expect(composer?.className).not.toContain("bottom-0");
+
+    const textarea = requiredQuestionTextarea();
+    expect(textarea.className).toContain("border");
+    expect(textarea.className).not.toContain("border-0");
   });
 
   it("selects a knowledge base and sends through shared streaming API", async () => {
@@ -116,6 +132,12 @@ describe("ChatHomePage", () => {
       { id: "conv-a", title: "New Conversation", createdAt: 1, updatedAt: 1 },
     ]);
     desktopMocks.listQuestionMessages.mockResolvedValue([]);
+    desktopMocks.createQuestionConversation.mockResolvedValue({
+      id: "conv-a",
+      title: "New Conversation",
+      createdAt: 1,
+      updatedAt: 1,
+    });
     desktopMocks.streamQuestionMessage.mockImplementation(
       async (_projectId, _conversationId, _message, nextHandlers) => {
         handlers = nextHandlers;
@@ -126,8 +148,13 @@ describe("ChatHomePage", () => {
     await selectKnowledgeBase("Alpha");
     await waitForText("询问这个知识库");
     updateQuestion("What is inside?");
+    await waitForCondition(() => !requiredButton("发送").disabled);
     await clickButton("发送");
 
+    expect(desktopMocks.createQuestionConversation).toHaveBeenCalledWith(
+      "project-a",
+      expect.any(AbortSignal),
+    );
     expect(desktopMocks.streamQuestionMessage).toHaveBeenCalledWith(
       "project-a",
       "conv-a",
@@ -146,6 +173,470 @@ describe("ChatHomePage", () => {
     });
 
     await waitForText("Home answer.");
+
+    const answerMessage = container?.querySelector<HTMLElement>('[data-answer-message="true"]');
+    expect(answerMessage?.className).not.toContain("bg-[color:var(--paper-muted)]");
+    expect(answerMessage?.className).not.toContain("border-[color:var(--paper-border)]");
+
+    const composer = container?.querySelector<HTMLElement>('[data-chat-composer="home"]');
+    expect(composer?.getAttribute("data-chat-composer-state")).toBe("active");
+    expect(composer?.className).toContain("fixed");
+    expect(composer?.className).toContain("bottom-0");
+    expect(composer?.className).toContain("md:left-[var(--chat-home-sidebar-width)]");
+
+    const spacer = container?.querySelector<HTMLElement>('[data-chat-composer-spacer="home"]');
+    expect(spacer).not.toBeNull();
+    expect(spacer?.className).toContain("h-[var(--chat-home-composer-height)]");
+  });
+
+  it("starts a new home chat from the sidebar for the selected knowledge base", async () => {
+    vi.mocked(fetchProjects).mockResolvedValue({
+      projects: [
+        {
+          id: "project-a",
+          name: "Alpha",
+          status: "ready",
+          hasPurpose: true,
+          hasSchema: true,
+          hasWikiDirectory: true,
+          hasRawSourcesDirectory: true,
+          updatedAt: null,
+        },
+      ],
+      warnings: [],
+    });
+    desktopMocks.listQuestionConversations.mockResolvedValue([
+      { id: "conv-a", title: "First chat", createdAt: 1, updatedAt: 1 },
+    ]);
+    desktopMocks.listQuestionMessages.mockResolvedValue([]);
+    desktopMocks.createQuestionConversation.mockResolvedValue({
+      id: "conv-new",
+      title: "New chat",
+      createdAt: 3,
+      updatedAt: 3,
+    });
+
+    await renderChatHomePage();
+    await selectKnowledgeBase("Alpha");
+    await clickDesktopNewConversation();
+
+    await waitForCondition(() =>
+      desktopMocks.createQuestionConversation.mock.calls.some(
+        ([projectId]) => projectId === "project-a",
+      ),
+    );
+    expect(desktopMocks.createQuestionConversation).toHaveBeenCalledWith(
+      "project-a",
+      expect.any(AbortSignal),
+    );
+    expect(desktopMocks.listQuestionMessages).toHaveBeenLastCalledWith(
+      "project-a",
+      "conv-new",
+      expect.any(AbortSignal),
+    );
+    expect(container?.querySelector('[aria-current="true"]')?.textContent).toContain("New chat");
+  });
+
+  it("switches the home chat to the selected recent conversation", async () => {
+    window.localStorage.setItem(
+      "llm-wiki-web.chat.home.v1",
+      JSON.stringify({
+        sidebarCollapsed: false,
+        selectedProjectId: "project-a",
+        selectedConversationId: "conv-a",
+        recentConversations: [
+          {
+            projectId: "project-a",
+            projectName: "Alpha",
+            conversationId: "conv-a",
+            title: "First chat",
+            updatedAt: 2,
+          },
+          {
+            projectId: "project-a",
+            projectName: "Alpha",
+            conversationId: "conv-b",
+            title: "Second chat",
+            updatedAt: 1,
+          },
+        ],
+      }),
+    );
+    vi.mocked(fetchProjects).mockResolvedValue({
+      projects: [
+        {
+          id: "project-a",
+          name: "Alpha",
+          status: "ready",
+          hasPurpose: true,
+          hasSchema: true,
+          hasWikiDirectory: true,
+          hasRawSourcesDirectory: true,
+          updatedAt: null,
+        },
+      ],
+      warnings: [],
+    });
+    desktopMocks.listQuestionConversations.mockResolvedValue([
+      { id: "conv-a", title: "First chat", createdAt: 1, updatedAt: 2 },
+      { id: "conv-b", title: "Second chat", createdAt: 1, updatedAt: 1 },
+    ]);
+    desktopMocks.listQuestionMessages.mockImplementation(
+      async (_projectId, conversationId) =>
+        conversationId === "conv-b"
+          ? [
+              {
+                id: "message-b",
+                role: "assistant",
+                content: "Second answer.",
+                timestamp: 2,
+                conversationId: "conv-b",
+              },
+            ]
+          : [
+              {
+                id: "message-a",
+                role: "assistant",
+                content: "First answer.",
+                timestamp: 1,
+                conversationId: "conv-a",
+              },
+            ],
+    );
+
+    await renderChatHomePage();
+    await waitForText("First answer.");
+
+    const selectedBefore = container?.querySelector<HTMLElement>('[aria-current="true"]');
+    expect(selectedBefore?.textContent).toContain("First chat");
+
+    await clickButtonContaining("Second chat");
+
+    expect(desktopMocks.listQuestionMessages).toHaveBeenLastCalledWith(
+      "project-a",
+      "conv-b",
+      expect.any(AbortSignal),
+    );
+    await waitForText("Second answer.");
+
+    const selectedAfter = container?.querySelector<HTMLElement>('[aria-current="true"]');
+    expect(selectedAfter?.textContent).toContain("Second chat");
+    expect(selectedAfter?.className).toContain("border-[color:var(--ring)]");
+    expect(selectedAfter?.className).toContain("font-semibold");
+  });
+
+  it("deletes a recent conversation from the sidebar after confirmation", async () => {
+    window.localStorage.setItem(
+      "llm-wiki-web.chat.home.v1",
+      JSON.stringify({
+        sidebarCollapsed: false,
+        selectedProjectId: "project-a",
+        selectedConversationId: "conv-a",
+        recentConversations: [
+          {
+            projectId: "project-a",
+            projectName: "Alpha",
+            conversationId: "conv-a",
+            title: "First chat",
+            updatedAt: 2,
+          },
+          {
+            projectId: "project-a",
+            projectName: "Alpha",
+            conversationId: "conv-b",
+            title: "Second chat",
+            updatedAt: 1,
+          },
+        ],
+      }),
+    );
+    vi.mocked(fetchProjects).mockResolvedValue({
+      projects: [
+        {
+          id: "project-a",
+          name: "Alpha",
+          status: "ready",
+          hasPurpose: true,
+          hasSchema: true,
+          hasWikiDirectory: true,
+          hasRawSourcesDirectory: true,
+          updatedAt: null,
+        },
+      ],
+      warnings: [],
+    });
+    desktopMocks.listQuestionConversations.mockResolvedValue([
+      { id: "conv-a", title: "First chat", createdAt: 1, updatedAt: 2 },
+      { id: "conv-b", title: "Second chat", createdAt: 1, updatedAt: 1 },
+    ]);
+    desktopMocks.listQuestionMessages.mockImplementation(
+      async (_projectId, conversationId) =>
+        conversationId === "conv-b"
+          ? [
+              {
+                id: "message-b",
+                role: "assistant",
+                content: "Second answer.",
+                timestamp: 2,
+                conversationId: "conv-b",
+              },
+            ]
+          : [
+              {
+                id: "message-a",
+                role: "assistant",
+                content: "First answer.",
+                timestamp: 1,
+                conversationId: "conv-a",
+              },
+            ],
+    );
+
+    await renderChatHomePage();
+    await waitForText("First answer.");
+
+    const menuTrigger = requiredButtonByLabel("打开 First chat 菜单");
+    expect(menuTrigger.className).toContain("opacity-0");
+    expect(menuTrigger.className).toContain("group-hover/recent:opacity-100");
+
+    await clickElement(menuTrigger);
+    await clickElement(requiredElementContaining("删除"));
+    await waitForDocumentText("删除聊天记录");
+    await waitForDocumentText("First chat");
+    await clickElement(requiredButtonFromDocument("确认删除"));
+
+    await waitForCondition(() => !requiredDesktopSidebar().textContent?.includes("First chat"));
+    expect(requiredDesktopSidebar().textContent).toContain("Second chat");
+    expect(container?.querySelector('[aria-current="true"]')).toBeNull();
+
+    const composer = container?.querySelector<HTMLElement>('[data-chat-composer="home"]');
+    expect(composer?.getAttribute("data-chat-composer-state")).toBe("empty");
+    expect(requiredQuestionTextarea().disabled).toBe(false);
+    expect(desktopMocks.createQuestionConversation).not.toHaveBeenCalled();
+
+    await clickButtonContaining("Second chat");
+    await waitForText("Second answer.");
+    expect(requiredDesktopSidebar().textContent).not.toContain("First chat");
+    expect(requiredDesktopSidebar().textContent).not.toContain("New Conversation");
+  });
+
+  it("renames a recent conversation from the sidebar menu", async () => {
+    window.localStorage.setItem(
+      "llm-wiki-web.chat.home.v1",
+      JSON.stringify({
+        sidebarCollapsed: false,
+        selectedProjectId: "project-a",
+        selectedConversationId: "conv-a",
+        recentConversations: [
+          {
+            projectId: "project-a",
+            projectName: "Alpha",
+            conversationId: "conv-a",
+            title: "First chat",
+            updatedAt: 2,
+          },
+        ],
+      }),
+    );
+    vi.mocked(fetchProjects).mockResolvedValue({
+      projects: [
+        {
+          id: "project-a",
+          name: "Alpha",
+          status: "ready",
+          hasPurpose: true,
+          hasSchema: true,
+          hasWikiDirectory: true,
+          hasRawSourcesDirectory: true,
+          updatedAt: null,
+        },
+      ],
+      warnings: [],
+    });
+    desktopMocks.listQuestionConversations.mockResolvedValue([
+      { id: "conv-a", title: "First chat", createdAt: 1, updatedAt: 2 },
+    ]);
+    desktopMocks.listQuestionMessages.mockResolvedValue([
+      {
+        id: "message-a",
+        role: "assistant",
+        content: "First answer.",
+        timestamp: 1,
+        conversationId: "conv-a",
+      },
+    ]);
+
+    await renderChatHomePage();
+    await waitForText("First answer.");
+
+    const menuTrigger = requiredButtonByLabel("打开 First chat 菜单");
+    const historyItem = menuTrigger.closest<HTMLElement>('[data-chat-history-item="true"]');
+    expect(historyItem?.textContent).toContain("First chat");
+    expect(historyItem?.className).toContain("group/recent");
+    expect(menuTrigger.className).toContain("cursor-pointer");
+
+    await clickElement(menuTrigger);
+    await clickElement(requiredElementContaining("重命名"));
+    await waitForDocumentText("重命名聊天");
+
+    updateInput(requiredInputByLabel("聊天名称"), "Renamed chat");
+    await clickElement(requiredButtonFromDocument("确认重命名"));
+
+    await waitForCondition(() => requiredDesktopSidebar().textContent?.includes("Renamed chat") === true);
+    expect(requiredDesktopSidebar().textContent).not.toContain("First chat");
+  });
+
+  it("searches recent conversations by title from the sidebar top action", async () => {
+    window.localStorage.setItem(
+      "llm-wiki-web.chat.home.v1",
+      JSON.stringify({
+        sidebarCollapsed: false,
+        selectedProjectId: "project-a",
+        selectedConversationId: null,
+        recentConversations: [
+          {
+            projectId: "project-a",
+            projectName: "Alpha",
+            conversationId: "conv-a",
+            title: "First chat",
+            updatedAt: 2,
+          },
+          {
+            projectId: "project-a",
+            projectName: "Alpha",
+            conversationId: "conv-b",
+            title: "Second chat",
+            updatedAt: 1,
+          },
+        ],
+      }),
+    );
+    vi.mocked(fetchProjects).mockResolvedValue({
+      projects: [
+        {
+          id: "project-a",
+          name: "Alpha",
+          status: "ready",
+          hasPurpose: true,
+          hasSchema: true,
+          hasWikiDirectory: true,
+          hasRawSourcesDirectory: true,
+          updatedAt: null,
+        },
+      ],
+      warnings: [],
+    });
+    desktopMocks.listQuestionConversations.mockResolvedValue([
+      { id: "conv-a", title: "First chat", createdAt: 1, updatedAt: 2 },
+      { id: "conv-b", title: "Second chat", createdAt: 1, updatedAt: 1 },
+    ]);
+    desktopMocks.listQuestionMessages.mockImplementation(
+      async (_projectId, conversationId) =>
+        conversationId === "conv-b"
+          ? [
+              {
+                id: "message-b",
+                role: "assistant",
+                content: "Second answer.",
+                timestamp: 2,
+                conversationId: "conv-b",
+              },
+            ]
+          : [],
+    );
+
+    await renderChatHomePage();
+    await waitForText("First chat");
+
+    const collapseButton = requiredButtonByLabel("收起侧边栏");
+    const searchButton = requiredButtonByLabel("搜索历史记录");
+    expect(collapseButton.parentElement?.className).toContain("justify-between");
+    expect(collapseButton.textContent).not.toContain("收起");
+    expect(collapseButton.className).toContain("cursor-pointer");
+    expect(searchButton.className).toContain("cursor-pointer");
+
+    await clickElement(searchButton);
+    await waitForDocumentText("搜索历史记录");
+    updateInput(requiredInputByLabel("搜索历史记录"), "Second");
+
+    const results = requiredHistorySearchResults();
+    expect(results.textContent).toContain("Second chat");
+    expect(results.textContent).not.toContain("First chat");
+
+    await clickElement(requiredHistorySearchResult("Second chat"));
+    await waitForText("Second answer.");
+    expect(container?.querySelector('[aria-current="true"]')?.textContent).toContain("Second chat");
+  });
+
+  it("keeps a stored selected conversation when the API returns another conversation first", async () => {
+    window.localStorage.setItem(
+      "llm-wiki-web.chat.home.v1",
+      JSON.stringify({
+        sidebarCollapsed: false,
+        selectedProjectId: "project-a",
+        selectedConversationId: "conv-b",
+        recentConversations: [
+          {
+            projectId: "project-a",
+            projectName: "Alpha",
+            conversationId: "conv-b",
+            title: "Stored chat",
+            updatedAt: 2,
+          },
+        ],
+      }),
+    );
+    vi.mocked(fetchProjects).mockResolvedValue({
+      projects: [
+        {
+          id: "project-a",
+          name: "Alpha",
+          status: "ready",
+          hasPurpose: true,
+          hasSchema: true,
+          hasWikiDirectory: true,
+          hasRawSourcesDirectory: true,
+          updatedAt: null,
+        },
+      ],
+      warnings: [],
+    });
+    desktopMocks.listQuestionConversations.mockResolvedValue([
+      { id: "conv-a", title: "First API chat", createdAt: 1, updatedAt: 1 },
+      { id: "conv-b", title: "Stored chat", createdAt: 1, updatedAt: 2 },
+    ]);
+    desktopMocks.listQuestionMessages.mockImplementation(
+      async (_projectId, conversationId) =>
+        conversationId === "conv-b"
+          ? [
+              {
+                id: "stored-message",
+                role: "assistant",
+                content: "Stored answer.",
+                timestamp: 2,
+                conversationId: "conv-b",
+              },
+            ]
+          : [
+              {
+                id: "first-message",
+                role: "assistant",
+                content: "First API answer.",
+                timestamp: 1,
+                conversationId: "conv-a",
+              },
+            ],
+    );
+
+    await renderChatHomePage();
+
+    await waitForText("Stored answer.");
+    expect(desktopMocks.listQuestionMessages).toHaveBeenLastCalledWith(
+      "project-a",
+      "conv-b",
+      expect.any(AbortSignal),
+    );
+    expect(container?.querySelector('[aria-current="true"]')?.textContent).toContain("Stored chat");
   });
 
   it("shows a disabled composer before a knowledge base is selected", async () => {
@@ -228,6 +719,15 @@ function updateQuestion(value: string) {
   });
 }
 
+function updateInput(input: HTMLInputElement, value: string) {
+  act(() => {
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")
+      ?.set;
+    valueSetter?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
 function requiredQuestionTextarea() {
   const textarea = container?.querySelector<HTMLTextAreaElement>(
     'textarea[aria-label="知识库问答输入"]',
@@ -245,6 +745,42 @@ async function clickButton(name: string) {
     requiredButton(name).click();
     await Promise.resolve();
   });
+}
+
+async function clickButtonContaining(text: string) {
+  await act(async () => {
+    requiredButtonContaining(text).click();
+    await Promise.resolve();
+  });
+}
+
+async function clickDesktopNewConversation() {
+  await act(async () => {
+    requiredDesktopNewConversationButton().click();
+    await Promise.resolve();
+  });
+}
+
+function requiredDesktopNewConversationButton() {
+  const button = Array.from(
+    requiredDesktopSidebar().querySelectorAll<HTMLButtonElement>("button"),
+  ).find((candidate) => candidate.textContent?.includes("新会话"));
+
+  if (!button) {
+    throw new Error("Expected desktop new conversation button.");
+  }
+
+  return button;
+}
+
+function requiredDesktopSidebar() {
+  const sidebar = container?.querySelector<HTMLElement>("aside");
+
+  if (!sidebar) {
+    throw new Error("Expected desktop sidebar.");
+  }
+
+  return sidebar;
 }
 
 async function selectKnowledgeBase(name: string) {
@@ -271,6 +807,98 @@ function requiredButton(name: string) {
   }
 
   return button;
+}
+
+function requiredButtonContaining(text: string) {
+  const button = Array.from(container?.querySelectorAll("button") ?? []).find(
+    (candidate) => candidate.textContent?.includes(text),
+  );
+
+  if (!button) {
+    throw new Error(`Expected button containing ${text}.`);
+  }
+
+  return button;
+}
+
+function requiredButtonByLabel(label: string) {
+  const button = document.body.querySelector<HTMLButtonElement>(
+    `button[aria-label="${label}"]`,
+  );
+
+  if (!button) {
+    throw new Error(`Expected button labeled ${label}.`);
+  }
+
+  return button;
+}
+
+function requiredInputByLabel(label: string) {
+  const input = document.body.querySelector<HTMLInputElement>(
+    `input[aria-label="${label}"]`,
+  );
+
+  if (!input) {
+    throw new Error(`Expected input labeled ${label}.`);
+  }
+
+  return input;
+}
+
+function requiredHistorySearchResults() {
+  const results = document.body.querySelector<HTMLElement>(
+    '[data-chat-history-search-results="true"]',
+  );
+
+  if (!results) {
+    throw new Error("Expected chat history search results.");
+  }
+
+  return results;
+}
+
+function requiredHistorySearchResult(title: string) {
+  const result = Array.from(
+    document.body.querySelectorAll<HTMLElement>('[data-chat-history-search-result="true"]'),
+  ).find((candidate) => candidate.textContent?.includes(title));
+
+  if (!result) {
+    throw new Error(`Expected chat history search result ${title}.`);
+  }
+
+  return result;
+}
+
+function requiredButtonFromDocument(name: string) {
+  const button = Array.from(document.body.querySelectorAll("button")).find(
+    (candidate) => candidate.textContent?.trim() === name,
+  );
+
+  if (!button) {
+    throw new Error(`Expected document button named ${name}.`);
+  }
+
+  return button;
+}
+
+function requiredElementContaining(text: string) {
+  const element = Array.from(document.body.querySelectorAll<HTMLElement>("[role='menuitem'], button")).find(
+    (candidate) => candidate.textContent?.includes(text),
+  );
+
+  if (!element) {
+    throw new Error(`Expected document element containing ${text}.`);
+  }
+
+  return element;
+}
+
+async function clickElement(element: HTMLElement) {
+  await act(async () => {
+    element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    element.click();
+    await Promise.resolve();
+  });
 }
 
 function requiredSelectTrigger() {
@@ -341,4 +969,24 @@ async function waitForText(text: string) {
   }
 
   throw new Error(`Expected text: ${text}`);
+}
+
+async function waitForDocumentText(text: string) {
+  await waitForCondition(() => document.body.textContent?.includes(text) === true);
+}
+
+async function waitForCondition(predicate: () => boolean) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < 2000) {
+    if (predicate()) {
+      return;
+    }
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
+
+  throw new Error("Expected condition to pass.");
 }
