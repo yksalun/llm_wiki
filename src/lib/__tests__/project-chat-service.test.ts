@@ -144,6 +144,7 @@ describe("buildProjectChatContext", () => {
         snippet: "Attention mixes token context.",
         titleMatch: true,
         score: 10,
+        images: [],
       },
     ])
     const deps = createDependencies({ readFile, searchWiki })
@@ -249,6 +250,7 @@ describe("sendProjectChatMessage", () => {
           snippet: "Attention mixes token context.",
           titleMatch: true,
           score: 10,
+          images: [],
         },
       ]),
       readFile: vi.fn(async (path: string) =>
