@@ -53,12 +53,17 @@ export interface UseQuestionSessionOptions {
     projectId: string;
     conversation: DesktopBridgeConversation | null;
   }) => void;
+  onConversationsChange?: (event: {
+    projectId: string;
+    conversations: DesktopBridgeConversation[];
+  }) => void;
 }
 
 export function useQuestionSession({
   projectId,
   autoStartConversation = true,
   onConversationChange,
+  onConversationsChange,
 }: UseQuestionSessionOptions): QuestionSessionSnapshot {
   const [conversations, setConversations] = useState<DesktopBridgeConversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -78,6 +83,7 @@ export function useQuestionSession({
   const streamTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const streamFinalizerRef = useRef<(() => void) | null>(null);
   const onConversationChangeRef = useRef(onConversationChange);
+  const onConversationsChangeRef = useRef(onConversationsChange);
   const isStreaming = status === "streaming";
   const trimmedDraft = draft.trim();
   const canSendMessage =
@@ -89,9 +95,20 @@ export function useQuestionSession({
     onConversationChangeRef.current = onConversationChange;
   }, [onConversationChange]);
 
+  useEffect(() => {
+    onConversationsChangeRef.current = onConversationsChange;
+  }, [onConversationsChange]);
+
   const notifyConversationChange = useCallback(
     (conversation: DesktopBridgeConversation | null) => {
       onConversationChangeRef.current?.({ projectId, conversation });
+    },
+    [projectId],
+  );
+
+  const notifyConversationsChange = useCallback(
+    (conversations: DesktopBridgeConversation[]) => {
+      onConversationsChangeRef.current?.({ projectId, conversations });
     },
     [projectId],
   );
@@ -228,6 +245,7 @@ export function useQuestionSession({
           setMessages([]);
           setHiddenMessageId(null);
           setStatus("ready");
+          notifyConversationsChange(nextConversations);
           notifyConversationChange(null);
           return;
         }
@@ -256,6 +274,7 @@ export function useQuestionSession({
         setMessages(loadedMessages);
         setHiddenMessageId(null);
         setStatus("ready");
+        notifyConversationsChange(titledConversations);
         notifyConversationChange(titledActiveConversation);
       } catch (error: unknown) {
         if (isAbortError(error) || controller.signal.aborted) {
@@ -283,7 +302,7 @@ export function useQuestionSession({
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
     };
-  }, [autoStartConversation, notifyConversationChange, projectId]);
+  }, [autoStartConversation, notifyConversationChange, notifyConversationsChange, projectId]);
 
   function handleClearConversation() {
     if (isStreaming) {
@@ -338,6 +357,7 @@ export function useQuestionSession({
       setMessages(loadedMessages);
       setHiddenMessageId(null);
       setStatus("ready");
+      notifyConversationsChange(titledConversations);
       notifyConversationChange(titledConversation);
     } catch (error: unknown) {
       if (isAbortError(error) || controller.signal.aborted) {
@@ -389,6 +409,7 @@ export function useQuestionSession({
       setConversations(titledConversations);
       setHiddenMessageId(null);
       setStatus("ready");
+      notifyConversationsChange(titledConversations);
       notifyConversationChange(
         titledConversations.find((conversation) => conversation.id === conversationId) ?? null,
       );
@@ -467,6 +488,7 @@ export function useQuestionSession({
       setHiddenMessageId(null);
       setConversations(renamedConversations);
       setActiveConversationId(conversationId);
+      notifyConversationsChange(renamedConversations);
       notifyConversationChange(
         renamedConversations.find((conversation) => conversation.id === conversationId) ?? null,
       );
@@ -547,6 +569,7 @@ export function useQuestionSession({
       conversations,
       messages,
       notifyConversationChange,
+      notifyConversationsChange,
       projectId,
       status,
     ],

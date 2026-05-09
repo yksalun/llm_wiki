@@ -89,6 +89,25 @@ export interface DesktopBridgeReference {
   path: string;
 }
 
+export interface DesktopBridgeAnswerTokenUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
+export interface DesktopBridgeAnswerMetricStage {
+  id: string;
+  name: string;
+  durationMs: number;
+  tokenUsage?: DesktopBridgeAnswerTokenUsage;
+}
+
+export interface DesktopBridgeAnswerMetrics {
+  version: 1;
+  totalDurationMs: number;
+  stages: DesktopBridgeAnswerMetricStage[];
+}
+
 export interface DesktopBridgeConversation {
   id: string;
   title: string;
@@ -103,6 +122,7 @@ export interface DesktopBridgeMessage {
   timestamp: number;
   conversationId: string;
   references?: DesktopBridgeReference[];
+  metrics?: DesktopBridgeAnswerMetrics;
 }
 
 export interface DesktopBridgeMessageActionPayload {

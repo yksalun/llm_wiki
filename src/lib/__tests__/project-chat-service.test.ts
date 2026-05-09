@@ -310,6 +310,86 @@ describe("sendProjectChatMessage", () => {
     })
   })
 
+  it("attaches answer metrics to successful assistant messages", async () => {
+    const addedMessages: DisplayMessage[] = []
+    const nowTicks = [
+      1000, 1005,
+      1010, 1025,
+      1030, 1040,
+      1050, 1070,
+      1080, 1110,
+      1120, 1170,
+      1180,
+    ]
+    const deps = createDependencies({
+      now: vi.fn(() => nowTicks.shift() ?? 1180),
+      addMessage: vi.fn((msg: DisplayMessage) => {
+        addedMessages.push(msg)
+      }),
+      searchWiki: vi.fn(async () => [
+        {
+          path: "C:/demo/project/wiki/concepts/attention.md",
+          title: "Attention",
+          snippet: "Attention mixes token context.",
+          titleMatch: true,
+          score: 10,
+          images: [],
+        },
+      ]),
+      readFile: vi.fn(async (path: string) =>
+        path.endsWith("attention.md") ? "# Attention\nAttention mixes token context." : "",
+      ),
+      streamChat: vi.fn(async (_config, _messages, callbacks) => {
+        callbacks.onToken("Measured answer")
+        callbacks.onDone()
+      }),
+    })
+    const onDone = vi.fn()
+
+    await sendProjectChatMessage(request, createCallbacks({ onDone }), deps)
+
+    expect(onDone).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metrics: expect.objectContaining({
+          version: 1,
+          totalDurationMs: expect.any(Number),
+          stages: expect.arrayContaining([
+            expect.objectContaining({ id: "prepare_request" }),
+            expect.objectContaining({ id: "search_wiki" }),
+            expect.objectContaining({ id: "expand_graph" }),
+            expect.objectContaining({ id: "read_pages" }),
+            expect.objectContaining({ id: "model_generation" }),
+          ]),
+        }),
+      }),
+    )
+    expect(addedMessages[addedMessages.length - 1].metrics?.stages.length).toBeGreaterThan(0)
+  })
+
+  it("attaches official model token usage to the model generation stage", async () => {
+    const onDone = vi.fn()
+    const deps = createDependencies({
+      isGreeting: vi.fn(() => true),
+      streamChat: vi.fn(async (_config, _messages, callbacks) => {
+        callbacks.onUsage?.({ inputTokens: 100, outputTokens: 20, totalTokens: 120 })
+        callbacks.onToken("Measured answer")
+        callbacks.onDone()
+      }),
+    })
+
+    await sendProjectChatMessage(request, createCallbacks({ onDone }), deps)
+
+    const assistantMessage = onDone.mock.calls[0]?.[0] as DisplayMessage | undefined
+    const modelStage = assistantMessage?.metrics?.stages.find(
+      (stage) => stage.id === "model_generation",
+    )
+    expect(modelStage?.tokenUsage).toEqual({
+      inputTokens: 100,
+      outputTokens: 20,
+      totalTokens: 120,
+    })
+  })
+
   it("adds user and assistant error messages to the request conversation when context building fails", async () => {
     const error = new Error("graph unavailable")
     const addedMessages: DisplayMessage[] = []

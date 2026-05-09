@@ -11,6 +11,8 @@ import {
   TriangleAlert,
 } from "lucide-react";
 
+import { AnswerMetricsPanel } from "@/components/chat/answer-metrics-panel";
+import { useAnswerMetricsPreferences } from "@/components/chat/answer-metrics-preferences";
 import { Button } from "@/components/ui/button";
 import { QuestionReferences } from "@/components/workbench/question-references";
 import type { DesktopBridgeMessage, DesktopBridgeReference } from "@/lib/types";
@@ -95,6 +97,8 @@ function AssistantAnswerMessage({
   isLast: boolean;
   onAnswerAction: AnswerActionHandler;
 }) {
+  const { preferences } = useAnswerMetricsPreferences();
+
   return (
     <div
       data-answer-message="true"
@@ -105,6 +109,9 @@ function AssistantAnswerMessage({
         <div data-answer-references="true">
           <QuestionReferences projectId={projectId} references={references} />
         </div>
+      ) : null}
+      {preferences.showAnswerMetrics && message.metrics ? (
+        <AnswerMetricsPanel metrics={message.metrics} />
       ) : null}
       <AnswerActions
         message={message}

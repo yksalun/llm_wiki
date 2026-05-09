@@ -51,11 +51,31 @@ interface BridgeMessage {
   timestamp: number
   conversationId: string
   references: BridgeReference[]
+  metrics?: BridgeAnswerMetrics
 }
 
 interface BridgeReference {
   title: string
   path: string
+}
+
+interface BridgeAnswerTokenUsage {
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+}
+
+interface BridgeAnswerMetricStage {
+  id: string
+  name: string
+  durationMs: number
+  tokenUsage?: BridgeAnswerTokenUsage
+}
+
+interface BridgeAnswerMetrics {
+  version: 1
+  totalDurationMs: number
+  stages: BridgeAnswerMetricStage[]
 }
 
 const PROJECT_NOT_OPEN = "PROJECT_NOT_OPEN"
@@ -792,6 +812,7 @@ function toBridgeMessage(message: DisplayMessage): BridgeMessage {
     timestamp: message.timestamp,
     conversationId: message.conversationId,
     references: toBridgeReferences(message.references ?? []),
+    ...(message.metrics ? { metrics: message.metrics } : {}),
   }
 }
 

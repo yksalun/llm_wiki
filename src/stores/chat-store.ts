@@ -13,6 +13,25 @@ export interface MessageReference {
   path: string
 }
 
+export interface AnswerTokenUsage {
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+}
+
+export interface AnswerMetricStage {
+  id: string
+  name: string
+  durationMs: number
+  tokenUsage?: AnswerTokenUsage
+}
+
+export interface AnswerMetrics {
+  version: 1
+  totalDurationMs: number
+  stages: AnswerMetricStage[]
+}
+
 export interface DisplayMessage {
   id: string
   role: "user" | "assistant" | "system"
@@ -20,6 +39,7 @@ export interface DisplayMessage {
   timestamp: number
   conversationId: string
   references?: MessageReference[]  // pages cited in this response, saved at creation time
+  metrics?: AnswerMetrics
 }
 
 interface ChatState {

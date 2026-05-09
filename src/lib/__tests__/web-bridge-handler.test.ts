@@ -333,6 +333,70 @@ describe("web bridge chat requests", () => {
     ])
   })
 
+  it("emits answer metrics on streamed done messages", async () => {
+    mocks.sendProjectChatMessage.mockImplementation(async (_request: ChatRequest, callbacks: ChatCallbacks) => {
+      callbacks.onDone({
+        id: "msg-metrics",
+        role: "assistant",
+        content: "Measured answer",
+        timestamp: 1,
+        conversationId: baseRequest.conversationId,
+        references: [{ title: "Overview", path: "wiki/overview.md" }],
+        metrics: {
+          version: 1,
+          totalDurationMs: 1234,
+          stages: [
+            { id: "search_wiki", name: "Search wiki", durationMs: 120 },
+            {
+              id: "model_generation",
+              name: "Model generation",
+              durationMs: 900,
+              tokenUsage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
+            },
+          ],
+        },
+      } as Parameters<ChatCallbacks["onDone"]>[0] & {
+        metrics: {
+          version: 1
+          totalDurationMs: number
+          stages: Array<{
+            id: string
+            name: string
+            durationMs: number
+            tokenUsage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number }
+          }>
+        }
+      })
+    })
+
+    const { startWebBridgeHandler, useWikiStore, useChatStore } = await importTestModules()
+    resetStores(useWikiStore, useChatStore)
+    useWikiStore.setState({ project })
+    await startWebBridgeHandler()
+    await emitChat(baseRequest)
+    await flushPromises()
+
+    expect(mocks.invoke).toHaveBeenCalledWith("web_bridge_emit_done", {
+      requestId: baseRequest.requestId,
+      message: expect.objectContaining({
+        id: "msg-metrics",
+        metrics: {
+          version: 1,
+          totalDurationMs: 1234,
+          stages: [
+            { id: "search_wiki", name: "Search wiki", durationMs: 120 },
+            {
+              id: "model_generation",
+              name: "Model generation",
+              durationMs: 900,
+              tokenUsage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
+            },
+          ],
+        },
+      }),
+    })
+  })
+
   it("aborts immediately on project switch while references invoke is pending", async () => {
     let capturedRequest!: ChatRequest
     const servicePending = createDeferred()

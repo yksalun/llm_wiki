@@ -34,6 +34,34 @@ pub struct BridgeReference {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BridgeAnswerTokenUsage {
+    #[serde(rename = "inputTokens", skip_serializing_if = "Option::is_none")]
+    pub input_tokens: Option<i64>,
+    #[serde(rename = "outputTokens", skip_serializing_if = "Option::is_none")]
+    pub output_tokens: Option<i64>,
+    #[serde(rename = "totalTokens", skip_serializing_if = "Option::is_none")]
+    pub total_tokens: Option<i64>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BridgeAnswerMetricStage {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "durationMs")]
+    pub duration_ms: i64,
+    #[serde(rename = "tokenUsage", skip_serializing_if = "Option::is_none")]
+    pub token_usage: Option<BridgeAnswerTokenUsage>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BridgeAnswerMetrics {
+    pub version: i64,
+    #[serde(rename = "totalDurationMs")]
+    pub total_duration_ms: i64,
+    pub stages: Vec<BridgeAnswerMetricStage>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BridgeMessage {
     pub id: String,
     pub role: String,
@@ -43,6 +71,8 @@ pub struct BridgeMessage {
     pub conversation_id: String,
     #[serde(default)]
     pub references: Vec<BridgeReference>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metrics: Option<BridgeAnswerMetrics>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -875,6 +905,7 @@ mod tests {
                     title: "Doc".to_string(),
                     path: "F:\\wiki\\doc.md".to_string(),
                 }],
+                metrics: None,
             },
         });
 
@@ -883,6 +914,40 @@ mod tests {
         assert!(sse.contains("\"conversationId\":\"c1\""));
         assert!(sse.contains("\"path\":\"F:\\\\wiki\\\\doc.md\""));
         assert!(sse.contains("\"timestamp\":1777334400000"));
+    }
+
+    #[test]
+    fn done_sse_contains_answer_metrics_when_present() {
+        let sse = format_sse_event(&BridgeStreamEvent::Done {
+            message: BridgeMessage {
+                id: "m1".to_string(),
+                role: "assistant".to_string(),
+                content: "done".to_string(),
+                timestamp: 1777334400000,
+                conversation_id: "c1".to_string(),
+                references: Vec::new(),
+                metrics: Some(BridgeAnswerMetrics {
+                    version: 1,
+                    total_duration_ms: 1234,
+                    stages: vec![BridgeAnswerMetricStage {
+                        id: "model_generation".to_string(),
+                        name: "Model generation".to_string(),
+                        duration_ms: 900,
+                        token_usage: Some(BridgeAnswerTokenUsage {
+                            input_tokens: Some(100),
+                            output_tokens: Some(20),
+                            total_tokens: Some(120),
+                        }),
+                    }],
+                }),
+            },
+        });
+
+        assert!(sse.contains("\"metrics\""));
+        assert!(sse.contains("\"totalDurationMs\":1234"));
+        assert!(sse.contains("\"durationMs\":900"));
+        assert!(sse.contains("\"tokenUsage\""));
+        assert!(sse.contains("\"inputTokens\":100"));
     }
 
     #[test]
@@ -902,6 +967,7 @@ mod tests {
                     timestamp: 1777334400000,
                     conversation_id: "c1".to_string(),
                     references: Vec::new(),
+                    metrics: None,
                 },
             })
             .unwrap();
@@ -955,6 +1021,7 @@ mod tests {
                 timestamp: 1777334400000,
                 conversation_id: "c1".to_string(),
                 references: Vec::new(),
+                metrics: None,
             },
         )
         .unwrap();
@@ -1015,6 +1082,7 @@ mod tests {
                 timestamp: 1777334400000,
                 conversation_id: "c1".to_string(),
                 references: Vec::new(),
+                metrics: None,
             },
         )
         .unwrap();

@@ -161,7 +161,7 @@ describe("buildAnthropicUrl — URL suffix handling", () => {
 describe("parseGoogleLine — Gemini SSE parsing", () => {
   it("extracts plain text from a single-part event", () => {
     const line = 'data: {"candidates":[{"content":{"parts":[{"text":"Hello"}]}}]}'
-    expect(parseGoogleLine(line)).toBe("Hello")
+    expect(parseGoogleLine(line)).toEqual({ token: "Hello" })
   })
 
   it("concatenates text across multiple parts in one event", () => {
@@ -169,13 +169,13 @@ describe("parseGoogleLine — Gemini SSE parsing", () => {
     // multiple parts in a single streaming chunk. The old parser only
     // took parts[0], silently dropping the tail.
     const line = 'data: {"candidates":[{"content":{"parts":[{"text":"Hello "},{"text":"world"}]}}]}'
-    expect(parseGoogleLine(line)).toBe("Hello world")
+    expect(parseGoogleLine(line)).toEqual({ token: "Hello world" })
   })
 
   it("skips thought parts so reasoning tokens don't leak into output", () => {
     const line =
       'data: {"candidates":[{"content":{"parts":[{"thought":true,"text":"let me think"},{"text":"The answer is 42"}]}}]}'
-    expect(parseGoogleLine(line)).toBe("The answer is 42")
+    expect(parseGoogleLine(line)).toEqual({ token: "The answer is 42" })
   })
 
   it("returns null when the event has no visible text", () => {
@@ -298,6 +298,52 @@ describe("Sampling override translation across wires", () => {
     const body = cfg.buildBody(baseMessages, { temperature: 0.1, max_tokens: 500 }) as Record<string, unknown>
     expect(body.temperature).toBe(0.1)
     expect(body.max_tokens).toBe(500)
+  })
+
+  it("OpenAI requests streamed usage so official token counts can be displayed", () => {
+    const cfg = getProviderConfig({
+      provider: "openai",
+      apiKey: "k",
+      model: "gpt-4o",
+      ollamaUrl: "",
+      customEndpoint: "",
+      maxContextSize: 128000,
+    })
+    const body = cfg.buildBody(baseMessages) as Record<string, unknown>
+    expect(body.stream_options).toEqual({ include_usage: true })
+  })
+
+  it("custom OpenAI-compatible endpoints do not get OpenAI stream_options", () => {
+    const cfg = getProviderConfig({
+      provider: "custom",
+      apiKey: "k",
+      model: "qwen3",
+      ollamaUrl: "",
+      customEndpoint: "http://127.0.0.1:1234/v1",
+      maxContextSize: 8192,
+      apiMode: "chat_completions",
+    } as RealLlmConfig)
+    const body = cfg.buildBody(baseMessages) as Record<string, unknown>
+    expect(body.stream_options).toBeUndefined()
+  })
+
+  it("OpenAI parser extracts usage-only SSE chunks", () => {
+    const cfg = getProviderConfig({
+      provider: "openai",
+      apiKey: "k",
+      model: "gpt-4o",
+      ollamaUrl: "",
+      customEndpoint: "",
+      maxContextSize: 128000,
+    })
+
+    expect(
+      cfg.parseStream(
+        'data: {"choices":[],"usage":{"prompt_tokens":11,"completion_tokens":7,"total_tokens":18}}',
+      ),
+    ).toEqual({
+      tokenUsage: { inputTokens: 11, outputTokens: 7, totalTokens: 18 },
+    })
   })
 
   it("Anthropic maps stop → stop_sequences and respects max_tokens override", () => {

@@ -1,5 +1,5 @@
 import { readFile } from "@/commands/fs"
-import { streamChat, type ChatMessage } from "@/lib/llm-client"
+import { streamChat, type ChatMessage, type LlmTokenUsage } from "@/lib/llm-client"
 import { searchWiki, tokenizeQuery, type SearchResult } from "@/lib/search"
 import {
   buildRetrievalGraph,
@@ -11,8 +11,15 @@ import { buildLanguageReminder, getOutputLanguage } from "@/lib/output-language"
 import { isGreeting } from "@/lib/greeting-detector"
 import { getFileName, getRelativePath, normalizePath } from "@/lib/path-utils"
 import {
+  createAnswerMetricsRecorder,
+  normalizeAnswerTokenUsage,
+  type AnswerMetricsRecorder,
+} from "@/lib/answer-metrics"
+import {
   chatMessagesToLLM,
   useChatStore,
+  type AnswerMetrics,
+  type AnswerTokenUsage,
   type Conversation,
   type DisplayMessage,
   type MessageReference,
@@ -132,6 +139,7 @@ export function createDefaultProjectChatDependencies(): ProjectChatDependencies 
 export async function buildProjectChatContext(
   request: ProjectChatRequest,
   dependencies: ProjectChatDependencies = createDefaultProjectChatDependencies(),
+  metrics?: AnswerMetricsRecorder,
 ): Promise<ProjectChatContext> {
   const state = dependencies.getState()
   const projectPath = normalizePath(request.projectPath)
@@ -166,6 +174,7 @@ export async function buildProjectChatContext(
       llmConfig: state.llmConfig,
       dataVersion: state.dataVersion,
       dependencies,
+      metrics,
     })
     systemMessages.push(context.systemMessage)
     references = context.references
@@ -202,45 +211,49 @@ export async function sendProjectChatMessage(
     return null
   }
 
-  const initialState = dependencies.getState()
-  const now = dependencies.now()
-  const existingConversation = initialState.conversations.find(
-    (conversation) => conversation.id === request.conversationId,
-  )
-  const hasPriorUserMessage = initialState.messages.some(
-    (stateMessage) =>
-      stateMessage.conversationId === request.conversationId &&
-      stateMessage.role === "user",
-  )
-  const shouldRenamePlaceholder =
-    existingConversation &&
-    !hasPriorUserMessage &&
-    (existingConversation.title.trim() === "" ||
-      existingConversation.title === "New Conversation")
-  dependencies.upsertConversation(
-    existingConversation
-      ? {
-          ...existingConversation,
-          title: shouldRenamePlaceholder
-            ? message.slice(0, 50)
-            : existingConversation.title,
-          updatedAt: now,
-        }
-      : {
-          id: request.conversationId,
-          title: message.slice(0, 50),
-          createdAt: now,
-          updatedAt: now,
-        },
-  )
+  const metrics = createAnswerMetricsRecorder(dependencies.now)
+  const initialState = metrics.measureSync("prepare_request", "准备请求", () => {
+    const state = dependencies.getState()
+    const now = dependencies.now()
+    const existingConversation = state.conversations.find(
+      (conversation) => conversation.id === request.conversationId,
+    )
+    const hasPriorUserMessage = state.messages.some(
+      (stateMessage) =>
+        stateMessage.conversationId === request.conversationId &&
+        stateMessage.role === "user",
+    )
+    const shouldRenamePlaceholder =
+      existingConversation &&
+      !hasPriorUserMessage &&
+      (existingConversation.title.trim() === "" ||
+        existingConversation.title === "New Conversation")
+    dependencies.upsertConversation(
+      existingConversation
+        ? {
+            ...existingConversation,
+            title: shouldRenamePlaceholder
+              ? message.slice(0, 50)
+              : existingConversation.title,
+            updatedAt: now,
+          }
+        : {
+            id: request.conversationId,
+            title: message.slice(0, 50),
+            createdAt: now,
+            updatedAt: now,
+          },
+    )
 
-  const userMessage = createDisplayMessage({
-    role: "user",
-    content: message,
-    conversationId: request.conversationId,
-    now: dependencies.now,
+    const userMessage = createDisplayMessage({
+      role: "user",
+      content: message,
+      conversationId: request.conversationId,
+      now: dependencies.now,
+    })
+    dependencies.addMessage(userMessage)
+    return state
   })
-  dependencies.addMessage(userMessage)
 
   const controller = dependencies.createAbortController()
   const signal = request.signal ?? controller.signal
@@ -284,6 +297,7 @@ export async function sendProjectChatMessage(
     context = await buildProjectChatContext(
       { ...request, message },
       dependencies,
+      metrics,
     )
   } catch (err) {
     callErrorOnce(toError(err))
@@ -300,6 +314,15 @@ export async function sendProjectChatMessage(
   }
 
   let accumulated = ""
+  const modelStartedAt = dependencies.now()
+  let modelTokenUsage: AnswerTokenUsage | undefined
+  const captureModelUsage = (usage: LlmTokenUsage) => {
+    const normalized = normalizeAnswerTokenUsage({
+      ...modelTokenUsage,
+      ...usage,
+    })
+    if (normalized) modelTokenUsage = normalized
+  }
 
   try {
     await dependencies.streamChat(
@@ -311,12 +334,19 @@ export async function sendProjectChatMessage(
           accumulated += token
           callbacks.onToken(token)
         },
+        onUsage: captureModelUsage,
         onDone: () => {
           if (terminalCallbackCalled) return
           if (signal.aborted && accumulated.length === 0) {
             callErrorOnce(createAbortError(signal))
             return
           }
+          metrics.record(
+            "model_generation",
+            "模型生成",
+            dependencies.now() - modelStartedAt,
+            modelTokenUsage,
+          )
           terminalCallbackCalled = true
           cleanupAbortListener()
           const assistantMessage = createDisplayMessage({
@@ -324,6 +354,7 @@ export async function sendProjectChatMessage(
             content: accumulated,
             conversationId: request.conversationId,
             references: context.references,
+            metrics: metrics.build(),
             now: dependencies.now,
           })
           dependencies.addMessage(assistantMessage)
@@ -375,12 +406,14 @@ async function buildRetrievalContext({
   llmConfig,
   dataVersion,
   dependencies,
+  metrics,
 }: {
   message: string
   project: WikiProject
   llmConfig: LlmConfig
   dataVersion: number
   dependencies: ProjectChatDependencies
+  metrics?: AnswerMetricsRecorder
 }): Promise<{ systemMessage: ChatMessage; references: MessageReference[] }> {
   const projectPath = normalizePath(project.path)
   const maxContextSize = llmConfig.maxContextSize || 204_800
@@ -388,43 +421,69 @@ async function buildRetrievalContext({
   const pageBudget = Math.floor(maxContextSize * 0.6)
   const maxPageSize = Math.min(Math.floor(pageBudget * 0.3), 30_000)
 
-  const [rawIndex, purpose] = await Promise.all([
+  const readPagesStartedAt = dependencies.now()
+  const indexPurposePromise = Promise.all([
     dependencies.readFile(`${projectPath}/wiki/index.md`).catch(() => ""),
     dependencies.readFile(`${projectPath}/purpose.md`).catch(() => ""),
   ])
 
-  const searchResults = await dependencies.searchWiki(projectPath, message)
+  const searchResults = metrics
+    ? await metrics.measure(
+        "search_wiki",
+        "搜索知识库",
+        () => dependencies.searchWiki(projectPath, message),
+      )
+    : await dependencies.searchWiki(projectPath, message)
   const topSearchResults = searchResults.slice(0, 10)
-  const index = trimIndexToBudget(rawIndex, message, indexBudget, dependencies)
-  const graphExpansions = await buildGraphExpansions({
-    projectPath,
-    dataVersion,
-    topSearchResults,
-    dependencies,
-  })
+  const graphExpansions = metrics
+    ? await metrics.measure(
+        "expand_graph",
+        "扩展关联页面",
+        () =>
+          buildGraphExpansions({
+            projectPath,
+            dataVersion,
+            topSearchResults,
+            dependencies,
+          }),
+      )
+    : await buildGraphExpansions({
+        projectPath,
+        dataVersion,
+        topSearchResults,
+        dependencies,
+      })
 
-  const relevantPages = await collectRelevantPages({
-    projectPath,
-    topSearchResults,
-    graphExpansions,
-    pageBudget,
-    maxPageSize,
-    dependencies,
-  })
-
-  if (relevantPages.length === 0) {
-    await tryAddPage({
-      pages: relevantPages,
+  const readPages = async () => {
+    const [rawIndex, purpose] = await indexPurposePromise
+    const pages = await collectRelevantPages({
       projectPath,
-      title: "Overview",
-      filePath: `${projectPath}/wiki/overview.md`,
+      topSearchResults,
+      graphExpansions,
       pageBudget,
       maxPageSize,
       dependencies,
-      getUsedChars: () =>
-        relevantPages.reduce((sum, page) => sum + page.content.length, 0),
     })
+
+    if (pages.length === 0) {
+      await tryAddPage({
+        pages,
+        projectPath,
+        title: "Overview",
+        filePath: `${projectPath}/wiki/overview.md`,
+        pageBudget,
+        maxPageSize,
+        dependencies,
+        getUsedChars: () =>
+          pages.reduce((sum, page) => sum + page.content.length, 0),
+      })
+    }
+
+    return { rawIndex, purpose, relevantPages: pages }
   }
+  const { rawIndex, purpose, relevantPages } = await readPages()
+  metrics?.record("read_pages", "读取页面", dependencies.now() - readPagesStartedAt)
+  const index = trimIndexToBudget(rawIndex, message, indexBudget, dependencies)
 
   const pagesContext =
     relevantPages.length > 0
@@ -645,12 +704,14 @@ function createDisplayMessage({
   content,
   conversationId,
   references,
+  metrics,
   now,
 }: {
   role: DisplayMessage["role"]
   content: string
   conversationId: string
   references?: MessageReference[]
+  metrics?: AnswerMetrics
   now: () => number
 }): DisplayMessage {
   messageCounter += 1
@@ -662,6 +723,7 @@ function createDisplayMessage({
     timestamp,
     conversationId,
     references,
+    ...(metrics ? { metrics } : {}),
   }
 }
 

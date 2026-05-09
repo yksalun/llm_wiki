@@ -1,6 +1,7 @@
 "use client";
 
 import { requestJson } from "@/lib/client/api";
+import { normalizeDesktopBridgeAnswerMetrics } from "@/lib/answer-metrics";
 import type {
   DesktopBridgeConversation,
   DesktopBridgeMessage,
@@ -244,8 +245,14 @@ export function parseSseBlock(block: string): DesktopBridgeStreamEvent | null {
       return event as DesktopBridgeStreamEvent;
     }
 
-    if (event.type === "done" && event.message) {
-      return event as DesktopBridgeStreamEvent;
+    if (event.type === "done") {
+      const message = normalizeDesktopBridgeMessage(
+        (event as { message?: unknown }).message,
+      );
+
+      if (message) {
+        return { type: "done", message };
+      }
     }
 
     if (
@@ -260,6 +267,60 @@ export function parseSseBlock(block: string): DesktopBridgeStreamEvent | null {
   }
 
   return null;
+}
+
+function normalizeDesktopBridgeMessage(value: unknown): DesktopBridgeMessage | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const candidate = value as Partial<DesktopBridgeMessage>;
+
+  if (
+    typeof candidate.id !== "string" ||
+    !isDesktopBridgeMessageRole(candidate.role) ||
+    typeof candidate.content !== "string" ||
+    typeof candidate.timestamp !== "number" ||
+    !Number.isFinite(candidate.timestamp) ||
+    typeof candidate.conversationId !== "string"
+  ) {
+    return null;
+  }
+
+  const message: DesktopBridgeMessage = {
+    id: candidate.id,
+    role: candidate.role,
+    content: candidate.content,
+    timestamp: candidate.timestamp,
+    conversationId: candidate.conversationId,
+  };
+
+  if (Array.isArray(candidate.references)) {
+    message.references = candidate.references.filter(isDesktopBridgeReference);
+  }
+
+  const metrics = normalizeDesktopBridgeAnswerMetrics(candidate.metrics);
+
+  if (metrics) {
+    message.metrics = metrics;
+  }
+
+  return message;
+}
+
+function isDesktopBridgeMessageRole(
+  role: unknown,
+): role is DesktopBridgeMessage["role"] {
+  return role === "user" || role === "assistant" || role === "system";
+}
+
+function isDesktopBridgeReference(reference: unknown): reference is DesktopBridgeReference {
+  if (!reference || typeof reference !== "object" || Array.isArray(reference)) {
+    return false;
+  }
+
+  const candidate = reference as Partial<DesktopBridgeReference>;
+  return typeof candidate.title === "string" && typeof candidate.path === "string";
 }
 
 function consumeSseBuffer(

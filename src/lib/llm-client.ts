@@ -1,14 +1,15 @@
 import type { LlmConfig } from "@/stores/wiki-store"
-import { getProviderConfig, type RequestOverrides } from "./llm-providers"
+import { getProviderConfig, type LlmTokenUsage, type RequestOverrides } from "./llm-providers"
 import { getHttpFetch, isFetchNetworkError } from "./tauri-fetch"
 import { countReasoningCharsInLine, extractReasoningTextFromLine } from "./reasoning-detector"
 
-export type { ChatMessage, RequestOverrides } from "./llm-providers"
+export type { ChatMessage, LlmTokenUsage, RequestOverrides } from "./llm-providers"
 export { isFetchNetworkError } from "./tauri-fetch"
 
 export interface StreamCallbacks {
   onToken: (token: string) => void
   onReasoningToken?: (token: string) => void
+  onUsage?: (usage: LlmTokenUsage) => void
   onDone: () => void
   onError: (error: Error) => void
 }
@@ -172,6 +173,11 @@ export async function streamChat(
       callbacks.onReasoningToken?.(part)
     }
   }
+  const recordParsedLine = (line: string) => {
+    const parsed = providerConfig.parseStream(line)
+    if (parsed?.tokenUsage) callbacks.onUsage?.(parsed.tokenUsage)
+    if (parsed?.token !== undefined) recordToken(parsed.token)
+  }
 
   try {
     while (true) {
@@ -182,8 +188,7 @@ export async function streamChat(
           const trimmed = lineBuffer.trim()
           reasoningCharsObserved += countReasoningCharsInLine(trimmed)
           recordReasoning(trimmed)
-          const token = providerConfig.parseStream(trimmed)
-          if (token !== null) recordToken(token)
+          recordParsedLine(trimmed)
         }
         break
       }
@@ -196,8 +201,7 @@ export async function streamChat(
         if (!trimmed) continue
         reasoningCharsObserved += countReasoningCharsInLine(trimmed)
         recordReasoning(trimmed)
-        const token = providerConfig.parseStream(trimmed)
-        if (token !== null) recordToken(token)
+        recordParsedLine(trimmed)
       }
     }
 

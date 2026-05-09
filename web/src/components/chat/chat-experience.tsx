@@ -27,6 +27,10 @@ export interface ChatExperienceProps {
     projectId: string;
     conversation: DesktopBridgeConversation | null;
   }) => void;
+  onConversationsChange?: (event: {
+    projectId: string;
+    conversations: DesktopBridgeConversation[];
+  }) => void;
 }
 
 export function ChatExperience({
@@ -42,6 +46,7 @@ export function ChatExperience({
   requestedConversationId,
   newConversationRequestId,
   onConversationChange,
+  onConversationsChange,
 }: ChatExperienceProps) {
   const isHomeMode = mode === "home";
   const emptyHomeComposerState = isHomeMode ? "empty" : undefined;
@@ -121,6 +126,7 @@ export function ChatExperience({
       requestedConversationId={requestedConversationId}
       newConversationRequestId={newConversationRequestId}
       onConversationChange={onConversationChange}
+      onConversationsChange={onConversationsChange}
     />
   );
 }
@@ -141,6 +147,7 @@ function ActiveChatExperience({
   requestedConversationId,
   newConversationRequestId,
   onConversationChange,
+  onConversationsChange,
 }: ActiveChatExperienceProps) {
   const isHomeMode = mode === "home";
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -152,6 +159,7 @@ function ActiveChatExperience({
     projectId,
     autoStartConversation: !isHomeMode,
     onConversationChange,
+    onConversationsChange,
   });
   const trimmedDraft = session.draft.trim();
   const lastRenderedMessage =

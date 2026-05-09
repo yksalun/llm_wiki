@@ -203,6 +203,122 @@ describe("ChatHomePage", () => {
     expect(spacer).toBeNull();
   });
 
+  it("persists the answer metrics preference from personal center", async () => {
+    window.localStorage.setItem(
+      "llm-wiki-web.chat.home.v1",
+      JSON.stringify({
+        sidebarCollapsed: false,
+        selectedProjectId: "project-a",
+        selectedConversationId: "conv-a",
+        recentConversations: [
+          {
+            projectId: "project-a",
+            projectName: "Alpha",
+            conversationId: "conv-a",
+            title: "New Conversation",
+            updatedAt: 1,
+          },
+        ],
+      }),
+    );
+    vi.mocked(fetchProjects).mockResolvedValue({
+      projects: [
+        {
+          id: "project-a",
+          name: "Alpha",
+          status: "ready",
+          hasPurpose: true,
+          hasSchema: true,
+          hasWikiDirectory: true,
+          hasRawSourcesDirectory: true,
+          updatedAt: null,
+        },
+      ],
+      warnings: [],
+    });
+    desktopMocks.listQuestionConversations.mockResolvedValue([
+      { id: "conv-a", title: "New Conversation", createdAt: 1, updatedAt: 1 },
+    ]);
+    desktopMocks.listQuestionMessages.mockResolvedValue([
+      {
+        id: "assistant-metrics",
+        role: "assistant",
+        content: "Answer with metrics.",
+        timestamp: 2,
+        conversationId: "conv-a",
+        metrics: {
+          version: 1,
+          totalDurationMs: 1200,
+          stages: [
+            { id: "model_generation", name: "Model generation", durationMs: 1200 },
+          ],
+        },
+      },
+    ]);
+
+    await renderChatHomePage();
+    await waitForText("Answer with metrics.");
+    expect(container?.querySelector('[data-answer-metrics="true"]')).not.toBeNull();
+
+    await act(async () => {
+      requiredPersonalCenterTrigger().click();
+      await Promise.resolve();
+    });
+
+    const switchButton = requiredAnswerMetricsSwitch();
+    expect(switchButton.getAttribute("aria-checked")).toBe("true");
+
+    await act(async () => {
+      switchButton.click();
+      await Promise.resolve();
+    });
+
+    expect(window.localStorage.getItem("llm-wiki-web.preferences.v1")).toBe(
+      JSON.stringify({ showAnswerMetrics: false }),
+    );
+    expect(container?.querySelector('[data-answer-metrics="true"]')).toBeNull();
+  });
+
+  it("hydrates recent chats from desktop conversation history", async () => {
+    window.localStorage.setItem(
+      "llm-wiki-web.chat.home.v1",
+      JSON.stringify({
+        sidebarCollapsed: false,
+        selectedProjectId: "project-a",
+        selectedConversationId: null,
+        recentConversations: [],
+      }),
+    );
+    vi.mocked(fetchProjects).mockResolvedValue({
+      projects: [
+        {
+          id: "project-a",
+          name: "Alpha",
+          status: "ready",
+          hasPurpose: true,
+          hasSchema: true,
+          hasWikiDirectory: true,
+          hasRawSourcesDirectory: true,
+          updatedAt: null,
+        },
+      ],
+      warnings: [],
+    });
+    desktopMocks.listQuestionConversations.mockResolvedValue([
+      { id: "conv-a", title: "First restored chat", createdAt: 1, updatedAt: 2 },
+      { id: "conv-b", title: "Second restored chat", createdAt: 1, updatedAt: 1 },
+    ]);
+    desktopMocks.listQuestionMessages.mockResolvedValue([]);
+
+    await renderChatHomePage();
+
+    await waitForText("First restored chat");
+    await waitForText("Second restored chat");
+    expect(window.localStorage.getItem("llm-wiki-web.chat.home.v1")).toContain(
+      "First restored chat",
+    );
+  });
+
   it("starts a new home chat from the sidebar for the selected knowledge base", async () => {
     vi.mocked(fetchProjects).mockResolvedValue({
       projects: [
@@ -873,6 +989,30 @@ function requiredButtonByLabel(label: string) {
 
   if (!button) {
     throw new Error(`Expected button labeled ${label}.`);
+  }
+
+  return button;
+}
+
+function requiredPersonalCenterTrigger() {
+  const button = container?.querySelector<HTMLButtonElement>(
+    '[data-personal-center-trigger="desktop"]',
+  );
+
+  if (!button) {
+    throw new Error("Expected desktop personal center trigger.");
+  }
+
+  return button;
+}
+
+function requiredAnswerMetricsSwitch() {
+  const button = document.body.querySelector<HTMLButtonElement>(
+    '[data-answer-metrics-switch="true"]',
+  );
+
+  if (!button) {
+    throw new Error("Expected answer metrics switch.");
   }
 
   return button;

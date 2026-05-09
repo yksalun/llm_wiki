@@ -56,10 +56,21 @@ interface ProviderConfig {
   url: string
   headers: Record<string, string>
   buildBody: (messages: ChatMessage[], overrides?: RequestOverrides) => unknown
-  parseStream: (line: string) => string | null
+  parseStream: (line: string) => StreamParseResult | null
 }
 
 const JSON_CONTENT_TYPE = "application/json"
+
+export interface LlmTokenUsage {
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+}
+
+export interface StreamParseResult {
+  token?: string
+  tokenUsage?: LlmTokenUsage
+}
 
 /**
  * Origin header for local-LLM endpoints (Ollama, LM Studio, llama.cpp
@@ -113,21 +124,25 @@ function localLlmOriginHeader(): Record<string, string> {
   return { Origin: "http://localhost" }
 }
 
-function parseOpenAiLine(line: string): string | null {
+function parseOpenAiLine(line: string, includeUsage = false): StreamParseResult | null {
   if (!line.startsWith("data: ")) return null
   const data = line.slice(6).trim()
   if (data === "[DONE]") return null
   try {
     const parsed = JSON.parse(data) as {
-      choices: Array<{ delta: { content?: string } }>
+      choices?: Array<{ delta?: { content?: string | null } }>
+      usage?: unknown
     }
-    return parsed.choices?.[0]?.delta?.content ?? null
+    return buildStreamParseResult(
+      parsed.choices?.[0]?.delta?.content,
+      includeUsage ? normalizeOpenAiTokenUsage(parsed.usage) : undefined,
+    )
   } catch {
     return null
   }
 }
 
-function parseAnthropicLine(line: string): string | null {
+function parseAnthropicLine(line: string): StreamParseResult | null {
   if (!line.startsWith("data: ")) return null
   const data = line.slice(6).trim()
   try {
@@ -139,7 +154,7 @@ function parseAnthropicLine(line: string): string | null {
       parsed.type === "content_block_delta" &&
       parsed.delta?.type === "text_delta"
     ) {
-      return parsed.delta.text ?? null
+      return buildStreamParseResult(parsed.delta.text)
     }
     return null
   } catch {
@@ -147,7 +162,7 @@ function parseAnthropicLine(line: string): string | null {
   }
 }
 
-export function parseGoogleLine(line: string): string | null {
+export function parseGoogleLine(line: string): StreamParseResult | null {
   if (!line.startsWith("data: ")) return null
   const data = line.slice(6).trim()
   try {
@@ -170,10 +185,44 @@ export function parseGoogleLine(line: string): string | null {
       if (p.thought) continue
       if (p.text) out += p.text
     }
-    return out.length > 0 ? out : null
+    return out.length > 0 ? { token: out } : null
   } catch {
     return null
   }
+}
+
+function buildStreamParseResult(
+  token?: string | null,
+  tokenUsage?: LlmTokenUsage,
+): StreamParseResult | null {
+  const result: StreamParseResult = {}
+  if (typeof token === "string") result.token = token
+  if (tokenUsage) result.tokenUsage = tokenUsage
+  return Object.keys(result).length > 0 ? result : null
+}
+
+function normalizeOpenAiTokenUsage(usage: unknown): LlmTokenUsage | undefined {
+  if (!isRecord(usage)) return undefined
+
+  const normalized: LlmTokenUsage = {}
+  if (isValidTokenCount(usage.prompt_tokens)) {
+    normalized.inputTokens = usage.prompt_tokens
+  }
+  if (isValidTokenCount(usage.completion_tokens)) {
+    normalized.outputTokens = usage.completion_tokens
+  }
+  if (isValidTokenCount(usage.total_tokens)) {
+    normalized.totalTokens = usage.total_tokens
+  }
+  return Object.keys(normalized).length > 0 ? normalized : undefined
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function isValidTokenCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
 }
 
 /**
@@ -271,6 +320,10 @@ function buildOpenAiCompatibleBody(
     if (reasoning.mode === "low" || reasoning.mode === "medium" || reasoning.mode === "high") {
       body.reasoning_effort = reasoning.mode
     }
+  }
+
+  if (config.provider === "openai") {
+    body.stream_options = { include_usage: true }
   }
 
   return body
@@ -536,7 +589,7 @@ export function getProviderConfig(config: LlmConfig): ProviderConfig {
           ...buildOpenAiCompatibleBody(config, messages, overrides),
           model,
         }),
-        parseStream: parseOpenAiLine,
+        parseStream: (line) => parseOpenAiLine(line, true),
       }
 
     case "anthropic": {

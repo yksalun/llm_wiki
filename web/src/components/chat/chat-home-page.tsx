@@ -26,6 +26,7 @@ import {
   type ChatHomeState,
 } from "@/components/chat/chat-home-storage";
 import { KnowledgeBaseSelector } from "@/components/chat/knowledge-base-selector";
+import { PersonalCenterSheet } from "@/components/chat/personal-center-sheet";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import {
   AlertDialog,
@@ -70,6 +71,7 @@ export function ChatHomePage() {
   const [projectsState, setProjectsState] = useState<ProjectsState>({ status: "loading" });
   const [homeState, setHomeState] = useState<ChatHomeState>(() => loadChatHomeState());
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [personalCenterOpen, setPersonalCenterOpen] = useState(false);
   const [newConversationRequestId, setNewConversationRequestId] = useState(0);
 
   useEffect(() => {
@@ -173,6 +175,35 @@ export function ChatHomePage() {
     });
   }
 
+  function handleConversationsChange(event: {
+    projectId: string;
+    conversations: DesktopBridgeConversation[];
+  }) {
+    const project = projects.find((candidate) => candidate.id === event.projectId);
+
+    updateHomeState((current) => {
+      if (current.selectedProjectId !== event.projectId) {
+        return current;
+      }
+
+      if (current.recentConversations.length > 0) {
+        return current;
+      }
+
+      return event.conversations.reduce(
+        (nextState, conversation) =>
+          upsertRecentConversation(nextState, {
+            projectId: event.projectId,
+            projectName: project?.name ?? event.projectId,
+            conversationId: conversation.id,
+            title: conversation.title || "新会话",
+            updatedAt: conversation.updatedAt || conversation.createdAt || Date.now(),
+          }),
+        current,
+      );
+    });
+  }
+
   const knowledgeBaseEmptyAction =
     projectsState.status === "loading" ? null : (
       <Link
@@ -233,6 +264,7 @@ export function ChatHomePage() {
               : nextState;
           })
         }
+        onOpenPersonalCenter={() => setPersonalCenterOpen(true)}
       />
 
       <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
@@ -268,9 +300,17 @@ export function ChatHomePage() {
                   : nextState;
               })
             }
+            onOpenPersonalCenter={() => {
+              setMobileSidebarOpen(false);
+              setPersonalCenterOpen(true);
+            }}
           />
         </SheetContent>
       </Sheet>
+      <PersonalCenterSheet
+        open={personalCenterOpen}
+        onOpenChange={setPersonalCenterOpen}
+      />
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex shrink-0 items-center justify-between border-b border-[color:var(--paper-border)] bg-[color:var(--paper-panel)]/80 px-4 py-3">
@@ -313,6 +353,7 @@ export function ChatHomePage() {
             requestedConversationId={homeState.selectedConversationId}
             newConversationRequestId={newConversationRequestId}
             onConversationChange={handleConversationChange}
+            onConversationsChange={handleConversationsChange}
           />
         </div>
       </section>
@@ -359,6 +400,7 @@ function DesktopSidebar({
   onSelectRecent,
   onRenameRecent,
   onRemoveRecent,
+  onOpenPersonalCenter,
 }: {
   collapsed: boolean;
   projects: ProjectSummary[];
@@ -370,6 +412,7 @@ function DesktopSidebar({
   onSelectRecent: (projectId: string, conversationId: string) => void;
   onRenameRecent: (projectId: string, conversationId: string, title: string) => void;
   onRemoveRecent: (projectId: string, conversationId: string) => void;
+  onOpenPersonalCenter: () => void;
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -471,7 +514,13 @@ function DesktopSidebar({
           : null}
       </div>
 
-      <Button type="button" variant="ghost" className={cn("mt-3 w-full", collapsed ? "px-0" : "justify-start")}>
+      <Button
+        data-personal-center-trigger="desktop"
+        type="button"
+        variant="ghost"
+        className={cn("mt-3 w-full", collapsed ? "px-0" : "justify-start")}
+        onClick={onOpenPersonalCenter}
+      >
         <UserCircle className="size-4" aria-hidden="true" />
         {!collapsed ? "个人中心" : null}
       </Button>
@@ -723,6 +772,7 @@ function MobileSidebarBody({
   onSelectRecent,
   onRenameRecent,
   onRemoveRecent,
+  onOpenPersonalCenter,
 }: {
   projects: ProjectSummary[];
   recentConversations: ChatHomeState["recentConversations"];
@@ -732,6 +782,7 @@ function MobileSidebarBody({
   onSelectRecent: (projectId: string, conversationId: string) => void;
   onRenameRecent: (projectId: string, conversationId: string, title: string) => void;
   onRemoveRecent: (projectId: string, conversationId: string) => void;
+  onOpenPersonalCenter: () => void;
 }) {
   return (
     <div className="space-y-3 px-4 pb-4">
@@ -749,6 +800,16 @@ function MobileSidebarBody({
         <Settings2 className="size-4" aria-hidden="true" />
         知识库配置
       </Link>
+      <Button
+        data-personal-center-trigger="mobile"
+        type="button"
+        variant="ghost"
+        className="w-full justify-start"
+        onClick={onOpenPersonalCenter}
+      >
+        <UserCircle className="size-4" aria-hidden="true" />
+        个人中心
+      </Button>
       <div className="space-y-1">
         {recentConversations.length === 0 ? (
           <p className="rounded-md border border-dashed border-[color:var(--paper-border)] px-3 py-2 text-sm text-muted-foreground">
